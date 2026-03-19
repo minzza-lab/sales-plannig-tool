@@ -12,6 +12,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 일반 이메일 로그인
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -30,6 +31,22 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       onLoginSuccess();
     }
     setIsLoading(false);
+  };
+
+  // 카카오 소셜 로그인
+  const handleKakaoLogin = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'kakao',
+      options: {
+        redirectTo: window.location.origin // 로그인 후 현재 사이트로 돌아옴
+      }
+    });
+
+    if (error) {
+      setError(`카카오 로그인 오류: ${error.message}`);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -70,6 +87,19 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {isLoading ? '인증 중...' : '시스템 접속하기'}
           </button>
         </form>
+
+        <div className="login-divider">
+          <span>또는</span>
+        </div>
+
+        <button 
+          onClick={handleKakaoLogin} 
+          className="kakao-login-btn" 
+          disabled={isLoading}
+        >
+          <span className="kakao-icon">💬</span>
+          카카오로 시작하기
+        </button>
 
         <div className="login-footer">
           <p>계정이 없으신 경우 관리자에게 문의하세요.</p>

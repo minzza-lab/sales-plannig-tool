@@ -88,9 +88,53 @@
   box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
 }
 
-.login-submit-btn:disabled {
-  background: #94a3b8;
-  cursor: not-allowed;
+/* Divider */
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 25px 0;
+  color: #cbd5e1;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.login-divider span {
+  padding: 0 15px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Kakao Button */
+.kakao-login-btn {
+  width: 100%;
+  padding: 14px;
+  background-color: #FEE500;
+  color: #000000;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s;
+}
+
+.kakao-login-btn:hover:not(:disabled) {
+  background-color: #F7E100;
+  transform: translateY(-1px);
+}
+
+.kakao-icon {
+  font-size: 1.2rem;
 }
 
 .login-error-msg {
