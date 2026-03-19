@@ -33,15 +33,19 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(false);
   };
 
-  // 카카오 소셜 로그인 (이메일 권한 오류 회피 설정)
+  // 카카오 소셜 로그인 (이메일 권한을 완전히 제외하고 닉네임/프로필만 요청)
   const handleKakaoLogin = async () => {
     setIsLoading(true);
+    setError(null);
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: {
         redirectTo: window.location.origin,
+        // 명시적으로 이메일을 빼고 닉네임과 프로필만 요청합니다.
+        scopes: 'profile_nickname profile_image',
         queryParams: {
-          prompt: 'login' // 매번 로그인을 새로 시도하여 동의 항목 갱신 유도
+          prompt: 'login'
         }
       }
     });
