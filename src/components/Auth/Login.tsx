@@ -33,7 +33,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(false);
   };
 
-  // 카카오 소셜 로그인 (이메일 권한을 완전히 제외하고 닉네임/프로필만 요청)
+  // 카카오 소셜 로그인 (KOE205 에러 해결을 위한 강력한 스코프 제한)
   const handleKakaoLogin = async () => {
     setIsLoading(true);
     setError(null);
@@ -42,9 +42,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       provider: 'kakao',
       options: {
         redirectTo: window.location.origin,
-        // 명시적으로 이메일을 빼고 닉네임과 프로필만 요청합니다.
-        scopes: 'profile_nickname profile_image',
+        // Supabase의 기본 요청을 무시하고 카카오가 허용하는 최소 권한만 요청합니다.
         queryParams: {
+          scope: 'profile_nickname', // 이메일을 완전히 빼고 닉네임만 요청
           prompt: 'login'
         }
       }
