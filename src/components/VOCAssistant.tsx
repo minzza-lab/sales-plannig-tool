@@ -19,7 +19,7 @@ const VOCAssistant: React.FC = () => {
       const { data, error } = await supabase
         .from('knowledge_base')
         .select('title, content')
-        .limit(10); // 최신 10개만 참고
+        .limit(10);
 
       if (data && !error) {
         const tipsString = data.map(tip => `• ${tip.title}: ${tip.content}`).join('\n');
@@ -148,8 +148,20 @@ const VOCAssistant: React.FC = () => {
   return (
     <div className="voc-container">
       <div className="voc-header">
-        <h1 className="title">웰리힐리파크 AI VOC 어시스턴트</h1>
-        <p className="subtitle">우리 회사 공식 가이드와 팀원들의 지식이 결합된 AI입니다</p>
+        <h1 className="title">웰리 AI VOC 어시스턴트</h1>
+        <p className="subtitle">공식 가이드와 팀의 지능이 결합된 스마트 CS 도구입니다</p>
+      </div>
+
+      <div className="quick-guide-card-voc animate-fade-in">
+        <div className="guide-icon">🤖</div>
+        <div className="guide-content">
+          <h4>AI VOC 어시스턴트 활용 가이드</h4>
+          <ul>
+            <li><strong>목표:</strong> 고객의 불편함을 빠르게 해소하고 품격 있는 브랜드 이미지를 전달합니다.</li>
+            <li><strong>데이터 연동:</strong> '웰리 지식 백과'에 등록된 최신 정보가 답변에 자동으로 반영됩니다.</li>
+            <li><strong>작성 팁:</strong> 고객의 성함을 입력하면 더욱 친근한 맞춤형 답변이 생성됩니다.</li>
+          </ul>
+        </div>
       </div>
 
       <div className="voc-workspace">
@@ -158,7 +170,7 @@ const VOCAssistant: React.FC = () => {
             <div className="section-label">고객 성함 (선택)</div>
             <input
               type="text"
-              placeholder="예: 최민혁"
+              placeholder="예: 홍길동"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               className="name-input"
@@ -168,7 +180,7 @@ const VOCAssistant: React.FC = () => {
           <div className="input-field-group">
             <div className="section-label">고객 문의 내용 (VOC)</div>
             <textarea
-              placeholder="고객의 문의 내용을 여기에 입력하세요..."
+              placeholder="고객의 문의 내용을 복사하여 붙여넣으세요..."
               value={vocContent}
               onChange={(e) => setVocContent(e.target.value)}
               className="voc-textarea-new"
@@ -206,7 +218,7 @@ const VOCAssistant: React.FC = () => {
                     <p>등록된 팀 지식을 바탕으로 답변을 작성 중입니다...</p>
                   </div>
                 ) : (
-                  <span>내용 입력 후 버튼을 누르면<br />우리 팀의 노하우가 담긴 답변이 나타납니다.</span>
+                  <span>내용 입력 후 버튼을 누르면<br />최적의 공식 답변이 생성됩니다.</span>
                 )}
               </div>
             )}
@@ -222,9 +234,14 @@ const VOCAssistant: React.FC = () => {
       {error && <div className="voc-error">{error}</div>}
 
       <div className="info-box-voc">
-        <h4>💡 지능형 답변 시스템 가동 중</h4>
-        <p>• <strong>팀 지식 연동:</strong> '공유 지식 베이스'에 등록된 최신 정보를 실시간으로 참고합니다.</p>
-        <p>• <strong>베테랑 응대:</strong> 검증된 사례를 학습하여 답변의 품격을 높였습니다.</p>
+        <h4>💡 스마트 답변 시스템 가이드</h4>
+        <p>• <strong>실시간 정보 반영:</strong> '웰리 지식 백과'에 등록된 최신 시설 및 운영 정보를 자동으로 참고합니다.</p>
+        <p>• <strong>계절별 자동 인사:</strong> 현재 날짜를 인식하여 계절에 맞는 품격 있는 인사말이 포함됩니다.</p>
+        <p>• <strong>개인화 서비스:</strong> 고객 성함 입력 시 더욱 정중하고 친근한 맞춤형 응대가 가능합니다.</p>
+        <p>• <strong>유연한 스타일:</strong> 상황에 맞춰 3가지 답변 톤(정중/공감/간결)을 자유롭게 선택할 수 있습니다.</p>
+        <div className="mandatory-review">
+          ⚠️ <strong>최종 검수 필수:</strong> 생성된 답변은 반드시 담당자가 내용의 정확성을 재검토한 후 사용하시기 바랍니다.
+        </div>
       </div>
     </div>
   );

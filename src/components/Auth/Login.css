@@ -88,6 +88,29 @@
   box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
 }
 
+/* Mode Toggle */
+.login-mode-toggle {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.toggle-link-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 700;
+  margin-left: 8px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.toggle-link-btn:hover {
+  color: #1d4ed8;
+}
+
 /* Divider */
 .login-divider {
   display: flex;
@@ -133,10 +156,7 @@
   transform: translateY(-1px);
 }
 
-.kakao-icon {
-  font-size: 1.2rem;
-}
-
+/* Messages */
 .login-error-msg {
   background: #fef2f2;
   color: #b91c1c;
@@ -148,17 +168,22 @@
   border: 1px solid #fee2e2;
 }
 
+.login-success-msg {
+  background: #f0fdf4;
+  color: #15803d;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+  text-align: center;
+  border: 1px solid #dcfce7;
+}
+
 .login-footer {
   margin-top: 30px;
   text-align: center;
   border-top: 1px solid #f1f5f9;
   padding-top: 25px;
-}
-
-.login-footer p {
-  font-size: 0.85rem;
-  color: #94a3b8;
-  margin: 0 0 5px 0;
 }
 
 .login-footer .copyright {

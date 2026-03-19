@@ -21,7 +21,7 @@ const FieldSketchWriter: React.FC = () => {
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const maxWidth = 800; // 가로폭 800px로 최적화
+          const maxWidth = 800; 
           let width = img.width;
           let height = img.height;
 
@@ -96,13 +96,7 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      // 확인된 최신 모델 리스트 (Gemini 2.5 지원 확인됨)
-      const modelsToTry = [
-        "gemini-2.5-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash"
-      ];
-      
+      const modelsToTry = ["gemini-2.5-flash", "gemini-flash-latest"];
       let success = false;
 
       for (const modelName of modelsToTry) {
@@ -147,27 +141,41 @@ const FieldSketchWriter: React.FC = () => {
 
   return (
     <div className="sketch-container">
-      <h1 className="title">현장스케치 '초경량' 매니저</h1>
-      <p className="subtitle">사진 용량을 90% 압축하여 버벅임 없는 즉시 등록이 가능합니다</p>
+      <div className="sketch-header">
+        <h1 className="title">현장스케치 자동 생성기</h1>
+        <p className="subtitle">AI가 사진을 분석하여 생동감 넘치는 게시물을 즉시 제작합니다</p>
+      </div>
+
+      {/* 🚀 상단 사용방법 안내 */}
+      <div className="quick-guide-card-sketch animate-fade-in">
+        <div className="guide-icon">📖</div>
+        <div className="guide-content">
+          <h4>현장스케치 이용 가이드</h4>
+          <ul>
+            <li><strong>STEP 1:</strong> 이번 회차의 에피소드 번호를 입력하세요.</li>
+            <li><strong>STEP 2:</strong> '사진 추가' 버튼을 눌러 현장 사진들을 한꺼번에 선택하세요.</li>
+            <li><strong>STEP 3:</strong> 생성 버튼을 누른 후, 미리보기로 AI가 작성한 내용을 확인하세요.</li>
+            <li><strong>STEP 4:</strong> 코드를 전체 복사하여 홈페이지 게시판에 붙여넣으면 끝!</li>
+          </ul>
+        </div>
+      </div>
 
       <div className="sketch-upload-card">
-        <div className="info-badge-green">
-          ✅ <strong>용량 다이어트 적용:</strong> 사진을 올리는 즉시 웹 최적화가 이루어집니다.
-        </div>
-
         <div className="input-row-v4">
-          <div className="ep-input">
-            <label>에피소드 번호</label>
+          <div className="ep-input-wrapper">
+            <label className="section-label">에피소드 번호</label>
             <input 
               type="text" 
-              placeholder="123"
+              placeholder="예: 2026-05"
               value={episodeNumber} 
               onChange={(e) => setEpisodeNumber(e.target.value)} 
+              className="ep-input-field"
             />
           </div>
-          <div className="upload-btn-area">
+          <div className="upload-btn-wrapper">
+            <label className="section-label">사진 업로드</label>
             <input type="file" id="sketch-upload" multiple accept="image/*" onChange={handleFileChange} hidden />
-            <label htmlFor="sketch-upload" className="custom-upload-btn-v4">📸 사진 추가하기</label>
+            <label htmlFor="sketch-upload" className="custom-upload-btn-v4">📸 사진 다중 선택하기</label>
           </div>
         </div>
 
@@ -176,7 +184,7 @@ const FieldSketchWriter: React.FC = () => {
             {selectedFiles.map((file, idx) => (
               <div key={idx} className="preview-card-v4">
                 <img src={file.preview} alt="" />
-                <span className="file-name-tag">이미지 #{idx} 준비됨</span>
+                <span className="file-name-tag">이미지 #{idx}</span>
                 <button onClick={() => removeFile(idx)} className="del-btn-v4">×</button>
               </div>
             ))}
@@ -184,7 +192,7 @@ const FieldSketchWriter: React.FC = () => {
         )}
 
         <button onClick={generateEmbeddedSketch} className="generate-magic-btn" disabled={isLoading || selectedFiles.length === 0}>
-          {isLoading ? '최적화 및 분석 중...' : '웹 최적화 HTML 생성하기'}
+          {isLoading ? '이미지 최적화 및 AI 분석 중...' : '게시물 HTML 자동 생성하기'}
         </button>
       </div>
 
@@ -206,11 +214,21 @@ const FieldSketchWriter: React.FC = () => {
                 {copied ? '복사완료!' : '코드 전체 복사'}
               </button>
             </div>
-            <div className="source-info success">이미지 데이터가 포함되었습니다. 안심하고 붙여넣으세요!</div>
+            <div className="source-info success">이미지 데이터가 내장되었습니다. 그대로 게시판에 붙여넣으세요!</div>
             <textarea readOnly value={htmlResult} className="source-area-v4" />
           </div>
         </div>
       )}
+
+      {/* 💡 하단 팁 및 주의사항 섹션 */}
+      <div className="info-box-sketch">
+        <h4>💡 현장스케치 제작 팁 및 주의사항</h4>
+        <p>• <strong>초경량 최적화:</strong> 사진 용량을 최대 90%까지 자동 압축하여 홈페이지 속도를 저하시키지 않습니다.</p>
+        <p>• <strong>반응형 디자인:</strong> 생성된 HTML은 모바일과 PC 화면 모두에 최적화되어 보여집니다.</p>
+        <div className="mandatory-review-sketch">
+          ⚠️ <strong>최종 검수 필수:</strong> AI가 작성한 멘트가 현장 상황과 일치하는지 반드시 확인 후 업로드해 주세요.
+        </div>
+      </div>
     </div>
   );
 };

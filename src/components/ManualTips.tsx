@@ -15,10 +15,13 @@ const ManualTips: React.FC = () => {
   const [tips, setTips] = useState<Tip[]>([]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [category, setCategory] = useState('CS꿀팁');
+  const [category, setCategory] = useState('답변 학습');
   const [author, setAuthor] = useState('');
+  const [activeTab, setActiveTab] = useState('전체');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  const categories = ['답변 학습', '시설 안내', '운영 시간', '기타 정보'];
 
   // 팁 목록 가져오기
   const fetchTips = async () => {
@@ -30,7 +33,6 @@ const ManualTips: React.FC = () => {
 
     if (error) {
       console.error('Error fetching tips:', error);
-      setMessage({ type: 'error', text: '데이터를 가져오는데 실패했습니다.' });
     } else {
       setTips(data || []);
     }
@@ -41,7 +43,23 @@ const ManualTips: React.FC = () => {
     fetchTips();
   }, []);
 
-  // 새로운 팁 등록하기
+  // 지식 삭제하기
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('이 정보를 삭제하시겠습니까?')) return;
+
+    const { error } = await supabase
+      .from('knowledge_base')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('삭제에 실패했습니다.');
+    } else {
+      setTips(tips.filter(tip => tip.id !== id));
+    }
+  };
+
+  // 새로운 지식 등록하기
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !content) {
@@ -57,97 +75,122 @@ const ManualTips: React.FC = () => {
       ]);
 
     if (error) {
-      console.error('Error saving tip:', error);
       setMessage({ type: 'error', text: '저장에 실패했습니다.' });
     } else {
-      setMessage({ type: 'success', text: '새로운 팁이 성공적으로 등록되었습니다!' });
+      setMessage({ type: 'success', text: '성공적으로 등록되었습니다!' });
       setTitle('');
       setContent('');
       setAuthor('');
-      fetchTips(); // 목록 새로고침
+      fetchTips();
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     }
     setIsLoading(false);
   };
 
+  // 필터링된 목록
+  const filteredTips = activeTab === '전체' 
+    ? tips 
+    : tips.filter(tip => tip.category === activeTab);
+
   return (
     <div className="tips-container">
       <div className="tips-header">
-        <h1 className="title">공유 지식 베이스 (Knowledge Base)</h1>
-        <p className="subtitle">팀원들의 노하우가 모여 AI를 더 똑똑하게 만듭니다</p>
+        <h1 className="title">웰리 지식 백과</h1>
+        <p className="subtitle">정확한 정보 공유가 팀의 경쟁력입니다</p>
+      </div>
+
+      <div className="quick-guide-card animate-fade-in">
+        <div className="guide-icon">💡</div>
+        <div className="guide-content">
+          <h4>지식 백과 관리 가이드</h4>
+          <ul>
+            <li><strong>답변 학습:</strong> AI가 고객 응대 시 참고할 모범 문구와 노하우를 등록합니다.</li>
+            <li><strong>시설/운영:</strong> 최신화된 객실 정보와 영업 시간을 공유하여 정확한 안내를 돕습니다.</li>
+            <li><strong>유지 관리:</strong> 잘못된 정보는 우측 상단의 삭제 버튼을 눌러 관리할 수 있습니다.</li>
+          </ul>
+        </div>
       </div>
 
       <div className="tips-grid">
         {/* 입력 폼 */}
         <div className="tip-form-card">
-          <h3>📘 새로운 지식 등록</h3>
+          <h3>📘 지식 등록</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>카테고리</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option value="CS꿀팁">CS 꿀팁 (답변 가이드)</option>
-                <option value="영업비결">영업 비결 (세일즈 노하우)</option>
-                <option value="시설안내">시설 안내 (객실/부대시설)</option>
-                <option value="기타">기타 정보</option>
+                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>제목</label>
               <input 
                 type="text" 
-                placeholder="예: 셔틀버스 위치 문의 시 대응법" 
+                placeholder="정보를 한눈에 알 수 있는 제목" 
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
             <div className="form-group">
-              <label>상세 내용 (AI가 학습할 핵심 내용)</label>
+              <label>상세 내용</label>
               <textarea 
-                placeholder="구체적인 상황과 해결책을 적어주세요..."
+                placeholder="구체적인 내용을 입력하세요..."
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
             <div className="form-group">
-              <label>등록자 (선택)</label>
+              <label>등록자</label>
               <input 
                 type="text" 
-                placeholder="예: 홍길동 과장" 
+                placeholder="이름/직함" 
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
               />
             </div>
             <button type="submit" className="submit-tip-btn" disabled={isLoading}>
-              {isLoading ? '등록 중...' : '우리 팀 지식으로 등록하기'}
+              {isLoading ? '등록 중...' : '지식 자산화하기'}
             </button>
           </form>
-          {message.text && (
-            <div className={`message-banner ${message.type}`}>
-              {message.text}
-            </div>
-          )}
+          {message.text && <div className={`message-banner ${message.type}`}>{message.text}</div>}
         </div>
 
-        {/* 공유 목록 */}
+        {/* 공유 목록 및 필터 */}
         <div className="tip-list-section">
-          <div className="list-header">
-            <h3>🤝 실시간 공유 목록 ({tips.length})</h3>
-            <button onClick={fetchTips} className="refresh-btn">🔄 새로고침</button>
+          <div className="list-header-complex">
+            <h3>🤝 실시간 지식 공유</h3>
+            <div className="category-tabs">
+              <button className={activeTab === '전체' ? 'active' : ''} onClick={() => setActiveTab('전체')}>전체</button>
+              {categories.map(cat => (
+                <button 
+                  key={cat} 
+                  className={activeTab === cat ? 'active' : ''} 
+                  onClick={() => setActiveTab(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
           
           <div className="tips-list-scroll">
-            {tips.length === 0 ? (
-              <div className="empty-state">아직 등록된 지식이 없습니다. 첫 번째 꿀팁을 공유해 보세요!</div>
+            {filteredTips.length === 0 ? (
+              <div className="empty-state">선택한 카테고리에 정보가 없습니다.</div>
             ) : (
-              tips.map((tip) => (
+              filteredTips.map((tip) => (
                 <div key={tip.id} className="tip-item-card animate-slide-up">
                   <div className="tip-item-header">
-                    <span className={`tag ${tip.category}`}>{tip.category}</span>
-                    <span className="author">By {tip.author}</span>
+                    <div className="header-left">
+                      <span className={`tag ${tip.category.replace(' ', '')}`}>{tip.category}</span>
+                      <span className="author">By {tip.author}</span>
+                    </div>
+                    <button className="delete-tip-btn" onClick={() => handleDelete(tip.id)} title="삭제">
+                      🗑️
+                    </button>
                   </div>
                   <h4>{tip.title}</h4>
                   <p>{tip.content}</p>
-                  <div className="tip-date">{new Date(tip.created_at).toLocaleDateString()} 등록</div>
+                  <div className="tip-date">{new Date(tip.created_at).toLocaleDateString()}</div>
                 </div>
               ))
             )}
