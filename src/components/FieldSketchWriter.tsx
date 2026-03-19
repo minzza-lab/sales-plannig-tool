@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './FieldSketchWriter.css';
 
 const FieldSketchWriter: React.FC = () => {
-  const [apiKey] = useState<string>(localStorage.getItem('gemini_api_key') || '');
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
   const [episodeNumber, setEpisodeNumber] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<{file: File, preview: string, base64: string}[]>([]);
   const [htmlResult, setHtmlResult] = useState<string>('');
@@ -33,7 +33,6 @@ const FieldSketchWriter: React.FC = () => {
           canvas.width = width;
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
-          // 품질 0.5로 낮추어 코드 길이 대폭 단축
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
           resolve(compressedBase64);
         };
@@ -64,8 +63,8 @@ const FieldSketchWriter: React.FC = () => {
   };
 
   const generateEmbeddedSketch = async () => {
-    if (!apiKey) {
-      alert('AI VOC 어시스턴트 메뉴에서 API 키를 먼저 설정해주세요.');
+    if (!apiKey || apiKey === 'your_key_here') {
+      alert('.env 파일에 API 키를 먼저 설정해주세요.');
       return;
     }
     if (selectedFiles.length === 0) {
@@ -97,7 +96,13 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-flash-preview"];
+      // 확인된 최신 모델 리스트 (Gemini 2.5 지원 확인됨)
+      const modelsToTry = [
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash"
+      ];
+      
       let success = false;
 
       for (const modelName of modelsToTry) {
@@ -117,13 +122,11 @@ const FieldSketchWriter: React.FC = () => {
           if (response.ok) {
             let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
-            // 이미지 데이터 치환 (강화된 로직)
             for (let i = 0; i < selectedFiles.length; i++) {
               const placeholder = `[IMG_DATA_${i}]`;
               if (text.includes(placeholder)) {
                 text = text.replaceAll(placeholder, selectedFiles[i].base64);
               } else {
-                // AI가 실수로 누락한 경우 하단에 강제 삽입
                 text += `\n<h3 style="text-align: center;"><img src="${selectedFiles[i].base64}" width="1080" /></h3>`;
               }
             }

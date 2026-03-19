@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './VOCAssistant.css';
 
 const VOCAssistant: React.FC = () => {
-  const [apiKey, setApiKey] = useState<string>(localStorage.getItem('gemini_api_key') || '');
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
   const [vocContent, setVocContent] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>('');
   const [tone, setTone] = useState<'polite' | 'empathetic' | 'concise'>('polite');
@@ -10,19 +10,6 @@ const VOCAssistant: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
-  const [showKeyInput, setShowKeyInput] = useState<boolean>(!localStorage.getItem('gemini_api_key'));
-
-  const saveApiKey = (key: string) => {
-    const trimmedKey = key.trim();
-    if (!trimmedKey) {
-      alert('올바른 API 키를 입력해주세요.');
-      return;
-    }
-    localStorage.setItem('gemini_api_key', trimmedKey);
-    setApiKey(trimmedKey);
-    setShowKeyInput(false);
-    alert('API 키가 안전하게 저장되었습니다.');
-  };
 
   const getSeasonInfo = () => {
     const month = new Date().getMonth() + 1;
@@ -43,16 +30,14 @@ const VOCAssistant: React.FC = () => {
     };
     return { 
       name: '겨울', 
-      header: '은빛 설원의 낭만이 가득한 웰리힐리파크입니다.', 
+      header: '銀빛 설원의 낭만이 가득한 웰리힐리파크입니다.', 
       footer: '추운 날씨에 감기 조심하시고, 하얀 눈처럼 포근한 겨울 보내시길 바랍니다.' 
     };
   };
 
   const generateResponse = async () => {
-    const currentKey = apiKey || localStorage.getItem('gemini_api_key');
-    if (!currentKey) {
-      alert('API 키를 먼저 설정하고 저장해주세요.');
-      setShowKeyInput(true);
+    if (!apiKey || apiKey === 'your_key_here') {
+      alert('.env 파일에 올바른 API 키를 설정해주세요.');
       return;
     }
 
@@ -81,12 +66,11 @@ const VOCAssistant: React.FC = () => {
     - 답변은 반드시 한국어로 작성하세요.`;
 
     try {
-      // 2026년 기준 최신 모델 명칭 리스트 (가장 성공 확률 높은 순)
+      // 확인된 최신 모델 리스트
       const modelsToTry = [
-        "gemini-2.5-flash",        // 현재 가장 표준적인 고성능 모델
-        "gemini-2.5-pro",          // 더욱 정교한 추론 모델
-        "gemini-3-flash-preview",  // 최신 차세대 모델
-        "gemini-1.5-flash"         // 하위 호환용
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash"
       ];
       
       let success = false;
@@ -94,10 +78,8 @@ const VOCAssistant: React.FC = () => {
 
       for (const modelName of modelsToTry) {
         try {
-          console.log(`[${modelName}] 모델로 호출 시도...`);
-          // v1 엔드포인트를 우선 사용 (안정화 버전)
           const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${currentKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -107,46 +89,23 @@ const VOCAssistant: React.FC = () => {
             }
           );
 
-          let data = await response.json();
-
-          // 만약 v1에서 404가 나면 v1beta로 한 번 더 시도
-          if (response.status === 404) {
-            console.log(`[${modelName}] v1 실패, v1beta로 재시도...`);
-            const betaRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: prompt }] }]
-                }),
-              }
-            );
-            data = await betaRes.json();
-            if (!betaRes.ok) throw new Error(data.error?.message || `HTTP ${betaRes.status}`);
-          } else if (!response.ok) {
-            throw new Error(data.error?.message || `HTTP ${response.status}`);
-          }
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
 
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
             setAiResponse(text);
             success = true;
-            console.log(`[${modelName}] 생성 성공!`);
             break;
           }
         } catch (innerErr: any) {
           lastApiError = innerErr.message;
-          console.warn(`[${modelName}] 최종 실패:`, lastApiError);
           continue;
         }
       }
 
-      if (!success) {
-        throw new Error(`최신 AI 모델들이 응답하지 않습니다. (최종 에러: ${lastApiError})`);
-      }
+      if (!success) throw new Error(lastApiError || 'API 호출 실패');
     } catch (err: any) {
-      console.error('Gemini API Error:', err);
       setError(`오류 발생: ${err.message}`);
     } finally {
       setIsLoading(false);
@@ -166,26 +125,7 @@ const VOCAssistant: React.FC = () => {
       <div className="voc-header">
         <h1 className="title">웰리힐리파크 AI VOC 어시스턴트</h1>
         <p className="subtitle">우리 회사 공식 스타일 가이드가 적용된 AI 답변 도구입니다</p>
-        <button className="settings-btn" onClick={() => setShowKeyInput(!showKeyInput)}>
-          {showKeyInput ? '설정 닫기' : '🔑 API 키 설정'}
-        </button>
       </div>
-
-      {showKeyInput && (
-        <div className="api-key-config animate-fade-in">
-          <h4>Gemini API 키 설정</h4>
-          <p>입력하신 키는 브라우저에만 저장되며 외부로 유출되지 않습니다.</p>
-          <div className="key-input-row">
-            <input
-              type="password"
-              placeholder="API 키를 입력하세요"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <button onClick={() => saveApiKey(apiKey)}>저장</button>
-          </div>
-        </div>
-      )}
 
       <div className="voc-workspace">
         <div className="voc-input-section">
