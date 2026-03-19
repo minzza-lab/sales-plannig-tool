@@ -6,6 +6,7 @@ import URLShortener from './components/URLShortener'
 import BarcodeGenerator from './components/BarcodeGenerator'
 import VOCAssistant from './components/VOCAssistant'
 import FieldSketchWriter from './components/FieldSketchWriter'
+import ManualTips from './components/ManualTips'
 import './App.css'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />
           <Route path="tools/voc-assistant" element={<VOCAssistant />} />
           <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
+          <Route path="tools/knowledge-base" element={<ManualTips />} />
         </Route>
       </Routes>
     </BrowserRouter>

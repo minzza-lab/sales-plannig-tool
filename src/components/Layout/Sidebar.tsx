@@ -16,6 +16,22 @@ const Sidebar: React.FC = () => {
             </NavLink>
           </li>
           <li>
+            <NavLink to="/tools/knowledge-base" className={({ isActive }) => (isActive ? 'active' : '')}>
+              <span className="icon">🤝</span> 공유 지식 베이스
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')}>
+              <span className="icon">🤖</span> AI VOC 어시스턴트
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')}>
+              <span className="icon">📸</span> AI 현장스케치
+            </NavLink>
+          </li>
+          <hr className="sidebar-divider" />
+          <li>
             <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')}>
               <span className="icon">🔍</span> QR 코드 생성기
             </NavLink>
@@ -29,22 +45,6 @@ const Sidebar: React.FC = () => {
             <NavLink to="/tools/barcode-generator" className={({ isActive }) => (isActive ? 'active' : '')}>
               <span className="icon">📊</span> 바코드 생성기
             </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <span className="icon">🤖</span> AI VOC 어시스턴트
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <span className="icon">📸</span> AI 현장스케치
-            </NavLink>
-          </li>
-          <li className="disabled">
-            <span><span className="icon">📈</span> 매출 예측 (준비중)</span>
-          </li>
-          <li className="disabled">
-            <span><span className="icon">🎯</span> 목표 관리 (준비중)</span>
           </li>
         </ul>
       </nav>

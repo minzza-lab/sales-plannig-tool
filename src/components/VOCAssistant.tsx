@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import './VOCAssistant.css';
 
 const VOCAssistant: React.FC = () => {
@@ -10,6 +11,23 @@ const VOCAssistant: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [teamTips, setTeamTips] = useState<string>('');
+
+  // DB에서 팀원들의 지식(팁) 가져오기
+  useEffect(() => {
+    const fetchTeamKnowledge = async () => {
+      const { data, error } = await supabase
+        .from('knowledge_base')
+        .select('title, content')
+        .limit(10); // 최신 10개만 참고
+
+      if (data && !error) {
+        const tipsString = data.map(tip => `• ${tip.title}: ${tip.content}`).join('\n');
+        setTeamTips(tipsString);
+      }
+    };
+    fetchTeamKnowledge();
+  }, []);
 
   const getSeasonInfo = () => {
     const month = new Date().getMonth() + 1;
@@ -57,32 +75,26 @@ const VOCAssistant: React.FC = () => {
       concise: "불필요한 수식어를 뺀 핵심 해결 중심의 간결한 톤"
     };
 
-    // 전문가 수준의 강화된 프롬프트 (학습 데이터 포함)
     const prompt = `
-    당신은 '웰리힐리파크'의 10년 경력 CS 총괄 팀장 '마스터 어시스턴트'입니다.
-    아래의 [우리 회사 공식 응대 원칙]과 [모범 사례]를 바탕으로 고객 문의에 대한 공식 답변 초안을 작성하세요.
+    당신은 '웰리힐리파크'의 10년 경력 CS 총괄 팀장입니다.
+    아래의 [우리 회사 공식 응대 원칙]과 [팀원 공유 지식]을 바탕으로 최상의 답변을 작성하세요.
 
     [우리 회사 공식 응대 원칙]
-    1. 환대(Hospitality): 첫 문장은 반드시 계절 인사를 포함한 따뜻한 환영 인사를 건넵니다.
-    2. 공감(Empathy): 불만 사항인 경우, 사실 관계 확인 전이라도 고객의 불편한 마음에 깊이 공감하고 정중히 사과합니다.
-    3. 구체성(Specificity): "노력하겠다"는 말보다는 "현장 부서 확인 후 조치하겠다", "당직 기사를 배치하겠다" 등 실질적인 단어를 사용합니다.
-    4. 품격(Dignity): 과도한 이모티콘은 지양하고, 격식 있는 한국어 높임말(하십시오체)을 주로 사용합니다.
+    1. 환대: 첫 문장은 반드시 계절 인사를 포함한 따뜻한 환영 인사를 건넵니다.
+    2. 공감: 불만 사항인 경우, 고객의 불편한 마음에 깊이 공감하고 정중히 사과합니다.
+    3. 구체성: 실질적인 조치(현장 부서 확인, 당직 기사 배치 등)를 명시합니다.
 
-    [모범 응대 사례 - 학습 데이터]
-    - 질문: "방이 너무 추워서 잠을 설쳤어요."
-    - 답변: "안녕하세요 ${customerName || '고객'}님, ${season.header} 우선 즐거운 휴식을 기대하셨을 텐데 객실 난방 문제로 불편을 드려 진심으로 송구스럽습니다. 즉시 시설팀 당직 기사를 배치하여 난방 시스템을 점검하고 보완하도록 조치하겠습니다. 고객님의 소중한 휴식 시간이 더는 방해받지 않도록 최선을 다하겠습니다. 다시 한번 사과의 말씀을 올립니다. ${season.footer}"
-
-    - 질문: "셔틀버스 시간표가 궁금해요."
-    - 답변: "반갑습니다 ${customerName || '고객'}님, ${season.header} 셔틀버스 이용에 대해 안내해 드리겠습니다. 현재 홈페이지 '고객센터 > 교통안내' 메뉴에서 가장 최신화된 노선과 시간표를 확인하실 수 있습니다. 혹시 추가로 궁금한 점이 있으시면 24시간 프런트 데스크(내선 100번)로 연락 부탁드립니다. 안전한 여행 되시길 기원합니다. ${season.footer}"
+    [팀원 공유 지식 - 반드시 참고하여 답변에 반영]
+    ${teamTips || '현재 등록된 추가 팀 지식이 없습니다.'}
 
     [현재 고객 데이터]
     - 고객 성함: ${customerName || '고객님'}
-    - 고객 문의 내용: ${vocContent}
-    - 요청 답변 스타일: ${tonePrompts[tone]}
+    - 고객 문의: ${vocContent}
+    - 답변 스타일: ${tonePrompts[tone]}
     - 필수 머릿말: "안녕하세요 ${customerName || '고객'}님, ${season.header}"
     - 필수 맺음말: "${season.footer}"
 
-    위 가이드라인을 엄격히 준수하여 답변 초안을 작성하세요.`;
+    작성 시 주의사항: 팀원 공유 지식에 해당 문의와 관련된 정보가 있다면 반드시 그 해결책을 답변에 포함시키세요.`;
 
     try {
       const modelsToTry = ["gemini-2.5-flash", "gemini-flash-latest"];
@@ -137,7 +149,7 @@ const VOCAssistant: React.FC = () => {
     <div className="voc-container">
       <div className="voc-header">
         <h1 className="title">웰리힐리파크 AI VOC 어시스턴트</h1>
-        <p className="subtitle">우리 회사 공식 스타일 가이드가 적용된 AI 답변 도구입니다</p>
+        <p className="subtitle">우리 회사 공식 가이드와 팀원들의 지식이 결합된 AI입니다</p>
       </div>
 
       <div className="voc-workspace">
@@ -173,7 +185,7 @@ const VOCAssistant: React.FC = () => {
           </div>
 
           <button onClick={generateResponse} className="generate-ai-btn" disabled={isLoading}>
-            {isLoading ? '베테랑의 답변을 가져오는 중...' : '공식 답변 초안 생성하기'}
+            {isLoading ? '지식을 검색하여 답변 생성 중...' : '공식 답변 초안 생성하기'}
           </button>
         </div>
 
@@ -191,10 +203,10 @@ const VOCAssistant: React.FC = () => {
                 {isLoading ? (
                   <div className="loader-container">
                     <div className="loader"></div>
-                    <p>전문가가 답변을 정교하게 다듬고 있습니다...</p>
+                    <p>등록된 팀 지식을 바탕으로 답변을 작성 중입니다...</p>
                   </div>
                 ) : (
-                  <span>내용 입력 후 버튼을 누르면<br />베테랑 팀장의 노하우가 담긴 답변이 나타납니다.</span>
+                  <span>내용 입력 후 버튼을 누르면<br />우리 팀의 노하우가 담긴 답변이 나타납니다.</span>
                 )}
               </div>
             )}
@@ -210,10 +222,9 @@ const VOCAssistant: React.FC = () => {
       {error && <div className="voc-error">{error}</div>}
 
       <div className="info-box-voc">
-        <h4>🌸 고도화된 응대 학습 시스템</h4>
-        <p>• <strong>원칙 기반:</strong> 단순 답변이 아닌 우리 회사만의 4대 응대 원칙을 따릅니다.</p>
-        <p>• <strong>모범 사례 학습:</strong> 검증된 베스트 사례를 바탕으로 답변 품질을 보장합니다.</p>
-        <p>• <strong>유연한 대응:</strong> 불만에는 사과를, 문의에는 정확한 정보 안내를 우선합니다.</p>
+        <h4>💡 지능형 답변 시스템 가동 중</h4>
+        <p>• <strong>팀 지식 연동:</strong> '공유 지식 베이스'에 등록된 최신 정보를 실시간으로 참고합니다.</p>
+        <p>• <strong>베테랑 응대:</strong> 검증된 사례를 학습하여 답변의 품격을 높였습니다.</p>
       </div>
     </div>
   );
