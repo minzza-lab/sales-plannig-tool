@@ -1,0 +1,86 @@
+.sidebar {
+  width: 260px;
+  height: 100vh;
+  background-color: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.sidebar-logo {
+  padding: 2rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.sidebar-logo h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #4f46e5;
+  margin: 0;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 1.5rem 0.75rem;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar-nav li a {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  color: #4b5563;
+  text-decoration: none;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.9375rem;
+}
+
+.sidebar-nav li a:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.sidebar-nav li a.active {
+  background-color: #eef2ff;
+  color: #4f46e5;
+}
+
+.sidebar-nav li a .icon {
+  margin-right: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.sidebar-nav li.disabled {
+  padding: 0.75rem 1rem;
+  color: #9ca3af;
+  font-size: 0.9375rem;
+  cursor: not-allowed;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-nav li.disabled .icon {
+  margin-right: 0.75rem;
+  opacity: 0.5;
+}
+
+.sidebar-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #f3f4f6;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-align: center;
+}

@@ -1,0 +1,91 @@
+.barcode-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px;
+  color: #111827;
+}
+
+.barcode-preview-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 650px;
+  transition: transform 0.3s ease;
+  border: 1px solid #f3f4f6;
+}
+
+.barcode-preview {
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #f3f4f6;
+  min-width: 350px;
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+}
+
+.barcode-placeholder {
+  width: 350px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f4f6;
+  border-radius: 12px;
+  color: #9ca3af;
+  border: 2px dashed #d1d5db;
+  text-align: center;
+  padding: 20px;
+}
+
+.download-btn-high {
+  width: 100%;
+  padding: 1rem;
+  background-color: #059669;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.download-btn-high:hover {
+  background-color: #047857;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.info-box-success {
+  width: 100%;
+  max-width: 650px;
+  margin-top: 3rem;
+  padding: 1.5rem;
+  background-color: #ecfdf5;
+  border-radius: 12px;
+  border-left: 5px solid #10b981;
+}
+
+.info-box-success h4 {
+  color: #065f46;
+  margin-bottom: 0.5rem;
+}
+
+.info-box-success p {
+  color: #064e3b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
