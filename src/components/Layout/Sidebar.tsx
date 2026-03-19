@@ -1,8 +1,18 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import './Sidebar.css';
 
 const Sidebar: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      navigate('/login');
+    }
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -49,6 +59,9 @@ const Sidebar: React.FC = () => {
         </ul>
       </nav>
       <div className="sidebar-footer">
+        <button onClick={handleLogout} className="logout-btn">
+          <span className="icon">🚪</span> 로그아웃
+        </button>
         <p>© 2026 Sales Tools</p>
       </div>
     </aside>
