@@ -33,13 +33,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(false);
   };
 
-  // 카카오 소셜 로그인
+  // 카카오 소셜 로그인 (이메일 권한 오류 회피 설정)
   const handleKakaoLogin = async () => {
     setIsLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: {
-        redirectTo: window.location.origin // 로그인 후 현재 사이트로 돌아옴
+        redirectTo: window.location.origin,
+        queryParams: {
+          prompt: 'login' // 매번 로그인을 새로 시도하여 동의 항목 갱신 유도
+        }
       }
     });
 
