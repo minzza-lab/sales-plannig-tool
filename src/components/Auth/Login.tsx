@@ -131,9 +131,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </form>
 
         <div className="login-mode-toggle">
-          {isSignUp ? '이미 계정이 있으신가요?' : '아직 계정이 없으신가요?'}
+          {isSignUp ? '이미 사번을 등록하셨나요?' : '아직 사번을 등록하지 않으셨나요?'}
           <button onClick={() => setIsSignUp(!isSignUp)} className="toggle-link-btn">
-            {isSignUp ? '로그인으로 돌아가기' : '무료 회원가입'}
+            {isSignUp ? '로그인으로 돌아가기' : '사번 등록'}
           </button>
         </div>
 
