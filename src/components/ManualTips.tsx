@@ -16,8 +16,8 @@ interface Tip {
   content: string;
   category: string;
   author: string;
-  likes: number; // 좋아요 추가
-  comments?: Comment[]; // 댓글 추가
+  likes: number;
+  comments?: Comment[];
 }
 
 const ManualTips: React.FC = () => {
@@ -56,22 +56,24 @@ const ManualTips: React.FC = () => {
     if (error) {
       console.error('Error fetching tips:', error);
     } else {
-      // 실제 DB에 likes 필드가 없을 경우를 대비해 기본값 0 설정
-      const tipsWithSocial = (data || []).map(tip => ({
-        ...tip,
-        likes: tip.likes || 0,
-        comments: tip.comments || []
-      }));
-      setTips(tipsWithSocial);
+      setTips(data || []);
     }
     setIsLoading(false);
   };
 
-  const handleLike = (id: string) => {
-    setTips(tips.map(tip => 
-      tip.id === id ? { ...tip, likes: (tip.likes || 0) + 1 } : tip
-    ));
-    // 실제 구현 시 supabase.from('knowledge_base').update(...) 필요
+  const handleLike = async (id: string, currentLikes: number) => {
+    const { error } = await supabase
+      .from('knowledge_base')
+      .update({ likes: (currentLikes || 0) + 1 })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating like:', error);
+    } else {
+      setTips(tips.map(tip => 
+        tip.id === id ? { ...tip, likes: (currentLikes || 0) + 1 } : tip
+      ));
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -169,8 +171,8 @@ const ManualTips: React.FC = () => {
                 <p>{tip.content}</p>
                 
                 <div className="tip-social-actions">
-                  <button className="tip-like-btn" onClick={() => handleLike(tip.id)}>
-                    ❤️ 도움돼요 <span>{tip.likes}</span>
+                  <button className="tip-like-btn" onClick={() => handleLike(tip.id, tip.likes)}>
+                    ❤️ 도움돼요 <span>{tip.likes || 0}</span>
                   </button>
                   <button className="tip-comment-btn" onClick={() => alert('댓글 기능 구현 중!')}>
                     💬 의견 <span>{tip.comments?.length || 0}</span>
