@@ -16,6 +16,7 @@ interface Tip {
   content: string;
   category: string;
   author: string;
+  author_dept?: string;
   likes: number;
   comments?: Comment[];
 }
@@ -25,23 +26,22 @@ const ManualTips: React.FC = () => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('답변 학습');
-  const [author, setAuthor] = useState('');
   const [activeTab, setActiveTab] = useState('전체');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const categories = ['답변 학습', '시설 안내', '운영 시간', '기타 정보'];
 
   useEffect(() => {
     fetchTips();
-    const setupUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.user_metadata?.full_name) {
-        setAuthor(user.user_metadata.full_name);
-      }
-    };
-    setupUser();
+    getCurrentUser();
   }, []);
+
+  const getCurrentUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setCurrentUser(user);
+  };
 
   const fetchTips = async () => {
     setIsLoading(true);
@@ -50,57 +50,40 @@ const ManualTips: React.FC = () => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching tips:', error);
-    } else {
-      setTips(data || []);
-    }
+    if (!error) setTips(data || []);
     setIsLoading(false);
   };
 
   const handleLike = async (id: string, currentLikes: number) => {
-    const { error } = await supabase
-      .from('knowledge_base')
-      .update({ likes: (currentLikes || 0) + 1 })
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error updating like:', error);
-    } else {
-      setTips(tips.map(tip => 
-        tip.id === id ? { ...tip, likes: (currentLikes || 0) + 1 } : tip
-      ));
-    }
+    await supabase.from('knowledge_base').update({ likes: (currentLikes || 0) + 1 }).eq('id', id);
+    setTips(tips.map(tip => tip.id === id ? { ...tip, likes: (currentLikes || 0) + 1 } : tip));
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 정보를 삭제하시겠습니까?')) return;
     const { error } = await supabase.from('knowledge_base').delete().eq('id', id);
-    if (error) alert('삭제에 실패했습니다.');
-    else setTips(tips.filter(tip => tip.id !== id));
+    if (!error) setTips(tips.filter(tip => tip.id !== id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content) return;
+    if (!title.trim() || !content.trim()) return;
 
     setIsLoading(true);
     const { error } = await supabase
       .from('knowledge_base')
       .insert([{ 
-        title, 
-        content, 
+        title: title.trim(), 
+        content: content.trim(), 
         category, 
-        author: author || '익명',
+        author: currentUser?.user_metadata?.full_name || '사용자',
+        author_dept: currentUser?.user_metadata?.department || '영업팀',
         likes: 0
       }]);
 
-    if (error) {
-      setMessage({ type: 'error', text: '저장에 실패했습니다.' });
-    } else {
+    if (!error) {
       setMessage({ type: 'success', text: '지식 자산화 완료!' });
-      setTitle('');
-      setContent('');
+      setTitle(''); setContent('');
       fetchTips();
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     }
@@ -112,15 +95,15 @@ const ManualTips: React.FC = () => {
     : tips.filter(tip => tip.category === activeTab);
 
   return (
-    <div className="tips-container">
+    <div className="tips-container animate-fade-in">
       <div className="tips-header">
         <h1 className="title">📚 영업 지식 커뮤니티</h1>
-        <p className="subtitle">현장의 노하우를 공유하고 팀원들과 소통해 보세요</p>
+        <p className="subtitle">우리 팀의 소중한 노하우가 쌓이는 공간입니다</p>
       </div>
 
       <div className="tips-grid">
         <div className="tip-form-card">
-          <h3>📘 지식 공유하기</h3>
+          <h3>📘 새로운 지식 등록</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>카테고리</label>
@@ -130,14 +113,25 @@ const ManualTips: React.FC = () => {
             </div>
             <div className="form-group">
               <label>제목</label>
-              <input type="text" placeholder="공유할 지식의 핵심 제목" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <input 
+                type="text" 
+                placeholder="정보를 한눈에 알 수 있는 제목" 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                required
+              />
             </div>
             <div className="form-group">
-              <label>상세 노하우</label>
-              <textarea placeholder="다른 팀원들에게 도움이 될 내용을 적어주세요..." value={content} onChange={(e) => setContent(e.target.value)} />
+              <label>상세 내용</label>
+              <textarea 
+                placeholder="팀원들에게 공유할 상세 노하우를 적어주세요..." 
+                value={content} 
+                onChange={(e) => setContent(e.target.value)} 
+                required
+              />
             </div>
             <button type="submit" className="submit-tip-btn" disabled={isLoading}>
-              {isLoading ? '등록 중...' : '지식 자산화하기'}
+              {isLoading ? '등록 중...' : '지식 저장하기'}
             </button>
           </form>
           {message.text && <div className={`message-banner ${message.type}`}>{message.text}</div>}
@@ -145,7 +139,6 @@ const ManualTips: React.FC = () => {
 
         <div className="tip-list-section">
           <div className="list-header-complex">
-            <h3>🤝 실시간 지식 공유</h3>
             <div className="category-tabs">
               <button className={activeTab === '전체' ? 'active' : ''} onClick={() => setActiveTab('전체')}>전체</button>
               {categories.map(cat => (
@@ -160,7 +153,10 @@ const ManualTips: React.FC = () => {
                 <div className="tip-item-header">
                   <div className="header-left">
                     <span className={`tag ${tip.category.replace(' ', '')}`}>{tip.category}</span>
-                    <span className="author">By {tip.author}</span>
+                    <span className="author-info">
+                      <strong>{tip.author}</strong>
+                      {tip.author_dept && <span className="author-dept">({tip.author_dept})</span>}
+                    </span>
                   </div>
                   <button className="delete-tip-btn" onClick={() => handleDelete(tip.id)}>🗑️</button>
                 </div>
@@ -171,12 +167,8 @@ const ManualTips: React.FC = () => {
                   <button className="tip-like-btn" onClick={() => handleLike(tip.id, tip.likes)}>
                     ❤️ 도움돼요 <span>{tip.likes || 0}</span>
                   </button>
-                  <button className="tip-comment-btn" onClick={() => alert('댓글 기능은 다음 업데이트 예정입니다!')}>
-                    💬 의견 <span>{tip.comments?.length || 0}</span>
-                  </button>
+                  <div className="tip-date">{new Date(tip.created_at).toLocaleDateString()}</div>
                 </div>
-
-                <div className="tip-date">{new Date(tip.created_at).toLocaleDateString()}</div>
               </div>
             ))}
           </div>

@@ -29,24 +29,20 @@ const AutomationRequest: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      await getCurrentUser();
-      await fetchRequests();
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+      fetchRequests();
     };
     init();
 
     const subscription = supabase
-      .channel('automation_realtime_all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => { fetchRequests(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => { fetchRequests(); })
+      .channel('automation_realtime_v3')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => fetchRequests())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => fetchRequests())
       .subscribe();
 
     return () => { supabase.removeChannel(subscription); };
   }, []);
-
-  const getCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUser(user);
-  };
 
   const fetchRequests = async () => {
     const { data, error } = await supabase
@@ -57,25 +53,22 @@ const AutomationRequest: React.FC = () => {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Fetch error:', error);
-    } else {
-      setRequests(data || []);
-    }
+    if (!error) setRequests(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRequest.trim()) return;
     setIsLoading(true);
+    
     const { error } = await supabase.from('automation_requests').insert([{
-      user_name: currentUser?.user_metadata?.full_name || '익명',
-      department: currentUser?.user_metadata?.department || '영업부',
+      user_name: currentUser?.user_metadata?.full_name || '사용자',
+      department: currentUser?.user_metadata?.department || '영업팀',
       content: newRequest.trim(),
       likes: 0
     }]);
+    
     if (!error) { setNewRequest(''); fetchRequests(); }
-    else { alert('등록 중 오류가 발생했습니다.'); }
     setIsLoading(false);
   };
 
@@ -84,39 +77,47 @@ const AutomationRequest: React.FC = () => {
     fetchRequests();
   };
 
+  const handleDeleteRequest = async (id: string) => {
+    if (!window.confirm('이 요청 글을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('automation_requests').delete().eq('id', id);
+    if (!error) fetchRequests();
+  };
+
   const handleCommentSubmit = async (requestId: string) => {
     const content = commentInputs[requestId];
     if (!content?.trim()) return;
-
-    const { error } = await supabase.from('automation_comments').insert([{
+    await supabase.from('automation_comments').insert([{
       request_id: requestId,
-      user_name: currentUser?.user_metadata?.full_name || '익명',
+      user_name: currentUser?.user_metadata?.full_name || '사용자',
       content: content.trim()
     }]);
+    setCommentInputs({ ...commentInputs, [requestId]: '' });
+    fetchRequests();
+  };
 
-    if (!error) {
-      setCommentInputs({ ...commentInputs, [requestId]: '' });
-      fetchRequests();
-    }
+  const handleDeleteComment = async (commentId: string) => {
+    if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('automation_comments').delete().eq('id', commentId);
+    if (!error) fetchRequests();
   };
 
   return (
     <div className="automation-request-container animate-fade-in">
       <div className="tool-header">
         <h1>⚡ 자동화 요청 게시판</h1>
-        <p>불편한 업무를 알려주시면 AI 도구로 만들어 드립니다.</p>
+        <p>현장의 불편함을 공유하면 AI 도구로 만들어 드립니다.</p>
       </div>
 
       <div className="request-input-card">
         <form onSubmit={handleSubmit}>
           <textarea
-            placeholder="어떤 업무가 자동화되면 좋을까요? 구체적으로 적어주세요."
+            placeholder="어떤 업무가 자동화되면 좋을까요? 구체적인 내용을 적어주세요."
             value={newRequest}
             onChange={(e) => setNewRequest(e.target.value)}
             required
           />
           <button type="submit" className="submit-btn" disabled={isLoading}>
-            {isLoading ? '등록 중...' : '요청 등록하기'}
+            {isLoading ? '등록 중...' : '아이디어 등록하기'}
           </button>
         </form>
       </div>
@@ -125,28 +126,37 @@ const AutomationRequest: React.FC = () => {
         {requests.map((req) => (
           <div key={req.id} className="request-item-card">
             <div className="item-header">
-              <span className="user-info">{req.department} <strong>{req.user_name}</strong></span>
-              <span className="date">{new Date(req.created_at).toLocaleDateString()}</span>
+              <div className="user-meta">
+                <span className="dept">{req.department}</span>
+                <span className="name">{req.user_name}</span>
+                <span className="dot">•</span>
+                <span className="date">{new Date(req.created_at).toLocaleDateString()}</span>
+              </div>
+              <button className="delete-icon-btn" onClick={() => handleDeleteRequest(req.id)}>🗑️</button>
             </div>
             <div className="item-content">{req.content}</div>
+            
             <div className="item-actions">
-              <button className="like-btn" onClick={() => handleLike(req.id, req.likes)}>
+              <button className="action-btn like" onClick={() => handleLike(req.id, req.likes)}>
                 ❤️ 공감 <span>{req.likes || 0}</span>
               </button>
-              <span className="comment-count">💬 댓글 {req.comments?.length || 0}개</span>
+              <div className="action-info">💬 댓글 {req.comments?.length || 0}</div>
             </div>
             
-            <div className="comment-section">
+            <div className="comment-box">
               {req.comments?.map(comment => (
-                <div key={comment.id} className="comment-item">
-                  <span className="comment-user">{comment.user_name}</span>
-                  <span className="comment-text">{comment.content}</span>
+                <div key={comment.id} className="comment-row">
+                  <div className="comment-main">
+                    <span className="c-user">{comment.user_name}</span>
+                    <span className="c-text">{comment.content}</span>
+                  </div>
+                  <button className="c-delete" onClick={() => handleDeleteComment(comment.id)}>✕</button>
                 </div>
               ))}
-              <div className="comment-input">
+              <div className="comment-form">
                 <input 
                   type="text" 
-                  placeholder="의견 남기기 (Enter)" 
+                  placeholder="의견을 남겨주세요 (Enter)" 
                   value={commentInputs[req.id] || ''}
                   onChange={(e) => setCommentInputs({...commentInputs, [req.id]: e.target.value})}
                   onKeyDown={(e) => e.key === 'Enter' && handleCommentSubmit(req.id)}
