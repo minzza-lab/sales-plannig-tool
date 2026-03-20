@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import './AutomationRequest.css';
 
-interface Comment {
+interface AutomationComment {
   id: string;
   request_id: string;
   user_name: string;
@@ -10,32 +10,34 @@ interface Comment {
   created_at: string;
 }
 
-interface RequestItem {
+interface AutomationRequestItem {
   id: string;
   user_name: string;
   department: string;
   content: string;
   likes: number;
   created_at: string;
-  comments?: Comment[];
+  comments?: AutomationComment[];
 }
 
 const AutomationRequest: React.FC = () => {
-  const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [requests, setRequests] = useState<AutomationRequestItem[]>([]);
   const [newRequest, setNewRequest] = useState('');
   const [commentInputs, setCommentInputs] = useState<{[key: string]: string}>({});
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    fetchRequests();
-    getCurrentUser();
+    const init = async () => {
+      await getCurrentUser();
+      await fetchRequests();
+    };
+    init();
 
-    // 실시간 구독
     const subscription = supabase
-      .channel('automation_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => fetchRequests())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => fetchRequests())
+      .channel('automation_realtime_all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => { fetchRequests(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => { fetchRequests(); })
       .subscribe();
 
     return () => { supabase.removeChannel(subscription); };
@@ -47,7 +49,6 @@ const AutomationRequest: React.FC = () => {
   };
 
   const fetchRequests = async () => {
-    // 요청글과 댓글을 함께 가져옴
     const { data, error } = await supabase
       .from('automation_requests')
       .select(`
@@ -56,8 +57,11 @@ const AutomationRequest: React.FC = () => {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) console.error('Error:', error);
-    else setRequests(data || []);
+    if (error) {
+      console.error('Fetch error:', error);
+    } else {
+      setRequests(data || []);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,10 +71,11 @@ const AutomationRequest: React.FC = () => {
     const { error } = await supabase.from('automation_requests').insert([{
       user_name: currentUser?.user_metadata?.full_name || '익명',
       department: currentUser?.user_metadata?.department || '영업부',
-      content: newRequest,
+      content: newRequest.trim(),
       likes: 0
     }]);
     if (!error) { setNewRequest(''); fetchRequests(); }
+    else { alert('등록 중 오류가 발생했습니다.'); }
     setIsLoading(false);
   };
 
@@ -141,7 +146,7 @@ const AutomationRequest: React.FC = () => {
               <div className="comment-input">
                 <input 
                   type="text" 
-                  placeholder="의견을 남겨주세요 (Enter)" 
+                  placeholder="의견 남기기 (Enter)" 
                   value={commentInputs[req.id] || ''}
                   onChange={(e) => setCommentInputs({...commentInputs, [req.id]: e.target.value})}
                   onKeyDown={(e) => e.key === 'Enter' && handleCommentSubmit(req.id)}

@@ -33,14 +33,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">🏠</span> 대시보드
             </NavLink>
           </li>
-          <li>
-            <NavLink to="/tools/knowledge-base" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🤝</span> 공유 지식 베이스
+          <li className="menu-highlight">
+            <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">⚡</span> 자동화 요청 게시판
             </NavLink>
           </li>
           <li>
-            <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">⚡</span> 자동화 요청 게시판
+            <NavLink to="/tools/knowledge-base" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🤝</span> 공유 지식 베이스
             </NavLink>
           </li>
           <li>
