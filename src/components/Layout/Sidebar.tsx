@@ -39,6 +39,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </NavLink>
           </li>
           <li>
+            <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">⚡</span> 자동화 요청 게시판
+            </NavLink>
+          </li>
+          <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🤖</span> AI VOC 어시스턴트
             </NavLink>

@@ -9,6 +9,7 @@ import BarcodeGenerator from './components/BarcodeGenerator'
 import VOCAssistant from './components/VOCAssistant'
 import FieldSketchWriter from './components/FieldSketchWriter'
 import ManualTips from './components/ManualTips'
+import AutomationRequest from './components/AutomationRequest'
 import Login from './components/Auth/Login'
 import './App.css'
 
@@ -44,13 +45,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         {!session ? (
-          // 로그인하지 않은 경우 로그인 페이지로 이동
           <>
             <Route path="/login" element={<Login onLoginSuccess={() => {}} />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         ) : (
-          // 로그인한 경우 메인 레이아웃 적용
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
@@ -59,6 +58,7 @@ function App() {
             <Route path="tools/voc-assistant" element={<VOCAssistant />} />
             <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
             <Route path="tools/knowledge-base" element={<ManualTips />} />
+            <Route path="tools/automation-request" element={<AutomationRequest />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
