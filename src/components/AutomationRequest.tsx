@@ -25,7 +25,6 @@ const AutomationRequest: React.FC = () => {
   const [newRequest, setNewRequest] = useState('');
   const [commentInputs, setCommentInputs] = useState<{[key: string]: string}>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const fetchRequests = async () => {
     const { data, error } = await supabase
@@ -39,17 +38,11 @@ const AutomationRequest: React.FC = () => {
     if (!error) setRequests(data || []);
   };
 
-  const fetchUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUser(user);
-  };
-
   useEffect(() => {
-    fetchUser();
     fetchRequests();
 
     const subscription = supabase
-      .channel('automation_realtime_final')
+      .channel('automation_realtime_final_v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => fetchRequests())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => fetchRequests())
       .subscribe();
@@ -62,7 +55,6 @@ const AutomationRequest: React.FC = () => {
     if (!newRequest.trim()) return;
     setIsLoading(true);
     
-    // 유저 정보 재확인
     const { data: { user } } = await supabase.auth.getUser();
     
     const { error } = await supabase.from('automation_requests').insert([{
