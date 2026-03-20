@@ -10,15 +10,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState(''); // 이름 추가
+  const [department, setDepartment] = useState(''); // 소속 부서 추가
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // 아이디/사번을 시스템이 인식 가능한 이메일 형식으로 변환 (유효한 TLD 사용)
+  // 아이디/사번을 시스템이 인식 가능한 이메일 형식으로 변환
   const formatEmail = (val: string) => {
     const trimmed = val.trim();
     if (trimmed.includes('@')) return trimmed;
-    // .internal 대신 .co.kr 같은 표준 도메인 형식을 사용하여 오류 방지
     return `${trimmed}@wellyhilly.co.kr`;
   };
 
@@ -34,26 +35,43 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (isSignUp && (!fullName.trim() || !department.trim())) {
+      setError('이름과 소속 부서를 입력해주세요.');
+      setIsLoading(false);
+      return;
+    }
+
     const email = formatEmail(username);
 
     try {
       if (isSignUp) {
+        // 회원가입 시 메타데이터(이름, 부서) 함께 저장
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName,
+              department: department
+            }
+          }
         });
 
         if (error) {
           if (error.message.includes('already registered')) {
             setError('이미 등록된 사번입니다. 로그인해주세요.');
+          } else if (error.message.includes('rate limit')) {
+            setError('너무 짧은 시간에 여러 번 시도하셨습니다. 1분 후 다시 시도해주세요.');
           } else {
             setError(`가입 오류: ${error.message}`);
           }
         } else {
-          setMessage('계정이 성공적으로 생성되었습니다! 이제 로그인을 진행해주세요.');
+          setMessage('사번 등록이 완료되었습니다! 이제 로그인을 진행해주세요.');
           setIsSignUp(false);
           setUsername('');
           setPassword('');
+          setFullName('');
+          setDepartment('');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -96,12 +114,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <div className="login-header">
           <div className="logo-icon">🚀</div>
           <h1>Sales Planning Tool</h1>
-          <p>{isSignUp ? '새로운 계정 만들기' : '웰리힐리파크 영업기획팀 전용 시스템'}</p>
+          <p>{isSignUp ? '새로운 팀원 등록' : '웰리힐리파크 영업기획팀 전용 시스템'}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
-            <label>{isSignUp ? '가입할 사번 또는 아이디' : '사번 또는 아이디'}</label>
+            <label>{isSignUp ? '등록할 사번 또는 아이디' : '사번 또는 아이디'}</label>
             <input
               type="text"
               placeholder="예: 20260320"
@@ -110,6 +128,31 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               required
             />
           </div>
+
+          {isSignUp && (
+            <>
+              <div className="form-group">
+                <label>이름</label>
+                <input
+                  type="text"
+                  placeholder="홍길동"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>소속 부서</label>
+                <input
+                  type="text"
+                  placeholder="예: 영업기획팀"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  required
+                />
+              </div>
+            </>
+          )}
 
           <div className="form-group">
             <label>비밀번호</label>
@@ -126,7 +169,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           {message && <div className="login-success-msg">{message}</div>}
 
           <button type="submit" className="login-submit-btn" disabled={isLoading}>
-            {isLoading ? '처리 중...' : (isSignUp ? '사번으로 가입하기' : '시스템 접속하기')}
+            {isLoading ? '처리 중...' : (isSignUp ? '사번 등록하기' : '시스템 접속하기')}
           </button>
         </form>
 

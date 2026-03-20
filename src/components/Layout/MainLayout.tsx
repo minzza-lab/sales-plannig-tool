@@ -1,10 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import Sidebar from './Sidebar';
 import './MainLayout.css';
 
 const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ name: string; dept: string } | null>(null);
+
+  useEffect(() => {
+    const getUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.user_metadata) {
+        setUserInfo({
+          name: user.user_metadata.full_name || '사용자',
+          dept: user.user_metadata.department || '영업담당자'
+        });
+      }
+    };
+    getUserData();
+  }, []);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
@@ -14,7 +29,6 @@ const MainLayout: React.FC = () => {
     <div className={`layout-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
-      {/* 모바일용 오버레이 */}
       {isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       )}
@@ -31,7 +45,9 @@ const MainLayout: React.FC = () => {
             </div>
           </div>
           <div className="user-info">
-            <span className="user-badge">영업담당자</span>
+            <span className="user-badge">
+              {userInfo ? `${userInfo.dept} ${userInfo.name}` : '불러오는 중...'}
+            </span>
           </div>
         </header>
         <div className="page-content">
