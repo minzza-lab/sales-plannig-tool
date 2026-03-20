@@ -4,13 +4,12 @@
   background-color: #f9fafb;
 }
 
-/* 사이드바는 Sidebar.tsx에서 fixed로 설정되어 있으므로 본문이 그만큼 옆으로 밀려야 함 */
 .main-content {
   flex: 1;
-  margin-left: 260px; /* 사이드바 너비와 동일하게 설정 */
+  margin-left: 260px;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* flex 자식의 최소 너비 보정 */
+  min-width: 0;
   transition: margin-left 0.3s ease;
 }
 
@@ -21,10 +20,27 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2rem;
+  padding: 0 1.5rem;
   position: sticky;
   top: 0;
   z-index: 40;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 5px;
+  color: #1e293b;
 }
 
 .search-bar {
@@ -53,19 +69,56 @@
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .page-content {
-  padding: 2rem;
+  padding: 1.5rem;
   flex: 1;
   width: 100%;
-  max-width: 100%;
   box-sizing: border-box;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 90;
+  backdrop-filter: blur(2px);
 }
 
 /* 모바일 화면 대응 */
 @media (max-width: 768px) {
   .main-content {
     margin-left: 0;
+  }
+
+  .mobile-menu-btn {
+    display: block;
+  }
+
+  .top-header {
+    padding: 0 1rem;
+  }
+
+  .search-bar {
+    max-width: 180px;
+  }
+
+  .page-content {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-bar {
+    display: none; /* 아주 작은 화면에서는 검색창 숨김 */
+  }
+  
+  .user-badge {
+    font-size: 0.7rem;
   }
 }

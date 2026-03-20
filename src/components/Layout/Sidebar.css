@@ -10,25 +10,42 @@
   top: 0;
   box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
   z-index: 100;
+  transition: transform 0.3s ease-in-out;
+}
+
+.logo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-close-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
 }
 
 .sidebar-logo {
-  padding: 30px 20px;
-  text-align: center;
+  padding: 24px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-logo h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  font-weight: 800;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 20px 0;
+  padding: 15px 0;
   overflow-y: auto;
 }
 
@@ -39,19 +56,19 @@
 }
 
 .sidebar-nav li {
-  margin-bottom: 5px;
-  padding: 0 15px;
+  margin-bottom: 2px;
+  padding: 0 12px;
 }
 
 .sidebar-nav a {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
+  padding: 10px 15px;
   color: #94a3b8;
   text-decoration: none;
-  border-radius: 10px;
+  border-radius: 8px;
   transition: all 0.2s;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .sidebar-nav a:hover {
@@ -62,23 +79,23 @@
 .sidebar-nav a.active {
   background-color: #3b82f6;
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .sidebar-nav .icon {
   margin-right: 12px;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .sidebar-divider {
   border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  margin: 15px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 12px 20px;
 }
 
 .sidebar-footer {
-  padding: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 15px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .logout-btn {
@@ -86,15 +103,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  background-color: rgba(239, 68, 68, 0.1);
+  padding: 10px;
+  background-color: rgba(239, 68, 68, 0.08);
   color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
   font-weight: 600;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
 }
 
 .logout-btn:hover {
@@ -104,17 +122,22 @@
 
 .sidebar-footer p {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748b;
   text-align: center;
 }
 
-.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  padding: 12px 15px;
-  display: flex;
-  align-items: center;
-  color: #64748b;
-  font-size: 0.95rem;
+/* 모바일 화면 대응 */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%); /* 기본적으로 숨김 */
+  }
+
+  .sidebar.open {
+    transform: translateX(0); /* 열릴 때 나타남 */
+  }
+
+  .mobile-close-btn {
+    display: block;
+  }
 }
