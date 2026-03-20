@@ -27,23 +27,6 @@ const AutomationRequest: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
-      fetchRequests();
-    };
-    init();
-
-    const subscription = supabase
-      .channel('automation_realtime_v3')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => fetchRequests())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => fetchRequests())
-      .subscribe();
-
-    return () => { supabase.removeChannel(subscription); };
-  }, []);
-
   const fetchRequests = async () => {
     const { data, error } = await supabase
       .from('automation_requests')
@@ -56,14 +39,35 @@ const AutomationRequest: React.FC = () => {
     if (!error) setRequests(data || []);
   };
 
+  const fetchUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setCurrentUser(user);
+  };
+
+  useEffect(() => {
+    fetchUser();
+    fetchRequests();
+
+    const subscription = supabase
+      .channel('automation_realtime_final')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_requests' }, () => fetchRequests())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_comments' }, () => fetchRequests())
+      .subscribe();
+
+    return () => { supabase.removeChannel(subscription); };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRequest.trim()) return;
     setIsLoading(true);
     
+    // 유저 정보 재확인
+    const { data: { user } } = await supabase.auth.getUser();
+    
     const { error } = await supabase.from('automation_requests').insert([{
-      user_name: currentUser?.user_metadata?.full_name || '사용자',
-      department: currentUser?.user_metadata?.department || '영업팀',
+      user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
+      department: user?.user_metadata?.department || '영업부',
       content: newRequest.trim(),
       likes: 0
     }]);
@@ -86,11 +90,15 @@ const AutomationRequest: React.FC = () => {
   const handleCommentSubmit = async (requestId: string) => {
     const content = commentInputs[requestId];
     if (!content?.trim()) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+
     await supabase.from('automation_comments').insert([{
       request_id: requestId,
-      user_name: currentUser?.user_metadata?.full_name || '사용자',
+      user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
       content: content.trim()
     }]);
+
     setCommentInputs({ ...commentInputs, [requestId]: '' });
     fetchRequests();
   };

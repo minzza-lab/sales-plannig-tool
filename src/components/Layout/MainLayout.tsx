@@ -8,17 +8,25 @@ const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<{ name: string; dept: string } | null>(null);
 
+  const fetchUserInfo = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.user_metadata) {
+      setUserInfo({
+        name: user.user_metadata.full_name || user.user_metadata.name || '사용자',
+        dept: user.user_metadata.department || '영업부'
+      });
+    }
+  };
+
   useEffect(() => {
-    const getUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && user.user_metadata) {
-        setUserInfo({
-          name: user.user_metadata.full_name || '사용자',
-          dept: user.user_metadata.department || '영업담당자'
-        });
-      }
-    };
-    getUserData();
+    fetchUserInfo();
+
+    // 인증 상태 변경 감지 (로그인/로그아웃 시 즉시 반영)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      fetchUserInfo();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const toggleSidebar = () => {
@@ -46,7 +54,7 @@ const MainLayout: React.FC = () => {
           </div>
           <div className="user-info">
             <span className="user-badge">
-              {userInfo ? `${userInfo.dept} ${userInfo.name}` : '불러오는 중...'}
+              {userInfo ? `${userInfo.dept} ${userInfo.name}` : '정보 불러오는 중...'}
             </span>
           </div>
         </header>
