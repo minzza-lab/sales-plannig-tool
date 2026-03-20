@@ -98,6 +98,7 @@
 
 .author-dept {
   color: #94a3b8;
+  font-weight: normal;
 }
 
 .delete-tip-btn {
@@ -140,6 +141,53 @@
   border-radius: 999px;
   font-weight: 700;
   cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.comment-summary {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Tip Comment Box */
+.tip-comment-box {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.tip-comment-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+}
+
+.c-main strong {
+  color: #1e293b;
+  margin-right: 8px;
+}
+
+.c-del {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.tip-comment-input {
+  margin-top: 0.8rem;
+}
+
+.tip-comment-input input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   font-size: 0.85rem;
 }
 

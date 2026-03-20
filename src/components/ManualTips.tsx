@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import './ManualTips.css';
 
-interface Comment {
+interface KnowledgeComment {
   id: string;
+  tip_id: string;
   user_name: string;
   content: string;
   created_at: string;
@@ -18,7 +19,7 @@ interface Tip {
   author: string;
   author_dept?: string;
   likes: number;
-  comments?: Comment[];
+  comments?: KnowledgeComment[];
 }
 
 const ManualTips: React.FC = () => {
@@ -27,6 +28,7 @@ const ManualTips: React.FC = () => {
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('답변 학습');
   const [activeTab, setActiveTab] = useState('전체');
+  const [commentInputs, setCommentInputs] = useState<{[key: string]: string}>({});
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -36,6 +38,15 @@ const ManualTips: React.FC = () => {
   useEffect(() => {
     fetchTips();
     getCurrentUser();
+
+    // 실시간 업데이트 구독
+    const subscription = supabase
+      .channel('knowledge_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'knowledge_base' }, () => fetchTips())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'knowledge_comments' }, () => fetchTips())
+      .subscribe();
+
+    return () => { supabase.removeChannel(subscription); };
   }, []);
 
   const getCurrentUser = async () => {
@@ -44,14 +55,15 @@ const ManualTips: React.FC = () => {
   };
 
   const fetchTips = async () => {
-    setIsLoading(true);
     const { data, error } = await supabase
       .from('knowledge_base')
-      .select('*')
+      .select(`
+        *,
+        comments:knowledge_comments(*)
+      `)
       .order('created_at', { ascending: false });
 
     if (!error) setTips(data || []);
-    setIsLoading(false);
   };
 
   const handleLike = async (id: string, currentLikes: number) => {
@@ -62,7 +74,7 @@ const ManualTips: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 정보를 삭제하시겠습니까?')) return;
     const { error } = await supabase.from('knowledge_base').delete().eq('id', id);
-    if (!error) setTips(tips.filter(tip => tip.id !== id));
+    if (!error) fetchTips();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,6 +82,7 @@ const ManualTips: React.FC = () => {
     if (!title.trim() || !content.trim()) return;
 
     setIsLoading(true);
+    // 컬럼명이 DB와 일치하는지 다시 확인 (author, author_dept, title, content, category, likes)
     const { error } = await supabase
       .from('knowledge_base')
       .insert([{ 
@@ -81,13 +94,37 @@ const ManualTips: React.FC = () => {
         likes: 0
       }]);
 
-    if (!error) {
+    if (error) {
+      alert(`등록 실패: ${error.message}`);
+    } else {
       setMessage({ type: 'success', text: '지식 자산화 완료!' });
       setTitle(''); setContent('');
       fetchTips();
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     }
     setIsLoading(false);
+  };
+
+  const handleCommentSubmit = async (tipId: string) => {
+    const commentText = commentInputs[tipId];
+    if (!commentText?.trim()) return;
+
+    const { error } = await supabase.from('knowledge_comments').insert([{
+      tip_id: tipId,
+      user_name: currentUser?.user_metadata?.full_name || '사용자',
+      content: commentText.trim()
+    }]);
+
+    if (!error) {
+      setCommentInputs({ ...commentInputs, [tipId]: '' });
+      fetchTips();
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('knowledge_comments').delete().eq('id', commentId);
+    if (!error) fetchTips();
   };
 
   const filteredTips = activeTab === '전체' 
@@ -113,22 +150,11 @@ const ManualTips: React.FC = () => {
             </div>
             <div className="form-group">
               <label>제목</label>
-              <input 
-                type="text" 
-                placeholder="정보를 한눈에 알 수 있는 제목" 
-                value={title} 
-                onChange={(e) => setTitle(e.target.value)} 
-                required
-              />
+              <input type="text" placeholder="제목을 입력하세요" value={title} onChange={(e) => setTitle(e.target.value)} required />
             </div>
             <div className="form-group">
               <label>상세 내용</label>
-              <textarea 
-                placeholder="팀원들에게 공유할 상세 노하우를 적어주세요..." 
-                value={content} 
-                onChange={(e) => setContent(e.target.value)} 
-                required
-              />
+              <textarea placeholder="노하우를 공유해 주세요..." value={content} onChange={(e) => setContent(e.target.value)} required />
             </div>
             <button type="submit" className="submit-tip-btn" disabled={isLoading}>
               {isLoading ? '등록 중...' : '지식 저장하기'}
@@ -138,13 +164,11 @@ const ManualTips: React.FC = () => {
         </div>
 
         <div className="tip-list-section">
-          <div className="list-header-complex">
-            <div className="category-tabs">
-              <button className={activeTab === '전체' ? 'active' : ''} onClick={() => setActiveTab('전체')}>전체</button>
-              {categories.map(cat => (
-                <button key={cat} className={activeTab === cat ? 'active' : ''} onClick={() => setActiveTab(cat)}>{cat}</button>
-              ))}
-            </div>
+          <div className="category-tabs">
+            <button className={activeTab === '전체' ? 'active' : ''} onClick={() => setActiveTab('전체')}>전체</button>
+            {categories.map(cat => (
+              <button key={cat} className={activeTab === cat ? 'active' : ''} onClick={() => setActiveTab(cat)}>{cat}</button>
+            ))}
           </div>
           
           <div className="tips-list-scroll">
@@ -167,7 +191,27 @@ const ManualTips: React.FC = () => {
                   <button className="tip-like-btn" onClick={() => handleLike(tip.id, tip.likes)}>
                     ❤️ 도움돼요 <span>{tip.likes || 0}</span>
                   </button>
-                  <div className="tip-date">{new Date(tip.created_at).toLocaleDateString()}</div>
+                  <span className="comment-summary">💬 {tip.comments?.length || 0}</span>
+                </div>
+
+                <div className="tip-comment-box">
+                  {tip.comments?.map(comment => (
+                    <div key={comment.id} className="tip-comment-row">
+                      <div className="c-main">
+                        <strong>{comment.user_name}</strong> {comment.content}
+                      </div>
+                      <button className="c-del" onClick={() => handleDeleteComment(comment.id)}>✕</button>
+                    </div>
+                  ))}
+                  <div className="tip-comment-input">
+                    <input 
+                      type="text" 
+                      placeholder="의견 남기기 (Enter)" 
+                      value={commentInputs[tip.id] || ''}
+                      onChange={(e) => setCommentInputs({...commentInputs, [tip.id]: e.target.value})}
+                      onKeyDown={(e) => e.key === 'Enter' && handleCommentSubmit(tip.id)}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
