@@ -37,11 +37,14 @@ const ManualTips: React.FC = () => {
 
   useEffect(() => {
     fetchTips();
-    getCurrentUser();
+    const setupUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+    };
+    setupUser();
 
-    // 실시간 업데이트 구독
     const subscription = supabase
-      .channel('knowledge_realtime')
+      .channel('knowledge_realtime_final')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'knowledge_base' }, () => fetchTips())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'knowledge_comments' }, () => fetchTips())
       .subscribe();
@@ -49,12 +52,8 @@ const ManualTips: React.FC = () => {
     return () => { supabase.removeChannel(subscription); };
   }, []);
 
-  const getCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUser(user);
-  };
-
   const fetchTips = async () => {
+    // 댓글 테이블이 없을 경우를 대비해 쿼리를 분리하거나 에러 처리를 강화합니다.
     const { data, error } = await supabase
       .from('knowledge_base')
       .select(`
@@ -63,7 +62,17 @@ const ManualTips: React.FC = () => {
       `)
       .order('created_at', { ascending: false });
 
-    if (!error) setTips(data || []);
+    if (error) {
+      console.error('Error fetching tips:', error);
+      // 만약 댓글 조인에서 에러가 나면 기본 정보만이라도 가져옵니다.
+      const { data: simpleData } = await supabase
+        .from('knowledge_base')
+        .select('*')
+        .order('created_at', { ascending: false });
+      setTips(simpleData || []);
+    } else {
+      setTips(data || []);
+    }
   };
 
   const handleLike = async (id: string, currentLikes: number) => {
@@ -73,8 +82,8 @@ const ManualTips: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 정보를 삭제하시겠습니까?')) return;
-    const { error } = await supabase.from('knowledge_base').delete().eq('id', id);
-    if (!error) fetchTips();
+    await supabase.from('knowledge_base').delete().eq('id', id);
+    fetchTips();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,7 +91,6 @@ const ManualTips: React.FC = () => {
     if (!title.trim() || !content.trim()) return;
 
     setIsLoading(true);
-    // 컬럼명이 DB와 일치하는지 다시 확인 (author, author_dept, title, content, category, likes)
     const { error } = await supabase
       .from('knowledge_base')
       .insert([{ 
@@ -109,22 +117,20 @@ const ManualTips: React.FC = () => {
     const commentText = commentInputs[tipId];
     if (!commentText?.trim()) return;
 
-    const { error } = await supabase.from('knowledge_comments').insert([{
+    await supabase.from('knowledge_comments').insert([{
       tip_id: tipId,
       user_name: currentUser?.user_metadata?.full_name || '사용자',
       content: commentText.trim()
     }]);
 
-    if (!error) {
-      setCommentInputs({ ...commentInputs, [tipId]: '' });
-      fetchTips();
-    }
+    setCommentInputs({ ...commentInputs, [tipId]: '' });
+    fetchTips();
   };
 
   const handleDeleteComment = async (commentId: string) => {
     if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
-    const { error } = await supabase.from('knowledge_comments').delete().eq('id', commentId);
-    if (!error) fetchTips();
+    await supabase.from('knowledge_comments').delete().eq('id', commentId);
+    fetchTips();
   };
 
   const filteredTips = activeTab === '전체' 
