@@ -29,22 +29,19 @@ const ManualTips: React.FC = () => {
   const [activeTab, setActiveTab] = useState('전체');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const categories = ['답변 학습', '시설 안내', '운영 시간', '기타 정보'];
 
   useEffect(() => {
     fetchTips();
-    getCurrentUser();
+    const setupUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata?.full_name) {
+        setAuthor(user.user_metadata.full_name);
+      }
+    };
+    setupUser();
   }, []);
-
-  const getCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUser(user);
-    if (user?.user_metadata?.full_name) {
-      setAuthor(user.user_metadata.full_name);
-    }
-  };
 
   const fetchTips = async () => {
     setIsLoading(true);
@@ -174,7 +171,7 @@ const ManualTips: React.FC = () => {
                   <button className="tip-like-btn" onClick={() => handleLike(tip.id, tip.likes)}>
                     ❤️ 도움돼요 <span>{tip.likes || 0}</span>
                   </button>
-                  <button className="tip-comment-btn" onClick={() => alert('댓글 기능 구현 중!')}>
+                  <button className="tip-comment-btn" onClick={() => alert('댓글 기능은 다음 업데이트 예정입니다!')}>
                     💬 의견 <span>{tip.comments?.length || 0}</span>
                   </button>
                 </div>
