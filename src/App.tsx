@@ -13,6 +13,7 @@ import AutomationRequest from './components/AutomationRequest'
 import Login from './components/Auth/Login'
 import './App.css'
 
+// Force rebuild for automation board visibility
 function App() {
   const [session, setSession] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
