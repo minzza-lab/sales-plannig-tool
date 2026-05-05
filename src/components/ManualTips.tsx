@@ -134,8 +134,8 @@ const ManualTips: React.FC = () => {
   };
 
   const filteredTips = activeTab === '전체' 
-    ? tips 
-    : tips.filter(tip => tip.category === activeTab);
+    ? tips.filter(t => t && !t.title?.startsWith('[SYSTEM]'))
+    : tips.filter(t => t && !t.title?.startsWith('[SYSTEM]') && t.category === activeTab);
 
   return (
     <div className="tips-container animate-fade-in">
@@ -182,7 +182,7 @@ const ManualTips: React.FC = () => {
               <div key={tip.id} className="tip-item-card animate-slide-up">
                 <div className="tip-item-header">
                   <div className="header-left">
-                    <span className={`tag ${tip.category.replace(' ', '')}`}>{tip.category}</span>
+                    <span className={`tag ${(tip.category || '기타 정보').replace(' ', '')}`}>{tip.category || '기타 정보'}</span>
                     <span className="author-info">
                       <strong>{tip.author}</strong>
                       {tip.author_dept && <span className="author-dept">({tip.author_dept})</span>}

@@ -247,6 +247,7 @@ const VOCAssistant: React.FC = () => {
     const { error } = await supabase.from('knowledge_base').insert({
       title,
       content,
+      category: '답변 학습',
       author: '시스템 자동수집',
     });
     
