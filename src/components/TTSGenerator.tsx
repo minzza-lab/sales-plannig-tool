@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import './TTSGenerator.css';
 
 interface VoiceOption {
@@ -34,6 +34,72 @@ const TTSGenerator: React.FC = () => {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [selectedSituation, setSelectedSituation] = useState('');
   const [customSituation, setCustomSituation] = useState('');
+  
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const [isPlayingVoice, setIsPlayingVoice] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playPreview = async (e: React.MouseEvent, voiceId: string) => {
+    e.stopPropagation();
+
+    if (isPlayingVoice === voiceId) {
+      previewAudioRef.current?.pause();
+      setIsPlayingVoice(null);
+      return;
+    }
+
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+    }
+
+    setIsPlayingVoice(voiceId);
+
+    if (previewUrls[voiceId]) {
+      const audio = new Audio(previewUrls[voiceId]);
+      previewAudioRef.current = audio;
+      audio.onended = () => setIsPlayingVoice(null);
+      audio.play();
+      return;
+    }
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API 키가 없습니다.");
+
+      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text: "안녕하세요, 웰리힐리파크에 오신 것을 환영합니다." },
+          voice: { languageCode: "ko-KR", name: voiceId },
+          audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0 }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.error && data.error.message.includes('API has not been used')) {
+           throw new Error("Google Cloud Console에서 'Cloud Text-to-Speech API'를 활성화해야 합니다.");
+        }
+        throw new Error(data.error?.message || "미리듣기 생성 실패");
+      }
+
+      if (data.audioContent) {
+        const audioBlob = base64ToBlob(data.audioContent, 'audio/mp3');
+        const url = URL.createObjectURL(audioBlob);
+        
+        setPreviewUrls(prev => ({ ...prev, [voiceId]: url }));
+        
+        const audio = new Audio(url);
+        previewAudioRef.current = audio;
+        audio.onended = () => setIsPlayingVoice(null);
+        audio.play();
+      }
+    } catch (error: any) {
+      alert("미리듣기 실패: " + error.message);
+      setIsPlayingVoice(null);
+    }
+  };
 
   const generateScript = async () => {
     const situation = customSituation || selectedSituation;
@@ -213,6 +279,13 @@ const TTSGenerator: React.FC = () => {
                     <h4>{voice.name}</h4>
                     <p>{voice.description}</p>
                   </div>
+                  <button 
+                    className="preview-btn" 
+                    onClick={(e) => playPreview(e, voice.id)}
+                    title="미리 듣기"
+                  >
+                    {isPlayingVoice === voice.id ? '⏹️' : '▶️'}
+                  </button>
                 </div>
               ))}
             </div>
