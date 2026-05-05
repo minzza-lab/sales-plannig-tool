@@ -30,6 +30,7 @@ const Approvals: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
   const [groupBy, setGroupBy] = useState<'year' | 'type'>('year');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Approval>>({});
@@ -257,6 +258,13 @@ const Approvals: React.FC = () => {
     }
   };
 
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }));
+  };
+
   const openEditModal = () => {
     if (selectedApproval) {
       setEditForm(selectedApproval);
@@ -450,32 +458,49 @@ const Approvals: React.FC = () => {
               }, {} as Record<string, Approval[]>)
             )
             .sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
-            .map(([groupKey, items]) => (
+            .map(([groupKey, items]) => {
+              // 검색 중이거나 사용자가 명시적으로 열어둔 경우에만 확장 (기본값은 닫힘)
+              const isExpanded = searchTerm.length > 0 || !!expandedGroups[groupKey];
+              
+              return (
               <div key={groupKey} className="approval-group">
-                <div className="group-header">
-                  <span className="group-title">{groupKey}</span>
-                  <span className="group-count">{items.length}건</span>
-                </div>
-                {items.map(approval => (
-                  <div 
-                    key={approval.id} 
-                    className={`approval-card ${selectedApproval?.id === approval.id ? 'active' : ''}`}
-                    onClick={() => setSelectedApproval(approval)}
-                  >
-                    <div className="approval-card-header">
-                      <span className="approval-dept">{approval.department}</span>
-                      <span className="approval-date">{approval.doc_date}</span>
-                    </div>
-                    <h3 className="approval-title">{approval.title}</h3>
-                    <p className="approval-desc">{approval.description || '내용 없음'}</p>
-                    <div className="approval-card-footer">
-                      <span className="approval-author">✍️ {approval.author}</span>
-                      <span className="approval-filename">📎 {approval.file_name}</span>
-                    </div>
+                <div 
+                  className="group-header accordion-header" 
+                  onClick={() => toggleGroup(groupKey)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="group-title">{groupKey}</span>
+                    <span className="group-count">{items.length}건</span>
                   </div>
-                ))}
+                  <span className="group-arrow" style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    {isExpanded ? '▲' : '▼'}
+                  </span>
+                </div>
+                
+                {isExpanded && (
+                  <div className="group-items animate-fade-in">
+                    {items.map(approval => (
+                      <div 
+                        key={approval.id} 
+                        className={`approval-card ${selectedApproval?.id === approval.id ? 'active' : ''}`}
+                        onClick={() => setSelectedApproval(approval)}
+                      >
+                        <div className="approval-card-header">
+                          <span className="approval-dept">{approval.department}</span>
+                          <span className="approval-date">{approval.doc_date}</span>
+                        </div>
+                        <h3 className="approval-title">{approval.title}</h3>
+                        <p className="approval-desc">{approval.description || '내용 없음'}</p>
+                        <div className="approval-card-footer">
+                          <span className="approval-author">✍️ {approval.author}</span>
+                          <span className="approval-filename">📎 {approval.file_name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))
+            )})
           )}
         </div>
 
