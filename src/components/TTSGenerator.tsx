@@ -63,8 +63,8 @@ const TTSGenerator: React.FC = () => {
     }
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("API 키가 없습니다.");
+      const apiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
+      if (!apiKey) throw new Error("Google TTS API 키가 없습니다. (.env 파일 확인)");
 
       const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
         method: 'POST',
@@ -150,8 +150,8 @@ const TTSGenerator: React.FC = () => {
     setAudioUrl(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // Google Cloud API Key (usually same as Gemini if enabled)
-      if (!apiKey) throw new Error("API 키가 없습니다.");
+      const apiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
+      if (!apiKey) throw new Error("Google TTS API 키가 없습니다.");
 
       // Google Cloud Text-to-Speech API Call
       const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
