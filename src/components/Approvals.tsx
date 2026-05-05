@@ -29,6 +29,7 @@ const Approvals: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [groupBy, setGroupBy] = useState<'year' | 'type'>('year');
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
@@ -347,6 +348,20 @@ const Approvals: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <div className="view-mode-toggle">
+          <button 
+            className={`toggle-btn ${groupBy === 'year' ? 'active' : ''}`}
+            onClick={() => setGroupBy('year')}
+          >
+            연도별 보기
+          </button>
+          <button 
+            className={`toggle-btn ${groupBy === 'type' ? 'active' : ''}`}
+            onClick={() => setGroupBy('type')}
+          >
+            종류별 보기
+          </button>
+        </div>
         <div className="year-filter">
           <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
             <option value="all">전체 연도</option>
@@ -362,22 +377,48 @@ const Approvals: React.FC = () => {
           {filteredApprovals.length === 0 ? (
             <div className="empty-state">조건에 맞는 품의서가 없습니다.</div>
           ) : (
-            filteredApprovals.map(approval => (
-              <div 
-                key={approval.id} 
-                className={`approval-card ${selectedApproval?.id === approval.id ? 'active' : ''}`}
-                onClick={() => setSelectedApproval(approval)}
-              >
-                <div className="approval-card-header">
-                  <span className="approval-dept">{approval.department}</span>
-                  <span className="approval-date">{approval.doc_date}</span>
+            Object.entries(
+              filteredApprovals.reduce((acc, curr) => {
+                let key = '기타';
+                if (groupBy === 'year') {
+                  key = curr.doc_date.substring(0, 4) + '년';
+                } else if (groupBy === 'type') {
+                  const match = curr.title.match(/\[(.*?)\]/);
+                  if (match && match[1]) {
+                    key = match[1];
+                  }
+                }
+                
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(curr);
+                return acc;
+              }, {} as Record<string, Approval[]>)
+            )
+            .sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
+            .map(([groupKey, items]) => (
+              <div key={groupKey} className="approval-group">
+                <div className="group-header">
+                  <span className="group-title">{groupKey}</span>
+                  <span className="group-count">{items.length}건</span>
                 </div>
-                <h3 className="approval-title">{approval.title}</h3>
-                <p className="approval-desc">{approval.description || '내용 없음'}</p>
-                <div className="approval-card-footer">
-                  <span className="approval-author">✍️ {approval.author}</span>
-                  <span className="approval-filename">📎 {approval.file_name}</span>
-                </div>
+                {items.map(approval => (
+                  <div 
+                    key={approval.id} 
+                    className={`approval-card ${selectedApproval?.id === approval.id ? 'active' : ''}`}
+                    onClick={() => setSelectedApproval(approval)}
+                  >
+                    <div className="approval-card-header">
+                      <span className="approval-dept">{approval.department}</span>
+                      <span className="approval-date">{approval.doc_date}</span>
+                    </div>
+                    <h3 className="approval-title">{approval.title}</h3>
+                    <p className="approval-desc">{approval.description || '내용 없음'}</p>
+                    <div className="approval-card-footer">
+                      <span className="approval-author">✍️ {approval.author}</span>
+                      <span className="approval-filename">📎 {approval.file_name}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))
           )}
