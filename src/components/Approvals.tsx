@@ -338,9 +338,18 @@ const Approvals: React.FC = () => {
                   className="download-btn"
                   download
                 >
-                  다운로드 / 보기
+                  새 창에서 열기 / 다운로드
                 </a>
               </div>
+              
+              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
+                <div className="detail-pdf-preview">
+                  <iframe 
+                    src={`${selectedApproval.file_url}#toolbar=0&navpanes=0&scrollbar=0`} 
+                    title="PDF Preview"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="detail-comments">
