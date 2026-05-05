@@ -34,8 +34,9 @@ const Approvals: React.FC = () => {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDate, setUploadDate] = useState('');
   const [uploadDesc, setUploadDesc] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const [newComment, setNewComment] = useState('');
   const [currentUser, setCurrentUser] = useState<{name: string; dept: string} | null>(null);
@@ -112,81 +113,110 @@ const Approvals: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setUploadFile(file);
+      const files = Array.from(e.target.files);
+      setUploadFiles(files);
 
-      // 파일명 자동 파싱 (예: 260505_품의_어린이날결과보고(안).pdf)
-      const fileNameStr = file.name;
-      const parts = fileNameStr.split('_');
-      
-      if (parts.length >= 3) {
-        const datePart = parts[0]; // 260505
-        const typePart = parts[1]; // 품의
+      if (files.length === 1) {
+        // 단일 파일인 경우에만 폼에 미리 채워줌
+        const file = files[0];
+        const parts = file.name.split('_');
         
-        // 나머지 부분은 제목 (확장자 제거)
-        let titlePart = parts.slice(2).join('_');
-        const extIndex = titlePart.lastIndexOf('.');
-        if (extIndex > -1) {
-          titlePart = titlePart.substring(0, extIndex);
+        if (parts.length >= 3) {
+          const datePart = parts[0];
+          const typePart = parts[1];
+          let titlePart = parts.slice(2).join('_');
+          const extIndex = titlePart.lastIndexOf('.');
+          if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+          
+          if (datePart.length === 6 && !isNaN(Number(datePart))) {
+            const year = '20' + datePart.substring(0, 2);
+            const month = datePart.substring(2, 4);
+            const day = datePart.substring(4, 6);
+            setUploadDate(`${year}-${month}-${day}`);
+          }
+          setUploadTitle(`[${typePart}] ${titlePart}`);
         }
-        
-        // 날짜 파싱 (260505 -> 2026-05-05)
-        if (datePart.length === 6 && !isNaN(Number(datePart))) {
-          const year = '20' + datePart.substring(0, 2);
-          const month = datePart.substring(2, 4);
-          const day = datePart.substring(4, 6);
-          setUploadDate(`${year}-${month}-${day}`);
-        }
-        
-        // 제목 셋팅
-        setUploadTitle(`[${typePart}] ${titlePart}`);
+      } else {
+        // 대량 업로드 시 폼을 초기화 (각 파일마다 개별 파싱됨)
+        setUploadTitle('대량 업로드 진행 중...');
+        setUploadDate(new Date().toISOString().split('T')[0]);
       }
     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadFile || !uploadTitle || !uploadDate) {
-      alert('파일, 제목, 문서 일자는 필수입니다.');
+    if (uploadFiles.length === 0) {
+      alert('파일을 선택해주세요.');
       return;
     }
 
     setIsUploading(true);
+    let successCount = 0;
+
     try {
-      // 1. Storage에 파일 업로드
-      const fileExt = uploadFile.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `documents/${uploadDate.substring(0,4)}/${fileName}`;
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const file = uploadFiles[i];
+        setUploadProgress(i + 1);
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
-        .from('approvals')
-        .upload(filePath, uploadFile);
+        // 개별 파일 파싱
+        let finalTitle = uploadTitle;
+        let finalDate = uploadDate;
+        
+        const parts = file.name.split('_');
+        if (parts.length >= 3) {
+          const datePart = parts[0];
+          const typePart = parts[1];
+          let titlePart = parts.slice(2).join('_');
+          const extIndex = titlePart.lastIndexOf('.');
+          if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+          
+          if (datePart.length === 6 && !isNaN(Number(datePart))) {
+            const year = '20' + datePart.substring(0, 2);
+            const month = datePart.substring(2, 4);
+            const day = datePart.substring(4, 6);
+            finalDate = `${year}-${month}-${day}`;
+          }
+          finalTitle = `[${typePart}] ${titlePart}`;
+        }
 
-      if (uploadError) throw uploadError;
+        // 1. Storage에 파일 업로드
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `documents/${finalDate.substring(0,4)}/${fileName}`;
 
-      const { data: urlData } = supabase.storage
-        .from('approvals')
-        .getPublicUrl(filePath);
+        const { error: uploadError } = await supabase.storage
+          .from('approvals')
+          .upload(filePath, file);
 
-      // 2. DB에 메타데이터 저장
-      const { error: dbError } = await supabase.from('approvals').insert({
-        title: uploadTitle,
-        doc_date: uploadDate,
-        department: currentUser?.dept || '기획팀',
-        author: currentUser?.name || '사용자',
-        file_url: urlData.publicUrl,
-        file_name: uploadFile.name,
-        description: uploadDesc
-      });
+        if (uploadError) throw uploadError;
 
-      if (dbError) throw dbError;
+        const { data: urlData } = supabase.storage
+          .from('approvals')
+          .getPublicUrl(filePath);
 
-      alert('성공적으로 업로드되었습니다!');
+        // 2. DB에 메타데이터 저장
+        const { error: dbError } = await supabase.from('approvals').insert({
+          title: finalTitle,
+          doc_date: finalDate,
+          department: currentUser?.dept || '기획팀',
+          author: currentUser?.name || '사용자',
+          file_url: urlData.publicUrl,
+          file_name: file.name,
+          description: uploadDesc
+        });
+
+        if (dbError) throw dbError;
+        successCount++;
+      }
+
+      alert(`총 ${successCount}개의 품의서가 성공적으로 업로드되었습니다!`);
       setIsUploadModalOpen(false);
-      setUploadFile(null);
+      setUploadFiles([]);
       setUploadTitle('');
       setUploadDesc('');
       setUploadDate('');
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
       fetchApprovals();
 
@@ -195,6 +225,7 @@ const Approvals: React.FC = () => {
       alert('업로드 중 오류가 발생했습니다: ' + error.message);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -387,19 +418,25 @@ const Approvals: React.FC = () => {
                 />
               </div>
               <div className="form-group">
-                <label>PDF 스캔본 첨부</label>
+                <label>PDF 스캔본 첨부 (여러 개 선택 가능)</label>
                 <input 
                   type="file" 
                   accept=".pdf,.doc,.docx,.xls,.xlsx"
+                  multiple
                   required
                   ref={fileInputRef}
                   onChange={handleFileChange}
                 />
+                {uploadFiles.length > 1 && (
+                  <p style={{ fontSize: '12px', color: '#10b981', marginTop: '5px' }}>
+                    ✅ 총 {uploadFiles.length}개의 파일이 일괄 업로드됩니다. (파일명으로 자동 분류됨)
+                  </p>
+                )}
               </div>
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={() => setIsUploadModalOpen(false)}>취소</button>
                 <button type="submit" className="submit-btn" disabled={isUploading}>
-                  {isUploading ? '업로드 중...' : '등록하기'}
+                  {isUploading ? `업로드 중... (${uploadProgress}/${uploadFiles.length})` : '등록하기'}
                 </button>
               </div>
             </form>
