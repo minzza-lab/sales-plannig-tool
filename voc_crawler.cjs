@@ -129,7 +129,10 @@ async function runCrawler() {
     const now = new Date();
     const formattedTime = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     
-    await supabase.from('knowledge_base').upsert({
+    // title이 unique 컬럼이 아니므로 기존 레코드를 삭제 후 새로 삽입합니다.
+    await supabase.from('knowledge_base').delete().eq('title', '[SYSTEM] LAST_SYNC');
+    
+    await supabase.from('knowledge_base').insert({
       title: '[SYSTEM] LAST_SYNC',
       content: JSON.stringify({
         synced_at: formattedTime,
@@ -138,7 +141,7 @@ async function runCrawler() {
       }),
       author: 'SYSTEM',
       category: '시스템'
-    }, { onConflict: 'title' });
+    });
     
     console.log('✅ 모든 미답변 VOC 크롤링 및 DB 동기화 완료!');
     
