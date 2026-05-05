@@ -12,6 +12,7 @@ const VOCAssistant: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [teamTips, setTeamTips] = useState<string>('');
+  const [unansweredList, setUnansweredList] = useState<any[]>([]);
 
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
@@ -34,6 +35,20 @@ const VOCAssistant: React.FC = () => {
     const urlContent = params.get('content');
     if (urlName) setCustomerName(urlName);
     if (urlContent) setVocContent(urlContent);
+    
+    // 크롤러로 수집된 미답변 VOC 리스트 가져오기
+    const fetchUnansweredVocList = async () => {
+      const { data, error } = await supabase
+        .from('voc_inquiries')
+        .select('*')
+        .eq('status', 'unanswered')
+        .order('created_at', { ascending: false });
+        
+      if (data && !error) {
+        setUnansweredList(data);
+      }
+    };
+    fetchUnansweredVocList();
   }, []);
 
   const getSeasonInfo = () => {
@@ -173,6 +188,30 @@ const VOCAssistant: React.FC = () => {
 
       <div className="voc-workspace">
         <div className="voc-input-section">
+          {unansweredList.length > 0 && (
+            <div className="unanswered-voc-list">
+              <div className="section-label">🚨 새로 수집된 미답변 VOC ({unansweredList.length}건)</div>
+              <div className="voc-cards-container">
+                {unansweredList.map((voc) => (
+                  <div 
+                    key={voc.id} 
+                    className="voc-card"
+                    onClick={() => {
+                      setCustomerName(voc.customer_name);
+                      setVocContent(`제목: ${voc.title}\n카테고리: ${voc.category}\n\n${voc.content}`);
+                    }}
+                  >
+                    <div className="voc-card-header">
+                      <span className="voc-category">{voc.category}</span>
+                      <span className="voc-name">{voc.customer_name}님</span>
+                    </div>
+                    <div className="voc-card-title">{voc.title}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="input-field-group">
             <div className="section-label">고객 성함 (선택)</div>
             <input
