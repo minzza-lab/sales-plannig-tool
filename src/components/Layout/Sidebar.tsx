@@ -64,6 +64,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">📸</span> AI 현장스케치
             </NavLink>
           </li>
+          <li>
+            <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🎙️</span> AI 성우 스튜디오
+            </NavLink>
+          </li>
           <hr className="sidebar-divider" />
           <li>
             <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
