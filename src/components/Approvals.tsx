@@ -31,6 +31,9 @@ const Approvals: React.FC = () => {
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
   const [groupBy, setGroupBy] = useState<'year' | 'type'>('year');
   
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Approval>>({});
+  
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDate, setUploadDate] = useState('');
@@ -248,6 +251,52 @@ const Approvals: React.FC = () => {
     }
   };
 
+  const openEditModal = () => {
+    if (selectedApproval) {
+      setEditForm(selectedApproval);
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedApproval) return;
+    if (!window.confirm(`'${selectedApproval.title}' 문서를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+    await supabase.from('approval_comments').delete().eq('approval_id', selectedApproval.id);
+    const { error } = await supabase.from('approvals').delete().eq('id', selectedApproval.id);
+    
+    if (error) {
+      alert("삭제 실패: " + error.message);
+    } else {
+      setSelectedApproval(null);
+      fetchApprovals();
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm.id || !editForm.title || !editForm.doc_date) return;
+    
+    const { error } = await supabase
+      .from('approvals')
+      .update({
+        title: editForm.title,
+        doc_date: editForm.doc_date,
+        department: editForm.department,
+        author: editForm.author,
+        file_name: editForm.file_name
+      })
+      .eq('id', editForm.id);
+      
+    if (error) {
+      alert("수정 실패: " + error.message);
+    } else {
+      setIsEditModalOpen(false);
+      fetchApprovals();
+      setSelectedApproval({ ...selectedApproval, ...editForm } as Approval);
+    }
+  };
+
   const handleAiSummarize = async () => {
     if (!selectedApproval || !selectedApproval.file_url) return;
     
@@ -427,7 +476,13 @@ const Approvals: React.FC = () => {
         {selectedApproval && (
           <div className="approval-detail">
             <div className="detail-header">
-              <h2>{selectedApproval.title}</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <h2 style={{ flex: 1, margin: 0, marginBottom: '10px' }}>{selectedApproval.title}</h2>
+                <div className="detail-actions" style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: '15px' }}>
+                  <button onClick={openEditModal} className="edit-btn">수정</button>
+                  <button onClick={handleDelete} className="delete-btn">삭제</button>
+                </div>
+              </div>
               <div className="detail-meta">
                 <span>{selectedApproval.department} {selectedApproval.author}</span>
                 <span>•</span>
@@ -571,6 +626,68 @@ const Approvals: React.FC = () => {
                 <button type="submit" className="submit-btn" disabled={isUploading}>
                   {isUploading ? `업로드 중... (${uploadProgress}/${uploadFiles.length})` : '등록하기'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>품의서 정보 수정</h2>
+              <button onClick={() => setIsEditModalOpen(false)}>✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="form-group">
+                <label>품의서 제목</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editForm.title || ''}
+                  onChange={e => setEditForm({...editForm, title: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label>문서 일자 (기안일)</label>
+                <input 
+                  type="date" 
+                  required
+                  value={editForm.doc_date || ''}
+                  onChange={e => setEditForm({...editForm, doc_date: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label>기안 부서</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editForm.department || ''}
+                  onChange={e => setEditForm({...editForm, department: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label>작성자 (기안자)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editForm.author || ''}
+                  onChange={e => setEditForm({...editForm, author: e.target.value})}
+                />
+              </div>
+              <div className="form-group">
+                <label>파일 이름 표시 (표시용)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editForm.file_name || ''}
+                  onChange={e => setEditForm({...editForm, file_name: e.target.value})}
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="cancel-btn" onClick={() => setIsEditModalOpen(false)}>취소</button>
+                <button type="submit" className="submit-btn">수정 저장</button>
               </div>
             </form>
           </div>
