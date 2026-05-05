@@ -37,6 +37,7 @@ const Approvals: React.FC = () => {
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   
   const [newComment, setNewComment] = useState('');
   const [currentUser, setCurrentUser] = useState<{name: string; dept: string} | null>(null);
@@ -246,6 +247,79 @@ const Approvals: React.FC = () => {
     }
   };
 
+  const handleAiSummarize = async () => {
+    if (!selectedApproval || !selectedApproval.file_url) return;
+    
+    // Check if the file is a PDF
+    if (!selectedApproval.file_url.toLowerCase().includes('.pdf')) {
+      alert('PDF 파일만 AI 요약이 가능합니다.');
+      return;
+    }
+
+    setIsSummarizing(true);
+    
+    try {
+      // 1. Fetch PDF Blob
+      const response = await fetch(selectedApproval.file_url);
+      const blob = await response.blob();
+      
+      // 2. Convert Blob to Base64
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        try {
+          const base64data = (reader.result as string).split(',')[1];
+          
+          // 3. Call Gemini
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (!apiKey || apiKey === 'your_key_here') {
+             throw new Error("환경 변수에 VITE_GEMINI_API_KEY가 설정되지 않았습니다.");
+          }
+          
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+          
+          const prompt = "이 품의서(결재 문서)의 핵심 내용을 2~3줄 분량으로 요약해줘. 글머리 기호(1. 2.)를 사용해서 직관적이고 짧게 작성해.";
+          
+          const result = await model.generateContent([
+            prompt,
+            {
+              inlineData: {
+                data: base64data,
+                mimeType: 'application/pdf'
+              }
+            }
+          ]);
+          
+          const summaryText = result.response.text();
+          
+          // 4. Update DB
+          const { error } = await supabase
+            .from('approvals')
+            .update({ description: summaryText })
+            .eq('id', selectedApproval.id);
+            
+          if (error) throw error;
+          
+          // Update Local State
+          setSelectedApproval({...selectedApproval, description: summaryText});
+          setApprovals(prev => prev.map(a => a.id === selectedApproval.id ? {...a, description: summaryText} : a));
+          
+          setIsSummarizing(false);
+        } catch (e: any) {
+          console.error(e);
+          alert("요약 처리 중 오류가 발생했습니다: " + e.message);
+          setIsSummarizing(false);
+        }
+      };
+    } catch (e: any) {
+      console.error(e);
+      alert("파일 다운로드 중 오류가 발생했습니다: " + e.message);
+      setIsSummarizing(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
@@ -331,8 +405,17 @@ const Approvals: React.FC = () => {
               )}
 
               <div className="detail-desc-box">
-                <h4>품의 요약 및 배경</h4>
-                <p>{selectedApproval.description || '등록된 요약이 없습니다.'}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ margin: 0 }}>품의 요약 및 배경</h4>
+                  <button 
+                    onClick={handleAiSummarize} 
+                    disabled={isSummarizing || !selectedApproval.file_url.toLowerCase().includes('.pdf')}
+                    className="ai-summarize-btn"
+                  >
+                    {isSummarizing ? '✨ 요약 중...' : '✨ AI 자동 요약'}
+                  </button>
+                </div>
+                <p>{selectedApproval.description || '등록된 요약이 없습니다. 우측 상단의 AI 자동 요약 버튼을 눌러보세요.'}</p>
               </div>
 
               <div className="detail-file-box">

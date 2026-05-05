@@ -241,6 +241,28 @@
   border: 1px solid #f1f5f9;
 }
 
+.ai-summarize-btn {
+  background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-summarize-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.ai-summarize-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .detail-file-box {
   display: flex;
   justify-content: space-between;
