@@ -27,6 +27,13 @@ const VOCAssistant: React.FC = () => {
       }
     };
     fetchTeamKnowledge();
+    
+    // URL 파라미터에서 데이터 파싱 (크롬 확장프로그램 연동용)
+    const params = new URLSearchParams(window.location.search);
+    const urlName = params.get('name');
+    const urlContent = params.get('content');
+    if (urlName) setCustomerName(urlName);
+    if (urlContent) setVocContent(urlContent);
   }, []);
 
   const getSeasonInfo = () => {
