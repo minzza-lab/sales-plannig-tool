@@ -12,6 +12,7 @@ import ManualTips from './components/ManualTips'
 import AutomationRequest from './components/AutomationRequest'
 import WaterParkSales from './components/WaterParkSales'
 import Login from './components/Auth/Login'
+import Approvals from './components/Approvals'
 import './App.css'
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
             <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
             <Route path="tools/knowledge-base" element={<ManualTips />} />
             <Route path="tools/automation-request" element={<AutomationRequest />} />
+            <Route path="tools/approvals" element={<Approvals />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
