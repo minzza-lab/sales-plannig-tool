@@ -281,25 +281,19 @@ label {
 }
 
 @media (max-width: 768px) {
-  .thumb-container {
-    padding: 10px;
-  }
-  .thumb-header h1 {
-    font-size: 24px;
-  }
-  .thumb-input-section {
-    flex-direction: column;
-  }
-  .thumb-input-section button {
-    padding: 16px;
-  }
-  .canvas-content h2 {
-    font-size: 26px;
-  }
-  .canvas-content p {
-    font-size: 16px;
-  }
-  .thumb-controls-panel {
-    padding: 15px;
-  }
+  .thumb-container { padding: 12px; }
+  .thumb-header h1 { font-size: 20px; margin-bottom: 5px; }
+  .thumb-header p { font-size: 13px; }
+  .thumb-input-section { flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .thumb-input-section input { padding: 12px 15px; font-size: 14px; }
+  .thumb-input-section button { padding: 12px; font-size: 14px; }
+  .canvas-content { padding: 20px; }
+  .canvas-content h2 { font-size: 20px !important; }
+  .canvas-content p { font-size: 13px !important; }
+  .thumb-controls-panel { padding: 15px; gap: 15px; }
+  .control-group h3 { font-size: 14px; margin-bottom: 10px; }
+  .copy-card { padding: 10px; }
+  .copy-texts strong { font-size: 13px; }
+  .copy-texts span { font-size: 11px; }
+  .download-btn { padding: 14px; font-size: 16px; }
 }

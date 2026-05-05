@@ -265,19 +265,19 @@
 
 /* 모바일 화면 대응 */
 @media (max-width: 768px) {
-  .tts-container {
-    padding: 10px;
-  }
-  .tts-header h1 {
-    font-size: 22px;
-  }
-  .panel-section {
-    padding: 15px;
-  }
-  .custom-situation {
-    flex-direction: column;
-  }
-  .voice-card {
-    padding: 10px;
-  }
+  .tts-container { padding: 12px; }
+  .tts-header h1 { font-size: 20px; }
+  .tts-header p { font-size: 13px; }
+  .panel-section { padding: 15px; margin-bottom: 15px; }
+  .section-title { font-size: 15px; }
+  .section-desc { font-size: 12px; margin-bottom: 12px; }
+  .custom-situation { flex-direction: column; gap: 8px; }
+  .custom-situation input { padding: 10px; font-size: 13px; }
+  .generate-script-btn { padding: 12px; font-size: 14px; }
+  .script-textarea { height: 180px; font-size: 13px; padding: 12px; }
+  .voice-card { padding: 10px; gap: 10px; }
+  .voice-icon { width: 32px; height: 32px; font-size: 18px; }
+  .voice-info h4 { font-size: 13px; }
+  .voice-info p { font-size: 11px; }
+  .generate-audio-btn { padding: 12px; font-size: 15px; }
 }

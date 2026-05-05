@@ -185,6 +185,31 @@
 .source-info.success { padding: 10px 20px; background: #f0fdf4; color: #15803d; font-size: 0.85rem; border-bottom: 1px solid #dcfce7; }
 
 @media (max-width: 768px) {
-  .input-row-v4 { flex-direction: column; }
-  .dual-view-v4 { grid-template-columns: 1fr; }
+  .sketch-container { padding: 16px 12px; }
+  .sketch-header .title { font-size: 1.8rem; }
+  .sketch-header .subtitle { font-size: 0.9rem; }
+  
+  .quick-guide-card-sketch { padding: 15px; gap: 12px; flex-direction: column; margin-bottom: 24px; }
+  .quick-guide-card-sketch .guide-icon { font-size: 1.5rem; }
+  .quick-guide-card-sketch .guide-content h4 { font-size: 1rem; }
+  .quick-guide-card-sketch .guide-content li { font-size: 0.85rem; }
+
+  .sketch-upload-card { padding: 20px; border-radius: 16px; margin-bottom: 24px; }
+  .input-row-v4 { flex-direction: column; gap: 15px; margin-bottom: 20px; }
+  .section-label { font-size: 0.85rem; }
+  .ep-input-field, .custom-upload-btn-v4, .context-textarea { padding: 12px; font-size: 0.9rem; }
+  .generate-magic-btn { padding: 14px; font-size: 1rem; border-radius: 10px; }
+
+  .file-preview-grid-v4 { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .preview-card-v4 img { height: 70px; }
+  .file-name-tag { font-size: 0.65rem; padding: 4px; }
+
+  .dual-view-v4 { grid-template-columns: 1fr; gap: 16px; margin-top: 24px; }
+  .panel-header-v4 { padding: 10px 15px; font-size: 0.9rem; }
+  .preview-scroll-v4, .source-area-v4 { height: 250px; padding: 12px; }
+  
+  .info-box-sketch { padding: 20px; margin-top: 30px; border-radius: 16px; }
+  .info-box-sketch h4 { font-size: 1rem; margin-bottom: 10px; }
+  .info-box-sketch p { font-size: 0.85rem; }
+  .mandatory-review-sketch { padding: 12px; font-size: 0.85rem; margin-top: 15px; }
 }

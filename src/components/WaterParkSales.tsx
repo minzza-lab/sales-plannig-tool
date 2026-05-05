@@ -666,45 +666,45 @@ const WaterParkSales: React.FC = () => {
 
               return (
                 <div className="integrated-summary-board animate-fade-in" style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '24px', borderRadius: '12px', color: 'white', marginBottom: '32px', boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.5)' }}>
-                  <div style={{ margin: '0 0 20px 0', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '12px' }}>
-                    <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="integrated-summary-header">
+                    <h3>
                       <Activity size={24} /> 일일 통합 영업 요약 대시보드
                     </h3>
-                    <div style={{ display: 'flex', gap: '16px', fontSize: '13px', opacity: 0.9 }}>
+                    <div className="integrated-date-info">
                       <div>
-                        <span style={{ color: '#93c5fd', fontWeight: 'bold' }}>당일:</span> {format(selectedDate, 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })}
-                        {KOREAN_HOLIDAYS[dateStr] && <span style={{ marginLeft: '6px', background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>🎈 {KOREAN_HOLIDAYS[dateStr]}</span>}
+                        <span className="date-label current">당일:</span> {format(selectedDate, 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })}
+                        {KOREAN_HOLIDAYS[dateStr] && <span className="date-holiday">🎈 {KOREAN_HOLIDAYS[dateStr]}</span>}
                       </div>
                       <div>
-                        <span style={{ color: '#fca5a5', fontWeight: 'bold' }}>전년 비교일:</span> {format(subMonths(selectedDate, 12), 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })}
-                        {KOREAN_HOLIDAYS[prevYearStr] && <span style={{ marginLeft: '6px', background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>🎈 {KOREAN_HOLIDAYS[prevYearStr]}</span>}
+                        <span className="date-label prev">전년 비교일:</span> {format(subMonths(selectedDate, 12), 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })}
+                        {KOREAN_HOLIDAYS[prevYearStr] && <span className="date-holiday">🎈 {KOREAN_HOLIDAYS[prevYearStr]}</span>}
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                  <div className="integrated-summary-grid">
                     {/* Row 1: Overall */}
-                    <div style={{ background: 'rgba(255,255,255,0.1)', padding: '16px', borderRadius: '8px' }}>
+                    <div className="integrated-card">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px' }}>총 종합 매출 (입장+부대)</div>
                       <div style={{ fontSize: '24px', fontWeight: 800 }}>{formatCurrency(totalRev)}</div>
                       {prevTotalRev > 0 && <div style={{ fontSize: '12px', marginTop: '8px', color: totalRev >= prevTotalRev ? '#86efac' : '#fca5a5' }}>
                         전년 동월 동일 대비 {totalRev >= prevTotalRev ? '▲' : '▼'} {Math.abs((totalRev-prevTotalRev)/prevTotalRev*100).toFixed(1)}%
                       </div>}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.1)', padding: '16px', borderRadius: '8px' }}>
+                    <div className="integrated-card">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px' }}>총 입장객 수</div>
                       <div style={{ fontSize: '24px', fontWeight: 800 }}>{totalAdmissions.toLocaleString()} 명</div>
                       {prevAdmissions > 0 && <div style={{ fontSize: '12px', marginTop: '8px', color: totalAdmissions >= prevAdmissions ? '#86efac' : '#fca5a5' }}>
                         전년 동월 동일 대비 {totalAdmissions >= prevAdmissions ? '▲' : '▼'} {Math.abs((totalAdmissions-prevAdmissions)/prevAdmissions*100).toFixed(1)}%
                       </div>}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.1)', padding: '16px', borderRadius: '8px' }}>
+                    <div className="integrated-card">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px' }}>종합 1인당 객단가</div>
                       <div style={{ fontSize: '24px', fontWeight: 800 }}>{formatCurrency(Math.round(perCapita))}</div>
                       {prevPerCapita > 0 && <div style={{ fontSize: '12px', marginTop: '8px', color: perCapita >= prevPerCapita ? '#86efac' : '#fca5a5' }}>
                         전년 동월 동일 대비 {perCapita >= prevPerCapita ? '▲' : '▼'} {Math.abs((perCapita-prevPerCapita)/prevPerCapita*100).toFixed(1)}%
                       </div>}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.1)', padding: '16px', borderRadius: '8px' }}>
+                    <div className="integrated-card">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px' }}>매출 비중 (입장 vs 상품)</div>
                       <div style={{ display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', marginTop: '12px', marginBottom: '8px' }}>
                         <div style={{ width: `${totalRev > 0 ? (ticketRev/totalRev*100) : 0}%`, background: '#60a5fa' }} title={`입장매출: ${formatCurrency(ticketRev)}`}></div>
@@ -717,21 +717,21 @@ const WaterParkSales: React.FC = () => {
                     </div>
 
                     {/* Row 2: Breakdown */}
-                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="integrated-card outline">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#93c5fd' }}>🎟️ 입장권(발권) 매출</div>
                       <div style={{ fontSize: '20px', fontWeight: 700 }}>{formatCurrency(ticketRev)}</div>
                       {prevTicketRev > 0 && <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.8 }}>
                         전년 동월 동일 대비 {ticketRev >= prevTicketRev ? '▲' : '▼'} {Math.abs((ticketRev-prevTicketRev)/prevTicketRev*100).toFixed(1)}%
                       </div>}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="integrated-card outline">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#fde68a' }}>🍔 상품(부대) 매출</div>
                       <div style={{ fontSize: '20px', fontWeight: 700 }}>{formatCurrency(fbRev)}</div>
                       {prevFbRev > 0 && <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.8 }}>
                         전년 동월 동일 대비 {fbRev >= prevFbRev ? '▲' : '▼'} {Math.abs((fbRev-prevFbRev)/prevFbRev*100).toFixed(1)}%
                       </div>}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="integrated-card outline">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#93c5fd' }}>🎟️ 발권 객단가</div>
                       <div style={{ fontSize: '20px', fontWeight: 700 }}>{formatCurrency(Math.round(totalAdmissions > 0 ? ticketRev / totalAdmissions : 0))}</div>
                       {prevAdmissions > 0 && prevTicketRev > 0 && (() => {
@@ -744,7 +744,7 @@ const WaterParkSales: React.FC = () => {
                         );
                       })()}
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="integrated-card outline">
                       <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#fde68a' }}>🍔 상품 객단가</div>
                       <div style={{ fontSize: '20px', fontWeight: 700 }}>{formatCurrency(Math.round(totalAdmissions > 0 ? fbRev / totalAdmissions : 0))}</div>
                       {prevAdmissions > 0 && prevFbRev > 0 && (() => {
