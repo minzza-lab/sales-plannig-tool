@@ -395,15 +395,6 @@ const Approvals: React.FC = () => {
             </div>
             
             <div className="detail-body">
-              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
-                <div className="detail-pdf-preview">
-                  <iframe 
-                    src={`${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=Fit`} 
-                    title="PDF Preview"
-                  />
-                </div>
-              )}
-
               <div className="detail-desc-box">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <h4 style={{ margin: 0 }}>품의 요약 및 배경</h4>
@@ -417,6 +408,15 @@ const Approvals: React.FC = () => {
                 </div>
                 <p>{selectedApproval.description || '등록된 요약이 없습니다. 우측 상단의 AI 자동 요약 버튼을 눌러보세요.'}</p>
               </div>
+
+              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
+                <div className="detail-pdf-preview">
+                  <iframe 
+                    src={`${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`} 
+                    title="PDF Preview"
+                  />
+                </div>
+              )}
 
               <div className="detail-file-box">
                 <div className="file-info">
