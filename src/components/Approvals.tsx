@@ -104,7 +104,8 @@ const Approvals: React.FC = () => {
     }
     
     if (searchTerm) {
-      const terms = searchTerm.toLowerCase().split(' ').filter(t => t.trim() !== '');
+      // Mac 환경에서 업로드된 파일명의 자음/모음 분리 현상(NFD)을 해결하기 위해 normalize('NFC') 적용
+      const terms = searchTerm.normalize('NFC').toLowerCase().split(' ').filter(t => t.trim() !== '');
       result = result.filter(a => {
         const textToSearch = `
           ${a.title || ''} 
@@ -112,9 +113,8 @@ const Approvals: React.FC = () => {
           ${a.author || ''} 
           ${a.file_name || ''}
           ${a.department || ''}
-        `.toLowerCase();
+        `.normalize('NFC').toLowerCase();
         
-        // 모든 검색어가 포함되어 있어야 매칭 (AND 검색)
         return terms.every(term => textToSearch.includes(term));
       });
     }
