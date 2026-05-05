@@ -321,6 +321,15 @@ const Approvals: React.FC = () => {
             </div>
             
             <div className="detail-body">
+              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
+                <div className="detail-pdf-preview">
+                  <iframe 
+                    src={`${selectedApproval.file_url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
+                    title="PDF Preview"
+                  />
+                </div>
+              )}
+
               <div className="detail-desc-box">
                 <h4>품의 요약 및 배경</h4>
                 <p>{selectedApproval.description || '등록된 요약이 없습니다.'}</p>
@@ -341,15 +350,6 @@ const Approvals: React.FC = () => {
                   새 창에서 열기 / 다운로드
                 </a>
               </div>
-              
-              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
-                <div className="detail-pdf-preview">
-                  <iframe 
-                    src={`${selectedApproval.file_url}#toolbar=0&navpanes=0&scrollbar=0`} 
-                    title="PDF Preview"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="detail-comments">
