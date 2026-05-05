@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -29,14 +30,16 @@ async function run() {
       return {
         report_date,
         report_type: 'RATE_ZONE', // Use RATE_ZONE as the main type to trigger cumulative dash
-        summary: {
-          label: '총 매출액 (과거입력)',
-          qtyLabel: '총 방문객',
-          totalAmount,
-          totalQty
-        },
-        chart_data: [{ name: '입장객', amount: totalAmount, quantity: totalQty }],
-        table_data: [{ category: '과거데이터', name: '총계', quantity: totalQty, amount: totalAmount }]
+        data: {
+          summary: {
+            label: '총 매출액 (과거입력)',
+            qtyLabel: '총 방문객',
+            totalAmount,
+            totalQty
+          },
+          chart_data: [{ name: '입장객', amount: totalAmount, quantity: totalQty }],
+          table_data: [{ category: '과거데이터', name: '총계', quantity: totalQty, amount: totalAmount }]
+        }
       };
     });
 

@@ -80,9 +80,9 @@ const WaterParkSales: React.FC = () => {
             report_date: d.report_date,
             type: d.report_type as ReportType,
             title: getTitleByType(d.report_type),
-            summary: d.summary,
-            chartData: d.chart_data,
-            tableData: d.table_data
+            summary: d.data?.summary || d.summary,
+            chartData: d.data?.chart_data || d.chart_data,
+            tableData: d.data?.table_data || d.table_data
           }));
           setReports(formatted);
         }
@@ -265,9 +265,11 @@ const WaterParkSales: React.FC = () => {
       const upsertData = stagedReports.map(r => ({
         report_date: r.report_date,
         report_type: r.type,
-        summary: r.summary,
-        chart_data: r.chartData,
-        table_data: r.tableData
+        data: {
+          summary: r.summary,
+          chart_data: r.chartData,
+          table_data: r.tableData
+        }
       }));
       const { error } = await supabase.from('daily_reports').upsert(upsertData, { onConflict: 'report_date, report_type' });
       if (error) throw error;
