@@ -179,3 +179,26 @@ tr:hover { background: #f3f4f6; }
 .d-bar-track { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
 .d-bar-fill { height: 100%; background: linear-gradient(90deg, #60a5fa, #3b82f6); border-radius: 4px; transition: width 0.3s ease; }
 .list-wrapper { padding: 16px; background: white; }
+
+/* 모바일 화면 대응 */
+@media (max-width: 768px) {
+  .waterpark-sales-container {
+    padding: 10px;
+  }
+  .sales-header h1 { font-size: 22px; }
+  .cum-cards { flex-direction: column; gap: 10px; }
+  .cal-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  
+  .cal-days-header div { padding: 8px 4px; font-size: 11px; }
+  .cal-cell { min-height: 80px; padding: 4px; }
+  .cal-date { font-size: 12px; }
+  .cal-weather { display: none; } /* 모바일 달력에서는 날씨 숨김 */
+  .cal-data-box { padding: 4px; }
+  .cal-data-row { font-size: 10px; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .cal-data-row .amt { text-align: left; }
+  .cal-data-row .qty { display: none; } /* 수량 숨김 */
+  
+  .action-bar { flex-direction: column; gap: 10px; align-items: stretch; }
+  .detail-header { flex-direction: column; align-items: flex-start; }
+  .weather-compare-box { margin-left: 0; width: 100%; flex-direction: column; }
+}

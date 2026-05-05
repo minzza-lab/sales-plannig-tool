@@ -25,10 +25,8 @@ const ThumbnailGenerator: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const generateThumbnail = async () => {
-    if (!productName.trim()) {
-      alert("상품명이나 기획 의도를 입력해주세요.");
-      return;
-    }
+    // 빈칸으로 누르면 회색 예시 글씨를 그대로 사용하도록 똑똑하게 처리
+    const targetProduct = productName.trim() || "여름시즌 워터파크 시크릿 특가 티켓";
 
     setIsGenerating(true);
     try {
@@ -41,7 +39,7 @@ const ThumbnailGenerator: React.FC = () => {
 
       const prompt = `
 당신은 웰리힐리파크 리조트의 전문 마케터이자 디자이너입니다.
-사용자가 다음 상품에 대한 썸네일(광고 이미지)을 만들려고 합니다: "${productName}"
+사용자가 다음 상품에 대한 썸네일(광고 이미지)을 만들려고 합니다: "${targetProduct}"
 
 이 썸네일을 위한 고품질 배경 이미지 프롬프트(반드시 영어로, Stable Diffusion 스타일)와, 시선을 사로잡는 마케팅 카피(메인 카피, 서브 카피) 3가지를 제안해주세요.
 배경 이미지 프롬프트는 텍스트를 넣을 수 있도록 'blank space, clean background, abstract or realistic blur' 같은 키워드를 포함하세요.
@@ -58,23 +56,29 @@ const ThumbnailGenerator: React.FC = () => {
       `;
 
       const result = await model.generateContent(prompt);
-      let responseText = result.response.text();
+      const responseText = result.response.text();
       
-      // JSON 파싱 (마크다운 코드 블록 제거)
-      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(responseText);
+      // 안정적인 JSON 파싱 (정규식으로 JSON 블록만 추출)
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요.");
+      const parsed = JSON.parse(jsonMatch[0]);
 
-      // Pollinations AI로 이미지 URL 생성
-      const encodedPrompt = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting");
-      // 캐시 방지를 위해 랜덤 시드 추가
-      const randomSeed = Math.floor(Math.random() * 100000);
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&seed=${randomSeed}`;
-
-      setBgImageUrl(imageUrl);
+      // 텍스트 먼저 업데이트 (유저에게 진행상황 보여주기 위함)
       setCopyOptions(parsed.copyOptions);
       setMainText(parsed.copyOptions[0].main);
       setSubText(parsed.copyOptions[0].sub);
       setSelectedCopyIndex(0);
+
+      // Pollinations AI로 이미지 URL 생성 및 직접 Fetch (로딩 상태 유지를 위함)
+      const encodedPrompt = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+      const randomSeed = Math.floor(Math.random() * 100000);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&seed=${randomSeed}`;
+
+      const imgResponse = await fetch(imageUrl);
+      if (!imgResponse.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 눌러주세요.");
+      
+      const blob = await imgResponse.blob();
+      setBgImageUrl(URL.createObjectURL(blob));
 
     } catch (error: any) {
       alert("생성 중 오류가 발생했습니다: " + error.message);
@@ -94,16 +98,34 @@ const ThumbnailGenerator: React.FC = () => {
     if (!canvasRef.current) return;
     
     try {
+      // 1. 캔버스 캡처
       const canvas = await html2canvas(canvasRef.current, {
-        scale: 2, // 고해상도 다운로드
-        useCORS: true, // 외부 이미지 로드 허용
+        scale: 2, // 초고화질
+        useCORS: true,
         allowTaint: true,
       });
       
-      const link = document.createElement('a');
-      link.download = `썸네일_${productName}_${new Date().getTime()}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      // 2. 용량이 큰 DataURL 대신 안전한 Blob 방식으로 다운로드
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          alert("이미지 저장에 실패했습니다.");
+          return;
+        }
+        
+        // 특수문자 제거하여 안전한 파일명 생성
+        const safeName = productName.replace(/[^a-zA-Z0-9가-힣]/g, '_') || '광고';
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.download = `썸네일_${safeName}_${new Date().getTime()}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url); // 메모리 반환
+        
+      }, 'image/png');
+      
     } catch (err) {
       alert("다운로드 중 오류가 발생했습니다.");
       console.error(err);
@@ -120,13 +142,13 @@ const ThumbnailGenerator: React.FC = () => {
       <div className="thumb-input-section">
         <input 
           type="text" 
-          placeholder="어떤 상품/이벤트의 썸네일을 만들까요? (예: 겨울 스키장 얼리버드 시즌권)" 
+          placeholder="예시: 여름시즌 워터파크 시크릿 특가 티켓" 
           value={productName}
           onChange={(e) => setProductName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && generateThumbnail()}
         />
         <button onClick={generateThumbnail} disabled={isGenerating}>
-          {isGenerating ? '마법 부리는 중... ✨' : '썸네일 뚝딱 만들기 🚀'}
+          {isGenerating ? '마법 부리는 중 (약 10초 소요)... ✨' : '썸네일 뚝딱 만들기 🚀'}
         </button>
       </div>
 

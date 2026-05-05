@@ -262,3 +262,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 모바일 화면 대응 */
+@media (max-width: 768px) {
+  .tts-container {
+    padding: 10px;
+  }
+  .tts-header h1 {
+    font-size: 22px;
+  }
+  .panel-section {
+    padding: 15px;
+  }
+  .custom-situation {
+    flex-direction: column;
+  }
+  .voice-card {
+    padding: 10px;
+  }
+}

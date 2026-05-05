@@ -279,3 +279,27 @@ label {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  .thumb-container {
+    padding: 10px;
+  }
+  .thumb-header h1 {
+    font-size: 24px;
+  }
+  .thumb-input-section {
+    flex-direction: column;
+  }
+  .thumb-input-section button {
+    padding: 16px;
+  }
+  .canvas-content h2 {
+    font-size: 26px;
+  }
+  .canvas-content p {
+    font-size: 16px;
+  }
+  .thumb-controls-panel {
+    padding: 15px;
+  }
+}
