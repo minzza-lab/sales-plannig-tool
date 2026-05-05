@@ -100,17 +100,23 @@ const Approvals: React.FC = () => {
     let result = approvals;
     
     if (selectedYear !== 'all') {
-      result = result.filter(a => a.doc_date.startsWith(selectedYear));
+      result = result.filter(a => a.doc_date && a.doc_date.startsWith(selectedYear));
     }
     
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(a => 
-        a.title.toLowerCase().includes(term) || 
-        a.description?.toLowerCase().includes(term) ||
-        a.author.toLowerCase().includes(term) ||
-        a.file_name.toLowerCase().includes(term)
-      );
+      const terms = searchTerm.toLowerCase().split(' ').filter(t => t.trim() !== '');
+      result = result.filter(a => {
+        const textToSearch = `
+          ${a.title || ''} 
+          ${a.description || ''} 
+          ${a.author || ''} 
+          ${a.file_name || ''}
+          ${a.department || ''}
+        `.toLowerCase();
+        
+        // 모든 검색어가 포함되어 있어야 매칭 (AND 검색)
+        return terms.every(term => textToSearch.includes(term));
+      });
     }
     
     setFilteredApprovals(result);
