@@ -124,6 +124,21 @@ async function runCrawler() {
         console.log(`[저장 완료] ${vocData.title}`);
       }
     }
+
+    // 시스템 동기화 시간 업데이트 (대시보드 표시용)
+    const now = new Date();
+    const formattedTime = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    await supabase.from('knowledge_base').upsert({
+      title: '[SYSTEM] LAST_SYNC',
+      content: JSON.stringify({
+        synced_at: formattedTime,
+        synced_by_name: '자동 수집 봇',
+        synced_by_id: 'auto-bot'
+      }),
+      author: 'SYSTEM',
+      category: '시스템'
+    }, { onConflict: 'title' });
     
     console.log('✅ 모든 미답변 VOC 크롤링 및 DB 동기화 완료!');
     

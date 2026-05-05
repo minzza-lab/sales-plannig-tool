@@ -18,7 +18,6 @@ const VOCAssistant: React.FC = () => {
   const [draftAnswer, setDraftAnswer] = useState<string>('');
   const [expandedVocId, setExpandedVocId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<any>(null);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
@@ -113,37 +112,6 @@ const VOCAssistant: React.FC = () => {
     };
   };
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    // 현재 사용자 정보 가져오기
-    const { data: { user } } = await supabase.auth.getUser();
-    const userName = user?.user_metadata?.full_name || '관리자';
-    const userId = user?.email?.split('@')[0] || 'admin';
-    
-    // 시간 포맷팅 (YYYY.MM.DD HH:mm)
-    const now = new Date();
-    const formattedTime = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
-    const syncData = {
-      synced_at: formattedTime,
-      synced_by_name: userName,
-      synced_by_id: userId
-    };
-
-    // SYSTEM 레코드 업데이트
-    await supabase.from('knowledge_base').upsert({
-      title: '[SYSTEM] LAST_SYNC',
-      content: JSON.stringify(syncData),
-      author: 'SYSTEM'
-    }, { onConflict: 'title' });
-    
-    setSyncStatus(syncData);
-    
-    setTimeout(() => {
-      setIsSyncing(false);
-      alert('✅ 수집 요청이 완료되었습니다!\n(데스크톱 환경의 크롤러 봇이 백그라운드에서 동기화를 진행합니다.)');
-    }, 1500);
-  };
 
   const generateResponse = async () => {
     if (!apiKey || apiKey === 'your_key_here') {
@@ -263,20 +231,16 @@ const VOCAssistant: React.FC = () => {
       <div className="voc-header">
         <h1 className="title">웰리 AI VOC 어시스턴트</h1>
         <p className="subtitle">공식 가이드와 팀의 지능이 결합된 스마트 CS 도구입니다</p>
-        
         <div className="sync-status-bar">
-          <button 
-            className="sync-btn" 
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            {isSyncing ? '🔄 동기화 요청 중...' : '📥 최신 데이터 동기화'}
-          </button>
-          {syncStatus && (
-            <span className="sync-info">
-              마지막 업데이트: {syncStatus.synced_at} (업데이트자: {syncStatus.synced_by_name})
-            </span>
-          )}
+          <div className="sync-auto-indicator">
+            <span className="sync-icon">🤖</span>
+            <span className="sync-text">크롤러가 15분마다 최신 데이터를 자동으로 수집 중입니다.</span>
+            {syncStatus && (
+              <span className="sync-info-highlight">
+                (마지막 업데이트: {syncStatus.synced_at} | 업데이트자: {syncStatus.synced_by_name})
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
