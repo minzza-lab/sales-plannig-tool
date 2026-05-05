@@ -4,6 +4,7 @@ import './FieldSketchWriter.css';
 const FieldSketchWriter: React.FC = () => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
   const [episodeNumber, setEpisodeNumber] = useState<string>('');
+  const [contextDescription, setContextDescription] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<{file: File, preview: string, base64: string}[]>([]);
   const [htmlResult, setHtmlResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -86,6 +87,7 @@ const FieldSketchWriter: React.FC = () => {
       const prompt = `
         당신은 '웰리힐리파크'의 공식 리포터 '현스girl★'입니다. [Ep.${episodeNumber}] 현장스케치를 작성하세요.
         
+        ${contextDescription ? `[현장 상황 및 추가 설명]\n${contextDescription}\n\n위 내용을 바탕으로 생동감 있고 자연스럽게 스토리를 풀어주세요.\n` : ''}
         [작성 지침 - 필수 준수]
         1. 모든 텍스트는 <h3 style="text-align: center;">내용</h3> 형식을 사용하세요.
         2. 본문 중간중간에 사진을 반드시 순서대로 모두 넣으세요.
@@ -96,7 +98,7 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-flash-latest"];
+      const modelsToTry = ["gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-pro-latest"];
       let success = false;
 
       for (const modelName of modelsToTry) {
@@ -177,6 +179,16 @@ const FieldSketchWriter: React.FC = () => {
             <input type="file" id="sketch-upload" multiple accept="image/*" onChange={handleFileChange} hidden />
             <label htmlFor="sketch-upload" className="custom-upload-btn-v4">📸 사진 다중 선택하기</label>
           </div>
+        </div>
+
+        <div className="context-input-wrapper">
+          <label className="section-label">현장 상황 설명 (선택사항)</label>
+          <textarea
+            placeholder="예: 오늘 날씨가 너무 맑아서 야외 파도풀에 사람들이 정말 많았어요. 가족 단위 고객들이 행복해하는 모습을 강조해주세요!"
+            value={contextDescription}
+            onChange={(e) => setContextDescription(e.target.value)}
+            className="context-textarea"
+          />
         </div>
 
         {selectedFiles.length > 0 && (
