@@ -160,7 +160,7 @@ const VOCAssistant: React.FC = () => {
     작성 시 주의사항: 팀원 공유 지식에 해당 문의와 관련된 정보가 있다면 반드시 그 해결책을 답변에 포함시키세요.`;
 
     try {
-      const modelsToTry = ["gemini-flash-latest", "gemini-3.1-flash-lite-preview", "gemini-2.5-flash-lite"];
+      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash-latest"];
       let success = false;
       let lastApiError = "";
 

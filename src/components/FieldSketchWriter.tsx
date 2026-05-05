@@ -98,7 +98,7 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      const modelsToTry = ["gemini-flash-latest", "gemini-3.1-flash-lite-preview", "gemini-2.5-flash-lite"];
+      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash-latest"];
       let success = false;
 
       for (const modelName of modelsToTry) {
