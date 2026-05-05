@@ -144,8 +144,8 @@ const FieldSketchWriter: React.FC = () => {
   return (
     <div className="sketch-container">
       <div className="sketch-header">
-        <h1 className="title">현장스케치 자동 생성기</h1>
-        <p className="subtitle">AI가 사진을 분석하여 생동감 넘치는 게시물을 즉시 제작합니다</p>
+        <h1 className="title">📸 홍보용 현장 스케치</h1>
+        <p className="subtitle">현장 사진을 분석하여 생동감 넘치는 마케팅 게시물을 즉시 제작합니다</p>
       </div>
 
       {/* 🚀 상단 사용방법 안내 */}
@@ -156,7 +156,7 @@ const FieldSketchWriter: React.FC = () => {
           <ul>
             <li><strong>STEP 1:</strong> 이번 회차의 에피소드 번호를 입력하세요.</li>
             <li><strong>STEP 2:</strong> '사진 추가' 버튼을 눌러 현장 사진들을 한꺼번에 선택하세요.</li>
-            <li><strong>STEP 3:</strong> 생성 버튼을 누른 후, 미리보기로 AI가 작성한 내용을 확인하세요.</li>
+            <li><strong>STEP 3:</strong> 생성 버튼을 누른 후, 미리보기로 작성된 내용을 확인하세요.</li>
             <li><strong>STEP 4:</strong> 코드를 전체 복사하여 홈페이지 게시판에 붙여넣으면 끝!</li>
           </ul>
         </div>
@@ -204,7 +204,7 @@ const FieldSketchWriter: React.FC = () => {
         )}
 
         <button onClick={generateEmbeddedSketch} className="generate-magic-btn" disabled={isLoading || selectedFiles.length === 0}>
-          {isLoading ? '이미지 최적화 및 AI 분석 중...' : '게시물 HTML 자동 생성하기'}
+          {isLoading ? '이미지 최적화 및 스토리 분석 중...' : '게시물 HTML 자동 생성하기'}
         </button>
       </div>
 
@@ -238,7 +238,7 @@ const FieldSketchWriter: React.FC = () => {
         <p>• <strong>초경량 최적화:</strong> 사진 용량을 최대 90%까지 자동 압축하여 홈페이지 속도를 저하시키지 않습니다.</p>
         <p>• <strong>반응형 디자인:</strong> 생성된 HTML은 모바일과 PC 화면 모두에 최적화되어 보여집니다.</p>
         <div className="mandatory-review-sketch">
-          ⚠️ <strong>최종 검수 필수:</strong> AI가 작성한 멘트가 현장 상황과 일치하는지 반드시 확인 후 업로드해 주세요.
+          ⚠️ <strong>최종 검수 필수:</strong> 생성된 멘트가 현장 상황과 일치하는지 반드시 확인 후 업로드해 주세요.
         </div>
       </div>
     </div>

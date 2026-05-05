@@ -6,16 +6,72 @@ const Dashboard: React.FC = () => {
   const tools = [
     {
       id: 'waterpark-sales',
-      title: '워터파크 매출 실적 보드',
-      description: '로컬 엑셀 데이터를 활용한 일일 영업 실적 비교 분석 대시보드입니다.',
+      title: '워터파크 매출 관리',
+      description: '일일 영업 실적 데이터를 비교하고 분석하는 대시보드입니다.',
       icon: '🌊',
       path: '/tools/waterpark-sales',
       status: 'active'
     },
     {
+      id: 'automation-request',
+      title: '자동화 요청 게시판',
+      description: '반복적인 업무나 필요한 기능 개발을 요청하는 공간입니다.',
+      icon: '⚡',
+      path: '/tools/automation-request',
+      status: 'active'
+    },
+    {
+      id: 'knowledge-base',
+      title: '공유 지식 베이스',
+      description: '팀원들과 업무 노하우 및 자료를 공유하는 게시판입니다.',
+      icon: '🤝',
+      path: '/tools/knowledge-base',
+      status: 'active'
+    },
+    {
+      id: 'approvals',
+      title: '품의서 보관함',
+      description: '부서별 결재 품의서를 체계적으로 관리하고 핵심 내용을 요약합니다.',
+      icon: '📄',
+      path: '/tools/approvals',
+      status: 'active'
+    },
+    {
+      id: 'voc-assistant',
+      title: '고객의 소리(VOC) 분석기',
+      description: '고객 문의사항을 분석하고 담당자에게 알맞은 답변 초안을 제안합니다.',
+      icon: '🎧',
+      path: '/tools/voc-assistant',
+      status: 'active'
+    },
+    {
+      id: 'field-sketch',
+      title: '홍보용 현장 스케치',
+      description: '현장 사진과 소식을 생생하고 매력적인 마케팅 문구로 변환합니다.',
+      icon: '📸',
+      path: '/tools/field-sketch',
+      status: 'active'
+    },
+    {
+      id: 'tts-generator',
+      title: '안내방송 성우 스튜디오',
+      description: '상황에 맞는 대본을 작성하고 자연스러운 음성 안내방송을 제작합니다.',
+      icon: '🎙️',
+      path: '/tools/tts-generator',
+      status: 'active'
+    },
+    {
+      id: 'thumbnail-generator',
+      title: '상품 썸네일 제작기',
+      description: '기획 의도에 맞는 홍보 배경 이미지와 마케팅 카피를 한 번에 생성합니다.',
+      icon: '🎨',
+      path: '/tools/thumbnail-generator',
+      status: 'active'
+    },
+    {
       id: 'qr-generator',
       title: 'QR 코드 생성기',
-      description: 'URL을 QR 코드로 변환하고 PNG로 다운로드하세요.',
+      description: '인터넷 주소를 QR 코드로 변환하고 이미지로 쉽게 다운로드하세요.',
       icon: '🔍',
       path: '/tools/qr-generator',
       status: 'active'
@@ -23,7 +79,7 @@ const Dashboard: React.FC = () => {
     {
       id: 'url-shortener',
       title: 'URL 단축기',
-      description: '긴 URL 주소를 짧고 간결하게 줄여보세요.',
+      description: '고객에게 발송할 길고 복잡한 인터넷 주소를 짧고 간결하게 줄여줍니다.',
       icon: '🔗',
       path: '/tools/url-shortener',
       status: 'active'
@@ -31,42 +87,10 @@ const Dashboard: React.FC = () => {
     {
       id: 'barcode-generator',
       title: '바코드 생성기',
-      description: '상품 번호나 식별 코드를 1차원 바코드로 변환합니다.',
+      description: '상품 번호나 식별 코드를 스캐너로 읽을 수 있는 바코드로 변환합니다.',
       icon: '📊',
       path: '/tools/barcode-generator',
       status: 'active'
-    },
-    {
-      id: 'voc-assistant',
-      title: 'AI VOC 어시스턴트',
-      description: '고객의 문의사항에 최적화된 답변 초안을 생성합니다.',
-      icon: '🤖',
-      path: '/tools/voc-assistant',
-      status: 'active'
-    },
-    {
-      id: 'field-sketch',
-      title: 'AI 현장스케치 작성기',
-      description: '현장 소식을 생생하고 매력적인 홍보 글로 변환합니다.',
-      icon: '📸',
-      path: '/tools/field-sketch',
-      status: 'active'
-    },
-    {
-      id: 'sales-forecast',
-      title: '매출 예측',
-      description: '과거 데이터를 기반으로 향후 매출을 시뮬레이션합니다.',
-      icon: '📈',
-      path: '#',
-      status: 'upcoming'
-    },
-    {
-      id: 'target-mgmt',
-      title: '목표 관리',
-      description: '팀별, 개인별 영업 목표 및 달성률을 추적합니다.',
-      icon: '🎯',
-      path: '#',
-      status: 'upcoming'
     }
   ];
 

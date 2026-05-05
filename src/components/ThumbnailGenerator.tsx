@@ -135,8 +135,8 @@ const ThumbnailGenerator: React.FC = () => {
   return (
     <div className="thumb-container animate-fade-in">
       <div className="thumb-header">
-        <h1>🎨 AI 마케팅 썸네일 스튜디오</h1>
-        <p>기획 의도만 적으면 AI가 배경 이미지를 그리고 찰떡같은 카피까지 얹어드립니다.</p>
+        <h1>🎨 상품 썸네일 제작기</h1>
+        <p>기획 의도만 적으면 배경 이미지를 그리고 찰떡같은 카피까지 얹어드립니다.</p>
       </div>
 
       <div className="thumb-input-section">
@@ -178,7 +178,7 @@ const ThumbnailGenerator: React.FC = () => {
           {/* Right: Controls */}
           <div className="thumb-controls-panel">
             <div className="control-group">
-              <h3>📝 AI가 추천하는 카피</h3>
+              <h3>📝 추천 마케팅 카피</h3>
               <div className="copy-options">
                 {copyOptions.map((copy, idx) => (
                   <div 

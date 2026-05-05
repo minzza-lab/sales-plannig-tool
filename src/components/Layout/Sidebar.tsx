@@ -45,7 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <NavLink to="/tools/approvals" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📄</span> 팀 결재 품의서 보관함
+              <span className="icon">📄</span> 품의서 보관함
             </NavLink>
           </li>
           <hr className="sidebar-divider" />
@@ -56,22 +56,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🤖</span> AI VOC 어시스턴트
+              <span className="icon">🎧</span> 고객의 소리(VOC) 분석기
             </NavLink>
           </li>
           <li>
             <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📸</span> AI 현장스케치
+              <span className="icon">📸</span> 홍보용 현장 스케치
             </NavLink>
           </li>
           <li>
             <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎙️</span> AI 성우 스튜디오
+              <span className="icon">🎙️</span> 안내방송 성우 스튜디오
             </NavLink>
           </li>
           <li>
             <NavLink to="/tools/thumbnail-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎨</span> AI 썸네일 생성기
+              <span className="icon">🎨</span> 상품 썸네일 제작기
             </NavLink>
           </li>
           <hr className="sidebar-divider" />

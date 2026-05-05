@@ -393,7 +393,7 @@ const Approvals: React.FC = () => {
     <div className="approvals-container animate-fade-in">
       <div className="approvals-header">
         <div className="header-titles">
-          <h1>팀 결재 품의서 보관함</h1>
+          <h1>품의서 보관함</h1>
           <p>과거의 품의서를 검색하고 다운로드하여 업무에 참고하세요.</p>
         </div>
         <button className="upload-btn" onClick={() => setIsUploadModalOpen(true)}>

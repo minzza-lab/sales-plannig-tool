@@ -209,7 +209,7 @@ const TTSGenerator: React.FC = () => {
     <div className="tts-container animate-fade-in">
       <div className="tts-header">
         <div className="header-titles">
-          <h1>🎙️ AI 성우 스튜디오</h1>
+          <h1>🎙️ 안내방송 성우 스튜디오</h1>
           <p>리조트 홍보 영상이나 장내 안내 방송용 고품질 음성(MP3)을 생성합니다.</p>
         </div>
       </div>
@@ -217,8 +217,8 @@ const TTSGenerator: React.FC = () => {
       <div className="tts-content-grid">
         <div className="tts-left-panel">
           <div className="panel-section">
-            <h2 className="section-title">✨ AI 대본 초안 작성기</h2>
-            <p className="section-desc">상황을 선택하면 AI가 자연스러운 안내/홍보 멘트를 뚝딱 써줍니다.</p>
+            <h2 className="section-title">✨ 대본 초안 작성기</h2>
+            <p className="section-desc">상황을 선택하면 자연스러운 안내/홍보 멘트를 뚝딱 써줍니다.</p>
             
             <div className="situation-selector">
               <select 
@@ -257,7 +257,7 @@ const TTSGenerator: React.FC = () => {
 
           <div className="panel-section">
             <h2 className="section-title">📝 대본 수정 및 텍스트 입력</h2>
-            <p className="section-desc">AI가 쓴 대본을 입맛에 맞게 수정하거나, 직접 문구를 입력하세요.</p>
+            <p className="section-desc">자동 생성된 대본을 입맛에 맞게 수정하거나, 직접 문구를 입력하세요.</p>
             <textarea
               className="script-textarea"
               placeholder="여기에 읽어줄 텍스트를 입력하세요. 마침표나 쉼표를 적절히 넣으면 더 자연스럽게 읽습니다."
