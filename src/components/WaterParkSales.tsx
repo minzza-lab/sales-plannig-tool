@@ -314,7 +314,7 @@ const WaterParkSales: React.FC = () => {
     const prevYearPrefix = format(subMonths(currentMonth, 12), 'yyyy');
     
     reports.forEach(r => {
-      if (r.type === 'RATE_ZONE') {
+      if (r.type === 'CUSTOMER_TYPE') {
         if (r.report_date.startsWith(targetPrefix)) {
           currentAmt += r.summary.totalAmount;
           currentPpl += r.summary.totalQty;
@@ -351,12 +351,12 @@ const WaterParkSales: React.FC = () => {
         const cloneDay = day;
         const dateStr = format(day, 'yyyy-MM-dd');
         const dayReports = reports.filter(r => r.report_date === dateStr);
-        const mainReport = dayReports.find(r => r.type === 'RATE_ZONE') || dayReports[0];
+        const mainReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE') || dayReports[0];
         const wInfo = weatherMap[dateStr];
 
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
-        const prevMainReport = prevDayReports.find(r => r.type === 'RATE_ZONE') || prevDayReports[0];
+        const prevMainReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE') || prevDayReports[0];
 
         const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
         const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -647,19 +647,19 @@ const WaterParkSales: React.FC = () => {
           <>
             {/* --- 통합 요약 대시보드 시작 --- */}
             {(() => {
-              const rz = combinedReports.find(r => r.type === 'RATE_ZONE');
+              const ct = combinedReports.find(r => r.type === 'CUSTOMER_TYPE');
               const hs = combinedReports.find(r => r.type === 'HOURLY_SALES');
-              const prz = reports.find(r => r.report_date === prevYearStr && r.type === 'RATE_ZONE');
+              const pct = reports.find(r => r.report_date === prevYearStr && r.type === 'CUSTOMER_TYPE');
               const phs = reports.find(r => r.report_date === prevYearStr && r.type === 'HOURLY_SALES');
 
-              const totalAdmissions = rz ? rz.summary.totalQty : 0;
-              const ticketRev = rz ? rz.summary.totalAmount : 0;
+              const totalAdmissions = ct ? ct.summary.totalQty : 0;
+              const ticketRev = ct ? ct.summary.totalAmount : 0;
               const fbRev = hs ? hs.summary.totalAmount : 0;
               const totalRev = ticketRev + fbRev;
               const perCapita = totalAdmissions > 0 ? totalRev / totalAdmissions : 0;
 
-              const prevAdmissions = prz ? prz.summary.totalQty : 0;
-              const prevTicketRev = prz ? prz.summary.totalAmount : 0;
+              const prevAdmissions = pct ? pct.summary.totalQty : 0;
+              const prevTicketRev = pct ? pct.summary.totalAmount : 0;
               const prevFbRev = phs ? phs.summary.totalAmount : 0;
               const prevTotalRev = prevTicketRev + prevFbRev;
               const prevPerCapita = prevAdmissions > 0 ? prevTotalRev / prevAdmissions : 0;
