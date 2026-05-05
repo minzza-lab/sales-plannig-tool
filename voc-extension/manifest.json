@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "WelliHilli VOC AI Sync",
+  "version": "1.0",
+  "description": "웰리힐리파크 사내 관리자 페이지의 VOC 내용을 AI 대시보드로 원클릭 전송합니다.",
+  "permissions": ["activeTab"],
+  "host_permissions": [
+    "https://wadm.wellihillipark.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://wadm.wellihillipark.com/customer/inquiry/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
