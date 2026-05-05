@@ -13,6 +13,7 @@ const VOCAssistant: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [teamTips, setTeamTips] = useState<string>('');
   const [unansweredList, setUnansweredList] = useState<any[]>([]);
+  const [answeredList, setAnsweredList] = useState<any[]>([]);
 
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
@@ -48,7 +49,23 @@ const VOCAssistant: React.FC = () => {
         setUnansweredList(data);
       }
     };
+    
+    // 답변 완료된 VOC 리스트 가져오기 (학습 자료용)
+    const fetchAnsweredVocList = async () => {
+      const { data, error } = await supabase
+        .from('voc_inquiries')
+        .select('*')
+        .eq('status', 'answered')
+        .order('created_at', { ascending: false })
+        .limit(5); // 최근 5개만
+        
+      if (data && !error) {
+        setAnsweredList(data);
+      }
+    };
+    
     fetchUnansweredVocList();
+    fetchAnsweredVocList();
   }, []);
 
   const getSeasonInfo = () => {
@@ -167,6 +184,23 @@ const VOCAssistant: React.FC = () => {
     }
   };
 
+  const saveToKnowledgeBase = async (voc: any) => {
+    const title = `[VOC 사례] ${voc.title || '무제'}`;
+    const content = `Q. ${voc.content}\n\nA. ${voc.answer}`;
+    
+    const { error } = await supabase.from('knowledge_base').insert({
+      title,
+      content,
+      author: '시스템 자동수집',
+    });
+    
+    if (error) {
+      alert('학습자료 저장 중 오류가 발생했습니다.');
+    } else {
+      alert('성공적으로 지식 백과에 추가되었습니다!');
+    }
+  };
+
   return (
     <div className="voc-container">
       <div className="voc-header">
@@ -204,6 +238,31 @@ const VOCAssistant: React.FC = () => {
                     <div className="voc-card-header">
                       <span className="voc-category">{voc.category}</span>
                       <span className="voc-name">{voc.customer_name}님</span>
+                    </div>
+                    <div className="voc-card-title">{voc.title}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {answeredList.length > 0 && (
+            <div className="answered-voc-list">
+              <div className="section-label">📚 최근 완료된 VOC (학습 자료용)</div>
+              <div className="voc-cards-container">
+                {answeredList.map((voc) => (
+                  <div key={voc.id} className="voc-card answered-card">
+                    <div className="voc-card-header">
+                      <span className="voc-category">{voc.category}</span>
+                      <button 
+                        className="save-knowledge-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          saveToKnowledgeBase(voc);
+                        }}
+                      >
+                        학습자료로 저장
+                      </button>
                     </div>
                     <div className="voc-card-title">{voc.title}</div>
                   </div>

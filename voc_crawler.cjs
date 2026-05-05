@@ -75,30 +75,29 @@ async function runCrawler() {
       await page.goto(item.url, { waitUntil: 'networkidle2' });
       
       const vocData = await page.evaluate(() => {
-        let customerName = '';
-        let vocContent = '';
-        let category = '';
-        let title = '';
-        let answer = '';
-
-        const ths = document.querySelectorAll('th');
-        ths.forEach(th => {
-          const label = th.innerText.trim();
-          const td = th.nextElementSibling;
-          if (!td) return;
-
-          if (label.includes('성명') || label.includes('등록자')) customerName = td.innerText.trim().split(/\s+/)[0];
-          if (label.includes('서비스') || label.includes('문의유형')) category += '[' + td.innerText.trim() + '] ';
-          if (label.includes('제목')) title = td.innerText.trim();
-          if (label === '내용') {
-            const textarea = td.querySelector('textarea');
-            vocContent = textarea ? textarea.value : td.innerText.trim();
+        const getValByTit = (labelText) => {
+          const spans = Array.from(document.querySelectorAll('span.tit'));
+          // <i> 태그 등 내부 텍스트 처리를 위해 includes 사용
+          const targetSpan = spans.find(span => span.innerText.trim().includes(labelText));
+          if (targetSpan) {
+            const inputTypeDiv = targetSpan.nextElementSibling;
+            if (inputTypeDiv && inputTypeDiv.classList.contains('inputType')) {
+              const input = inputTypeDiv.querySelector('input[type="text"], textarea');
+              if (input && input.value) return input.value.trim();
+              return inputTypeDiv.innerText.trim();
+            }
           }
-          if (label.includes('답변') || label.includes('문의답변')) {
-             const textarea = td.querySelector('textarea');
-             answer = textarea ? textarea.value : td.innerText.trim();
-          }
-        });
+          return '';
+        };
+
+        const rawCustomerName = getValByTit('문의자') || getValByTit('성명');
+        // "한선경(qaz8624)" -> "한선경" 분리
+        const customerName = rawCustomerName.split('(')[0].trim();
+        
+        const category = `${getValByTit('서비스')} / ${getValByTit('문의유형')}`;
+        const title = getValByTit('제목');
+        const vocContent = getValByTit('내용');
+        const answer = getValByTit('문의답변') || getValByTit('답변');
         
         const urlParams = new URLSearchParams(window.location.search);
         const seq = urlParams.get('seq');

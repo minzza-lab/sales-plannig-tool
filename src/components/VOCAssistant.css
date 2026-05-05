@@ -267,3 +267,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.answered-voc-list {
+  margin-bottom: 24px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.answered-card {
+  border-left: 3px solid #10b981;
+}
+
+.save-knowledge-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.save-knowledge-btn:hover {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
