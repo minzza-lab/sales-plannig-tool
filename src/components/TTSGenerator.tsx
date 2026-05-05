@@ -9,11 +9,20 @@ interface VoiceOption {
 }
 
 const VOICE_OPTIONS: VoiceOption[] = [
-  { id: 'ko-KR-Neural2-A', name: '차분한 여성 (기본)', gender: 'FEMALE', description: '안내 방송, 부드러운 내레이션에 적합' },
-  { id: 'ko-KR-Neural2-B', name: '부드러운 남성', gender: 'FEMALE', description: '신뢰감 있는 안내, 홍보 영상' }, // Note: Neural2-B is female, C is male
-  { id: 'ko-KR-Neural2-C', name: '신뢰감 있는 남성', gender: 'MALE', description: '격식 있는 안내, 중후한 느낌' },
-  { id: 'ko-KR-Standard-A', name: '밝은 여성 (표준)', gender: 'FEMALE', description: '발랄한 이벤트 안내, 쇼츠/릴스' },
-  { id: 'ko-KR-Standard-C', name: '명확한 남성 (표준)', gender: 'MALE', description: '명확한 정보 전달' },
+  // 최신 프리미엄 (Chirp3-HD)
+  { id: 'ko-KR-Chirp3-HD-Aoede', name: '[NEW] 감성적인 여성 (Chirp3)', gender: 'FEMALE', description: '가장 자연스럽고 감성적인 리조트 내레이션' },
+  { id: 'ko-KR-Chirp3-HD-Callirrhoe', name: '[NEW] 맑고 밝은 여성 (Chirp3)', gender: 'FEMALE', description: '경쾌한 이벤트, 프로모션 홍보' },
+  { id: 'ko-KR-Chirp3-HD-Charon', name: '[NEW] 차분한 남성 (Chirp3)', gender: 'MALE', description: '고급스럽고 신뢰감 있는 안내 방송' },
+  { id: 'ko-KR-Chirp3-HD-Fenrir', name: '[NEW] 묵직한 남성 (Chirp3)', gender: 'MALE', description: '안전 수칙, 주의사항 강조' },
+  
+  // 기존 고급 성우 (Neural2 / Wavenet)
+  { id: 'ko-KR-Neural2-A', name: '차분한 여성 (Neural2)', gender: 'FEMALE', description: '기본적인 안내 방송에 적합' },
+  { id: 'ko-KR-Wavenet-A', name: '정통 아나운서 여성 (Wavenet)', gender: 'FEMALE', description: '공식적이고 명확한 전달력' },
+  { id: 'ko-KR-Neural2-C', name: '신뢰감 있는 남성 (Neural2)', gender: 'MALE', description: '격식 있는 안내, 중후한 느낌' },
+  
+  // 외국어 안내방송용
+  { id: 'en-US-Neural2-F', name: '미국 영어 여성 (안내용)', gender: 'FEMALE', description: '외국인 고객 대상 영어 안내 방송 (입력도 영어로)' },
+  { id: 'en-US-Neural2-J', name: '미국 영어 남성 (안내용)', gender: 'MALE', description: '외국인 고객 대상 영어 안내 방송 (입력도 영어로)' },
 ];
 
 const PRESET_SITUATIONS = [
@@ -70,8 +79,8 @@ const TTSGenerator: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input: { text: "안녕하세요, 웰리힐리파크에 오신 것을 환영합니다." },
-          voice: { languageCode: "ko-KR", name: voiceId },
+          input: { text: "안녕하세요, 웰리힐리파크에 오신 것을 환영합니다. Welcome to Welli Hilli Park." },
+          voice: { languageCode: voiceId.substring(0, 5), name: voiceId },
           audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0 }
         })
       });
@@ -159,7 +168,7 @@ const TTSGenerator: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input: { text: text },
-          voice: { languageCode: "ko-KR", name: selectedVoice },
+          voice: { languageCode: selectedVoice.substring(0, 5), name: selectedVoice },
           audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0 }
         })
       });
