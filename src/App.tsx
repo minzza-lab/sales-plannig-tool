@@ -14,6 +14,7 @@ import WaterParkSales from './components/WaterParkSales'
 import Login from './components/Auth/Login'
 import Approvals from './components/Approvals'
 import TTSGenerator from './components/TTSGenerator'
+import ThumbnailGenerator from './components/ThumbnailGenerator'
 import './App.css'
 
 function App() {
@@ -60,6 +61,7 @@ function App() {
             <Route path="tools/automation-request" element={<AutomationRequest />} />
             <Route path="tools/approvals" element={<Approvals />} />
             <Route path="tools/tts-generator" element={<TTSGenerator />} />
+            <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
