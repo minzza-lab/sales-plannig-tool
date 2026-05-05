@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS sync_status (
+  id SERIAL PRIMARY KEY,
+  synced_by_name TEXT NOT NULL,
+  synced_by_id TEXT NOT NULL,
+  synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE sync_status DISABLE ROW LEVEL SECURITY;

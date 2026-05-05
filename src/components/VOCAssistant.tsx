@@ -14,6 +14,11 @@ const VOCAssistant: React.FC = () => {
   const [teamTips, setTeamTips] = useState<string>('');
   const [unansweredList, setUnansweredList] = useState<any[]>([]);
   const [answeredList, setAnsweredList] = useState<any[]>([]);
+  
+  const [draftAnswer, setDraftAnswer] = useState<string>('');
+  const [expandedVocId, setExpandedVocId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
@@ -64,8 +69,24 @@ const VOCAssistant: React.FC = () => {
       }
     };
     
+    // 마지막 동기화 기록 가져오기
+    const fetchSyncStatus = async () => {
+      const { data, error } = await supabase
+        .from('knowledge_base')
+        .select('content')
+        .eq('title', '[SYSTEM] LAST_SYNC')
+        .single();
+        
+      if (data && !error) {
+        try {
+          setSyncStatus(JSON.parse(data.content));
+        } catch(e) {}
+      }
+    };
+    
     fetchUnansweredVocList();
     fetchAnsweredVocList();
+    fetchSyncStatus();
   }, []);
 
   const getSeasonInfo = () => {
@@ -92,6 +113,38 @@ const VOCAssistant: React.FC = () => {
     };
   };
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    // 현재 사용자 정보 가져오기
+    const { data: { user } } = await supabase.auth.getUser();
+    const userName = user?.user_metadata?.full_name || '관리자';
+    const userId = user?.email?.split('@')[0] || 'admin';
+    
+    // 시간 포맷팅 (YYYY.MM.DD HH:mm)
+    const now = new Date();
+    const formattedTime = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    const syncData = {
+      synced_at: formattedTime,
+      synced_by_name: userName,
+      synced_by_id: userId
+    };
+
+    // SYSTEM 레코드 업데이트
+    await supabase.from('knowledge_base').upsert({
+      title: '[SYSTEM] LAST_SYNC',
+      content: JSON.stringify(syncData),
+      author: 'SYSTEM'
+    }, { onConflict: 'title' });
+    
+    setSyncStatus(syncData);
+    
+    setTimeout(() => {
+      setIsSyncing(false);
+      alert('✅ 수집 요청이 완료되었습니다!\n(데스크톱 환경의 크롤러 봇이 백그라운드에서 동기화를 진행합니다.)');
+    }, 1500);
+  };
+
   const generateResponse = async () => {
     if (!apiKey || apiKey === 'your_key_here') {
       alert('환경 변수에 API 키를 설정해주세요.');
@@ -116,7 +169,7 @@ const VOCAssistant: React.FC = () => {
 
     const prompt = `
     당신은 '웰리힐리파크'의 10년 경력 CS 총괄 팀장입니다.
-    아래의 [우리 회사 공식 응대 원칙]과 [팀원 공유 지식]을 바탕으로 최상의 답변을 작성하세요.
+    아래의 [우리 회사 공식 응대 원칙], [팀원 공유 지식], 그리고 [담당자 답변 초안]을 바탕으로 최상의 답변을 작성하세요.
 
     [우리 회사 공식 응대 원칙]
     1. 환대: 첫 문장은 반드시 계절 인사를 포함한 따뜻한 환영 인사를 건넵니다.
@@ -125,6 +178,9 @@ const VOCAssistant: React.FC = () => {
 
     [팀원 공유 지식 - 반드시 참고하여 답변에 반영]
     ${teamTips || '현재 등록된 추가 팀 지식이 없습니다.'}
+
+    [담당자 답변 초안 - 이 내용을 핵심 메시지로 삼아 문맥을 부드럽게 다듬어주세요]
+    ${draftAnswer ? draftAnswer : '담당자가 별도 초안을 주지 않았습니다. 문의 내용에 맞게 공식 가이드에 따라 답변을 생성하세요.'}
 
     [현재 고객 데이터]
     - 고객 성함: ${customerName || '고객님'}
@@ -206,6 +262,21 @@ const VOCAssistant: React.FC = () => {
       <div className="voc-header">
         <h1 className="title">웰리 AI VOC 어시스턴트</h1>
         <p className="subtitle">공식 가이드와 팀의 지능이 결합된 스마트 CS 도구입니다</p>
+        
+        <div className="sync-status-bar">
+          <button 
+            className="sync-btn" 
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            {isSyncing ? '🔄 동기화 요청 중...' : '📥 최신 데이터 동기화'}
+          </button>
+          {syncStatus && (
+            <span className="sync-info">
+              마지막 업데이트: {syncStatus.synced_at} (업데이트자: {syncStatus.synced_by_name})
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="quick-guide-card-voc animate-fade-in">
@@ -251,20 +322,40 @@ const VOCAssistant: React.FC = () => {
               <div className="section-label">📚 최근 완료된 VOC (학습 자료용)</div>
               <div className="voc-cards-container">
                 {answeredList.map((voc) => (
-                  <div key={voc.id} className="voc-card answered-card">
+                  <div 
+                    key={voc.id} 
+                    className={`voc-card answered-card ${expandedVocId === voc.id ? 'expanded' : ''}`}
+                    onClick={() => setExpandedVocId(expandedVocId === voc.id ? null : voc.id)}
+                  >
                     <div className="voc-card-header">
                       <span className="voc-category">{voc.category}</span>
-                      <button 
-                        className="save-knowledge-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          saveToKnowledgeBase(voc);
-                        }}
-                      >
-                        학습자료로 저장
-                      </button>
+                      <span className="voc-name">{voc.customer_name}님</span>
                     </div>
                     <div className="voc-card-title">{voc.title}</div>
+                    
+                    {expandedVocId === voc.id && (
+                      <div className="voc-card-expanded-content">
+                        <div className="expanded-section">
+                          <div className="expanded-label">문의 내용</div>
+                          <div className="expanded-text">{voc.content}</div>
+                        </div>
+                        <div className="expanded-section">
+                          <div className="expanded-label">답변 내용</div>
+                          <div className="expanded-text answer-text">{voc.answer}</div>
+                        </div>
+                        <div className="expanded-actions">
+                          <button 
+                            className="save-knowledge-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              saveToKnowledgeBase(voc);
+                            }}
+                          >
+                            ⭐ 이 답변을 학습자료로 저장
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -289,6 +380,16 @@ const VOCAssistant: React.FC = () => {
               value={vocContent}
               onChange={(e) => setVocContent(e.target.value)}
               className="voc-textarea-new"
+            />
+          </div>
+
+          <div className="input-field-group">
+            <div className="section-label">답변 초안 (선택 사항)</div>
+            <textarea
+              placeholder="직접 작성하고 싶은 답변의 핵심 내용이나 방향을 적어주시면 AI가 참고하여 문장을 다듬어줍니다."
+              value={draftAnswer}
+              onChange={(e) => setDraftAnswer(e.target.value)}
+              className="voc-textarea-new draft-textarea"
             />
           </div>
           
