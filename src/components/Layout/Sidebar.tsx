@@ -56,17 +56,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </li>
           <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎧</span> 고객의 소리(VOC) 분석기
+              <span className="icon">🎧</span> 고객의 소리(VOC) 어시스턴트
             </NavLink>
           </li>
           <li>
             <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📸</span> 홍보용 현장 스케치
+              <span className="icon">📸</span> 현장 스케치 생성기
             </NavLink>
           </li>
           <li>
             <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎙️</span> 안내방송 성우 스튜디오
+              <span className="icon">🎙️</span> 안내방송용 TTS 생성기
             </NavLink>
           </li>
           <li>

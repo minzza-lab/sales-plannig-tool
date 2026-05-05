@@ -144,7 +144,7 @@ const FieldSketchWriter: React.FC = () => {
   return (
     <div className="sketch-container">
       <div className="sketch-header">
-        <h1 className="title">📸 홍보용 현장 스케치</h1>
+        <h1 className="title">📸 현장 스케치 생성기</h1>
         <p className="subtitle">현장 사진을 분석하여 생동감 넘치는 마케팅 게시물을 즉시 제작합니다</p>
       </div>
 

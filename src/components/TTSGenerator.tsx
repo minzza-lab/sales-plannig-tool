@@ -209,7 +209,7 @@ const TTSGenerator: React.FC = () => {
     <div className="tts-container animate-fade-in">
       <div className="tts-header">
         <div className="header-titles">
-          <h1>🎙️ 안내방송 성우 스튜디오</h1>
+          <h1>🎙️ 안내방송용 TTS 생성기</h1>
           <p>리조트 홍보 영상이나 장내 안내 방송용 고품질 음성(MP3)을 생성합니다.</p>
         </div>
       </div>

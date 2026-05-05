@@ -229,7 +229,7 @@ const VOCAssistant: React.FC = () => {
   return (
     <div className="voc-container">
       <div className="voc-header">
-        <h1 className="title">🎧 고객의 소리(VOC) 분석기</h1>
+        <h1 className="title">🎧 고객의 소리(VOC) 어시스턴트</h1>
         <p className="subtitle">공식 가이드와 팀의 지식이 결합된 스마트 CS 도구입니다</p>
         <div className="sync-status-bar">
           <div className="sync-auto-indicator">
@@ -247,7 +247,7 @@ const VOCAssistant: React.FC = () => {
       <div className="quick-guide-card-voc animate-fade-in">
         <div className="guide-icon">🤖</div>
         <div className="guide-content">
-          <h4>고객의 소리(VOC) 분석기 활용 가이드</h4>
+          <h4>고객의 소리(VOC) 어시스턴트 활용 가이드</h4>
           <ul>
             <li><strong>목표:</strong> 고객의 불편함을 빠르게 해소하고 품격 있는 브랜드 이미지를 전달합니다.</li>
             <li><strong>데이터 연동:</strong> '웰리 지식 백과'에 등록된 최신 정보가 답변에 자동으로 반영됩니다.</li>

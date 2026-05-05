@@ -38,7 +38,7 @@ const Dashboard: React.FC = () => {
     },
     {
       id: 'voc-assistant',
-      title: '고객의 소리(VOC) 분석기',
+      title: '고객의 소리(VOC) 어시스턴트',
       description: '고객 문의사항을 분석하고 담당자에게 알맞은 답변 초안을 제안합니다.',
       icon: '🎧',
       path: '/tools/voc-assistant',
@@ -46,7 +46,7 @@ const Dashboard: React.FC = () => {
     },
     {
       id: 'field-sketch',
-      title: '홍보용 현장 스케치',
+      title: '현장 스케치 생성기',
       description: '현장 사진과 소식을 생생하고 매력적인 마케팅 문구로 변환합니다.',
       icon: '📸',
       path: '/tools/field-sketch',
@@ -54,7 +54,7 @@ const Dashboard: React.FC = () => {
     },
     {
       id: 'tts-generator',
-      title: '안내방송 성우 스튜디오',
+      title: '안내방송용 TTS 생성기',
       description: '상황에 맞는 대본을 작성하고 자연스러운 음성 안내방송을 제작합니다.',
       icon: '🎙️',
       path: '/tools/tts-generator',
