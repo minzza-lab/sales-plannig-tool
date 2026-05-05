@@ -112,7 +112,35 @@ const Approvals: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setUploadFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setUploadFile(file);
+
+      // 파일명 자동 파싱 (예: 260505_품의_어린이날결과보고(안).pdf)
+      const fileNameStr = file.name;
+      const parts = fileNameStr.split('_');
+      
+      if (parts.length >= 3) {
+        const datePart = parts[0]; // 260505
+        const typePart = parts[1]; // 품의
+        
+        // 나머지 부분은 제목 (확장자 제거)
+        let titlePart = parts.slice(2).join('_');
+        const extIndex = titlePart.lastIndexOf('.');
+        if (extIndex > -1) {
+          titlePart = titlePart.substring(0, extIndex);
+        }
+        
+        // 날짜 파싱 (260505 -> 2026-05-05)
+        if (datePart.length === 6 && !isNaN(Number(datePart))) {
+          const year = '20' + datePart.substring(0, 2);
+          const month = datePart.substring(2, 4);
+          const day = datePart.substring(4, 6);
+          setUploadDate(`${year}-${month}-${day}`);
+        }
+        
+        // 제목 셋팅
+        setUploadTitle(`[${typePart}] ${titlePart}`);
+      }
     }
   };
 
