@@ -977,10 +977,10 @@ const WaterParkSales: React.FC = () => {
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={categoryData.slice(0, 8)} cx="50%" cy="50%" innerRadius={75} outerRadius={120} paddingAngle={2} dataKey="amount" nameKey="name" labelLine={false} label={renderCustomizedLabel}>
-                            {categoryData.slice(0, 8).map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                            {categoryData.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                             <Label content={<CustomCenterLabel amount={activeReport.summary.totalAmount} qty={activeReport.summary.totalQty} />} position="center" />
                           </Pie>
-                          <RechartsTooltip formatter={formatCurrency} />
+                          <RechartsTooltip formatter={(val: any) => formatCurrency(Number(val))} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -990,7 +990,7 @@ const WaterParkSales: React.FC = () => {
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                           <XAxis type="number" tickFormatter={(v) => `₩${v/10000}만`} />
                           <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
-                          <RechartsTooltip formatter={formatCurrency} />
+                          <RechartsTooltip formatter={(val: any) => formatCurrency(Number(val))} />
                           <Legend />
                           {hasPrevData && <Bar dataKey="prevAmount" fill="#d1d5db" name="전년 동기" radius={[0, 4, 4, 0]} />}
                           <Bar dataKey="amount" fill="#3b82f6" name="올해" radius={[0, 4, 4, 0]}>
@@ -1011,10 +1011,10 @@ const WaterParkSales: React.FC = () => {
                       <ResponsiveContainer width="100%" height={260}>
                         <PieChart>
                           <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="amount" nameKey="name" labelLine={false} label={renderCustomizedLabel}>
-                            {categoryData.map((e, i) => <Cell key={i} fill={COLORS[(i+2) % COLORS.length]} />)}
+                            {categoryData.map((_, i) => <Cell key={i} fill={COLORS[(i+2) % COLORS.length]} />)}
                             <Label content={<CustomCenterLabel amount={activeReport.summary.totalAmount} qty={activeReport.summary.totalQty} />} position="center" />
                           </Pie>
-                          <RechartsTooltip formatter={formatCurrency} />
+                          <RechartsTooltip formatter={(val: any) => formatCurrency(Number(val))} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
