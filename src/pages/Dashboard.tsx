@@ -5,6 +5,14 @@ import './Dashboard.css';
 const Dashboard: React.FC = () => {
   const tools = [
     {
+      id: 'waterpark-sales',
+      title: '워터파크 매출 실적 보드',
+      description: '로컬 엑셀 데이터를 활용한 일일 영업 실적 비교 분석 대시보드입니다.',
+      icon: '🌊',
+      path: '/tools/waterpark-sales',
+      status: 'active'
+    },
+    {
       id: 'qr-generator',
       title: 'QR 코드 생성기',
       description: 'URL을 QR 코드로 변환하고 PNG로 다운로드하세요.',

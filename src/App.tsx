@@ -10,36 +10,31 @@ import VOCAssistant from './components/VOCAssistant'
 import FieldSketchWriter from './components/FieldSketchWriter'
 import ManualTips from './components/ManualTips'
 import AutomationRequest from './components/AutomationRequest'
+import WaterParkSales from './components/WaterParkSales'
 import Login from './components/Auth/Login'
 import './App.css'
 
-// Force rebuild for automation board visibility
 function App() {
-  const [session, setSession] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [session, setSession] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // 초기 세션 확인
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setIsLoading(false)
-    })
+      setSession(session);
+      setIsLoading(false);
+    });
 
-    // 인증 상태 변경 감지
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => subscription.unsubscribe();
+  }, []);
 
   if (isLoading) {
-    return (
-      <div className="loading-screen">
-        <div className="loader"></div>
-        <p>시스템을 불러오고 있습니다...</p>
-      </div>
-    )
+    return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>;
   }
 
   return (
@@ -53,6 +48,7 @@ function App() {
         ) : (
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
             <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
             <Route path="tools/url-shortener" element={<URLShortener />} />
             <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />

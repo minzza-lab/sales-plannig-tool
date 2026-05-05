@@ -9,24 +9,21 @@ const MainLayout: React.FC = () => {
   const [userInfo, setUserInfo] = useState<{ name: string; dept: string } | null>(null);
 
   const fetchUserInfo = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user && user.user_metadata) {
-      setUserInfo({
-        name: user.user_metadata.full_name || user.user_metadata.name || '사용자',
-        dept: user.user_metadata.department || '영업부'
-      });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserInfo({
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || '사용자',
+          dept: user.user_metadata?.department || '부서미지정'
+        });
+      }
+    } catch (err) {
+      console.log('Error fetching user info', err);
     }
   };
 
   useEffect(() => {
     fetchUserInfo();
-
-    // 인증 상태 변경 감지 (로그인/로그아웃 시 즉시 반영)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchUserInfo();
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   const toggleSidebar = () => {
@@ -56,6 +53,9 @@ const MainLayout: React.FC = () => {
             <span className="user-badge">
               {userInfo ? `${userInfo.dept} ${userInfo.name}` : '정보 불러오는 중...'}
             </span>
+            <button className="logout-btn" onClick={() => supabase.auth.signOut()} style={{ marginLeft: '12px', padding: '4px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '13px', color: '#64748b' }}>
+              로그아웃
+            </button>
           </div>
         </header>
         <div className="page-content">

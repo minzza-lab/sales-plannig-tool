@@ -16,11 +16,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // 아이디/사번을 시스템이 인식 가능한 이메일 형식으로 변환
+  // 아이디/사번을 시스템이 인식 가능한 이메일 형식으로 변환 (숫자만 있을 경우 Supabase 이메일 검증에서 튕길 수 있어 영문 접두사 추가)
   const formatEmail = (val: string) => {
     const trimmed = val.trim();
     if (trimmed.includes('@')) return trimmed;
-    return `${trimmed}@wellyhilly.co.kr`;
+    return `emp_${trimmed}@wellyhilly.com`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

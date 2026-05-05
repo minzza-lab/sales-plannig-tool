@@ -43,6 +43,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">🤝</span> 공유 지식 베이스
             </NavLink>
           </li>
+          <hr className="sidebar-divider" />
+          <li className="menu-highlight">
+            <NavLink to="/tools/waterpark-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🌊</span> 워터파크 매출 관리
+            </NavLink>
+          </li>
           <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🤖</span> AI VOC 어시스턴트
