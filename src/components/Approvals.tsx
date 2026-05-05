@@ -324,7 +324,7 @@ const Approvals: React.FC = () => {
               {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
                 <div className="detail-pdf-preview">
                   <iframe 
-                    src={`${selectedApproval.file_url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
+                    src={`${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=Fit`} 
                     title="PDF Preview"
                   />
                 </div>
