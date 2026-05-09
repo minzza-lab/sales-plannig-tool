@@ -50,10 +50,10 @@ async function runCrawler() {
     const pageTitle = await page.title();
     console.log(`현재 페이지 제목: ${pageTitle}`);
 
-    console.log('4. 테이블 데이터 파싱 중 (전체 페이지)...');
+    console.log('4. 테이블 데이터 파싱 중 (상위 10페이지)...');
     let allLinks = [];
     let currentPage = 1;
-    const maxPages = Infinity;
+    const maxPages = 10; // 최초 1회 수집 최대 페이지 수
 
     while (currentPage <= maxPages) {
       console.log(`[페이지 ${currentPage}] 링크 수집 중...`);
