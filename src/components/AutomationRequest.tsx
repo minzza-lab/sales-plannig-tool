@@ -96,14 +96,19 @@ const AutomationRequest: React.FC = () => {
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    await supabase.from('automation_comments').insert([{
+    const { error } = await supabase.from('automation_comments').insert([{
       request_id: requestId,
       user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
       content: content.trim()
     }]);
 
-    setCommentInputs({ ...commentInputs, [requestId]: '' });
-    fetchRequests();
+    if (error) {
+      console.error("Comment insert error:", error);
+      alert(`댓글 저장 실패: ${error.message}\n(Supabase 데이터베이스 구조를 확인해 주세요)`);
+    } else {
+      setCommentInputs({ ...commentInputs, [requestId]: '' });
+      fetchRequests();
+    }
   };
 
   const handleDeleteComment = async (commentId: string) => {
