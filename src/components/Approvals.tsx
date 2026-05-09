@@ -539,7 +539,11 @@ const Approvals: React.FC = () => {
               {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
                 <div className="detail-pdf-preview">
                   <iframe 
-                    src={`${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`} 
+                    src={
+                      window.innerWidth <= 768 
+                        ? `https://docs.google.com/gview?url=${encodeURIComponent(selectedApproval.file_url)}&embedded=true`
+                        : `${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`
+                    } 
                     title="PDF Preview"
                   />
                 </div>
