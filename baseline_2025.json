@@ -1,0 +1,155 @@
+[
+  {
+    "category1": "특가",
+    "category2": "일반",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 275,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "특가",
+    "category2": "일반",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 550,
+    "qty_2025": 10,
+    "revenue_2025": 5300
+  },
+  {
+    "category1": "특가",
+    "category2": "회원\r\n/\r\n제휴",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 190,
+    "qty_2025": 1,
+    "revenue_2025": 190
+  },
+  {
+    "category1": "특가",
+    "category2": "회원\r\n/\r\n제휴",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 440,
+    "qty_2025": 5,
+    "revenue_2025": 2200
+  },
+  {
+    "category1": "특가",
+    "category2": "지역\r\n주민",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 190,
+    "qty_2025": 9,
+    "revenue_2025": 1710
+  },
+  {
+    "category1": "특가",
+    "category2": "지역\r\n주민",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 440,
+    "qty_2025": 36,
+    "revenue_2025": 15840
+  },
+  {
+    "category1": "특별\r\n권종",
+    "category2": "일반",
+    "category3": "프리미엄 \r\n시즌패스",
+    "target": "4인권",
+    "price": 990,
+    "qty_2025": 4,
+    "revenue_2025": 4800
+  },
+  {
+    "category1": "특별권종",
+    "category2": "임직원",
+    "category3": "임직원\r\n시즌패스",
+    "target": "1인권",
+    "price": 50,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반\r\n(정상)",
+    "category2": "일반",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 275,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반(정상)",
+    "category2": "일반",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 550,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반(정상)",
+    "category2": "회원\r\n/\r\n제휴",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 190,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반(정상)",
+    "category2": "회원\r\n/\r\n제휴",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 440,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반(정상)",
+    "category2": "지역\r\n주민",
+    "category3": "개인권",
+    "target": "대 인",
+    "price": 190,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "일반(정상)",
+    "category2": "지역\r\n주민",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 440,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "프로\r\n모션",
+    "category2": "AK\r\n오프\r\n라인",
+    "category3": "개인권",
+    "target": "대인",
+    "price": 190,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "프로모션",
+    "category2": "AK\r\n오프\r\n라인",
+    "category3": "패밀리권",
+    "target": "3인권",
+    "price": 440,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  },
+  {
+    "category1": "프로모션",
+    "category2": "AK\r\n오프\r\n라인",
+    "category3": "프리미엄",
+    "target": "4인권",
+    "price": 990,
+    "qty_2025": 0,
+    "revenue_2025": 0
+  }
+]
