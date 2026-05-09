@@ -64,7 +64,13 @@ const AutomationRequest: React.FC = () => {
       likes: 0
     }]);
     
-    if (!error) { setNewRequest(''); fetchRequests(); }
+    if (error) {
+      console.error("Insert error:", error);
+      alert(`저장 실패: ${error.message}\n(Supabase 데이터베이스 구조를 확인해 주세요)`);
+    } else { 
+      setNewRequest(''); 
+      fetchRequests(); 
+    }
     setIsLoading(false);
   };
 
