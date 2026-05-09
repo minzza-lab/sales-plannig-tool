@@ -68,6 +68,8 @@ const WaterParkSales: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<ReportType | null>(null);
   const [weatherMap, setWeatherMap] = useState<Record<string, WeatherData>>({});
+  const [detailSearchTerm, setDetailSearchTerm] = useState('');
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -1024,14 +1026,47 @@ const WaterParkSales: React.FC = () => {
 
                     {/* 상세 데이터 리스트 영역 */}
                     <div className="list-wrapper">
-                      {categoryData.map((cat: any) => (
+                      <div className="detail-search-box" style={{ marginBottom: '16px' }}>
+                        <input 
+                          type="text" 
+                          placeholder="🔍 상세 항목 검색 (예: 락커, 구명조끼...)" 
+                          value={detailSearchTerm}
+                          onChange={(e) => setDetailSearchTerm(e.target.value)}
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
+                        />
+                      </div>
+                      {categoryData.map((cat: any, index: number) => {
+                        // 검색어 필터링 적용
+                        const items = (groupedItems[cat.name] || []).filter((r: any) => 
+                          r.name.toLowerCase().includes(detailSearchTerm.toLowerCase()) || 
+                          cat.name.toLowerCase().includes(detailSearchTerm.toLowerCase())
+                        );
+                        
+                        // 검색결과가 없으면 이 그룹은 렌더링 안 함
+                        if (items.length === 0) return null;
+                        
+                        // 첫 번째 그룹은 기본으로 열려있게, 검색어가 있으면 모두 열리게 처리
+                        const isExpanded = detailSearchTerm.length > 0 || (expandedCats[cat.name] !== undefined ? expandedCats[cat.name] : index === 0);
+
+                        return (
                         <div key={cat.name} className="cat-group">
-                          <h4 className="cat-group-header">
-                            {cat.name}
-                            <span className="cat-group-sum">총 {cat.quantity.toLocaleString()}건 ({formatCurrency(cat.amount)})</span>
+                          <h4 
+                            className="cat-group-header" 
+                            style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+                            onClick={() => setExpandedCats(prev => ({ ...prev, [cat.name]: !isExpanded }))}
+                          >
+                            <div>
+                              {cat.name}
+                              <span className="cat-group-sum">총 {cat.quantity.toLocaleString()}건 ({formatCurrency(cat.amount)})</span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>
+                              {isExpanded ? '▲ 접기' : '▼ 펼치기'}
+                            </span>
                           </h4>
-                          <div className="cat-group-items">
-                            {(groupedItems[cat.name] || []).map((row: any, i: number) => {
+                          
+                          {isExpanded && (
+                          <div className="cat-group-items animate-fade-in">
+                            {items.map((row: any, i: number) => {
                               const qty = Number(row.quantity);
                               const amount = Number(row.amount);
                               const pct = activeReport.summary.totalQty > 0 ? (qty / activeReport.summary.totalQty * 100) : 0;
@@ -1053,8 +1088,9 @@ const WaterParkSales: React.FC = () => {
                               );
                             })}
                           </div>
+                          )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
                 </div>
