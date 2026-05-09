@@ -266,6 +266,31 @@
   margin-bottom: 8px;
 }
 
+.voc-card-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hide-voc-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.hide-voc-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
 .voc-category {
   font-size: 11px;
   background: #f1f5f9;

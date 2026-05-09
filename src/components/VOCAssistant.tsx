@@ -18,6 +18,20 @@ const VOCAssistant: React.FC = () => {
   const [draftAnswer, setDraftAnswer] = useState<string>('');
   const [expandedVocId, setExpandedVocId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<any>(null);
+  
+  const [hiddenVocIds, setHiddenVocIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('hiddenVocIds');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hiddenVocIds', JSON.stringify(hiddenVocIds));
+  }, [hiddenVocIds]);
+
+  const handleHideVoc = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setHiddenVocIds(prev => [...prev, id]);
+  };
 
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
@@ -226,6 +240,8 @@ const VOCAssistant: React.FC = () => {
     }
   };
 
+  const visibleUnansweredList = unansweredList.filter(voc => !hiddenVocIds.includes(voc.id));
+
   return (
     <div className="voc-container">
       <div className="voc-header">
@@ -258,11 +274,11 @@ const VOCAssistant: React.FC = () => {
 
       <div className="voc-workspace">
         <div className="voc-list-section">
-          {unansweredList.length > 0 && (
+          {visibleUnansweredList.length > 0 && (
             <div className="unanswered-voc-list">
-              <div className="section-label">🚨 새로 수집된 미답변 VOC ({unansweredList.length}건)</div>
+              <div className="section-label">🚨 새로 수집된 미답변 VOC ({visibleUnansweredList.length}건)</div>
               <div className="voc-cards-container">
-                {unansweredList.map((voc) => (
+                {visibleUnansweredList.map((voc) => (
                   <div 
                     key={voc.id} 
                     className="voc-card"
@@ -272,8 +288,17 @@ const VOCAssistant: React.FC = () => {
                     }}
                   >
                     <div className="voc-card-header">
-                      <span className="voc-category">{voc.category}</span>
-                      <span className="voc-name">{voc.customer_name}님</span>
+                      <div className="voc-card-badge-group">
+                        <span className="voc-category">{voc.category}</span>
+                        <span className="voc-name">{voc.customer_name}님</span>
+                      </div>
+                      <button 
+                        className="hide-voc-btn"
+                        onClick={(e) => handleHideVoc(e, voc.id)}
+                        title="목록에서 숨기기"
+                      >
+                        ✕
+                      </button>
                     </div>
                     <div className="voc-card-title">{voc.title}</div>
                   </div>
