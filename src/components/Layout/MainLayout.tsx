@@ -53,7 +53,7 @@ const MainLayout: React.FC = () => {
             <span className="user-badge">
               {userInfo ? `${userInfo.dept} ${userInfo.name}` : '정보 불러오는 중...'}
             </span>
-            <button className="logout-btn" onClick={() => supabase.auth.signOut()} style={{ marginLeft: '12px', padding: '4px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '13px', color: '#64748b' }}>
+            <button className="logout-btn" onClick={() => supabase.auth.signOut()}>
               로그아웃
             </button>
           </div>

@@ -1,83 +1,134 @@
 .dashboard-container {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
+  animation: fadeUp 0.5s ease-out;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dashboard-header {
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
+  text-align: center;
 }
 
 .dashboard-header h1 {
-  font-size: 2.25rem;
+  font-size: 2.5rem;
   font-weight: 800;
-  color: #111827;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.025em;
 }
 
 .dashboard-header p {
   font-size: 1.125rem;
-  color: #6b7280;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  /* 3열 레이아웃을 기본으로 하되 모바일에서 1열로 붕괴되도록 최적화 */
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
 }
 
 .tool-card {
-  background: #ffffff;
-  padding: 2rem;
-  border-radius: 16px;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-card);
+  padding: 1.75rem;
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   display: flex;
-  gap: 1.5rem;
-  transition: all 0.3s ease;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 프리미엄 보더 이펙트 (활성화된 카드만) */
+.tool-card.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), #818cf8);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .tool-card.active:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  border-color: #4f46e5;
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-hover);
+  border-color: transparent;
+}
+
+.tool-card.active:hover::before {
+  opacity: 1;
 }
 
 .tool-card.upcoming {
-  opacity: 0.7;
-  background-color: #f9fafb;
+  opacity: 0.65;
+  background-color: var(--bg-main);
 }
 
 .tool-icon {
   font-size: 2.5rem;
+  margin-bottom: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background-color: var(--primary-light);
+  border-radius: 16px;
+}
+
+.tool-info {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  flex: 1;
 }
 
 .tool-info h3 {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
   margin: 0 0 0.5rem 0;
+  letter-spacing: -0.01em;
 }
 
 .tool-info p {
   font-size: 0.9375rem;
-  color: #4b5563;
+  color: var(--text-secondary);
   margin: 0 0 1.5rem 0;
   line-height: 1.5;
+  flex: 1;
 }
 
 .tool-link {
   display: inline-flex;
   align-items: center;
-  color: #4f46e5;
+  color: var(--primary);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   gap: 0.5rem;
+  padding: 0.5rem 0;
+  margin-top: auto;
 }
 
 .tool-link span {
-  transition: transform 0.2s;
+  transition: transform 0.2s ease;
 }
 
 .tool-link:hover span {
@@ -85,11 +136,64 @@
 }
 
 .upcoming-badge {
-  display: inline-block;
-  padding: 0.25rem 0.625rem;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.35rem 0.75rem;
   background-color: #f3f4f6;
-  color: #6b7280;
+  color: var(--text-secondary);
   border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-top: auto;
+}
+
+/* 모바일 화면 대응 */
+@media (max-width: 768px) {
+  .dashboard-header {
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+  
+  .dashboard-header h1 {
+    font-size: 1.875rem;
+  }
+  
+  .dashboard-header p {
+    font-size: 1rem;
+    max-width: 100%;
+  }
+
+  .tool-grid {
+    grid-template-columns: 1fr; /* 모바일에서는 무조건 1열 */
+    gap: 1rem;
+  }
+
+  .tool-card {
+    flex-direction: row; /* 모바일에서는 가로 배치로 리스트처럼 변경 */
+    padding: 1.25rem;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .tool-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 1.75rem;
+    margin-bottom: 0;
+    border-radius: 12px;
+  }
+  
+  .tool-info h3 {
+    font-size: 1.125rem;
+  }
+  
+  .tool-info p {
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+  
+  .tool-link {
+    font-size: 0.875rem;
+    padding: 0;
+  }
 }
