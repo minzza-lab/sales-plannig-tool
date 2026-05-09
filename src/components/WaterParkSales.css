@@ -1,4 +1,4 @@
-﻿.waterpark-sales-container {
+.waterpark-sales-container {
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
@@ -132,6 +132,11 @@
 table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 800px; }
 th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
 th { background: #f8fafc; font-weight: 700; color: var(--text-secondary); }
+
+.chart-wrapper {
+  height: 400px;
+  width: 100%;
+}
 
 /* 紐⑤컮???붾㈃ ???*/
 @media (max-width: 1024px) {
