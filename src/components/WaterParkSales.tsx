@@ -1072,13 +1072,20 @@ const WaterParkSales: React.FC = () => {
                               const pct = activeReport.summary.totalQty > 0 ? (qty / activeReport.summary.totalQty * 100) : 0;
                               const unitPrice = qty > 0 ? amount / qty : 0;
                               return (
-                                <div key={i} className="detailed-bar-row">
-                                  <div className="d-bar-info">
-                                    <span className="d-bar-name">{row.name}</span>
-                                    <div className="d-bar-metrics">
-                                      <span className="d-metric-pct">{pct.toFixed(1)}%</span>
-                                      <span className="d-metric-qty">{qty.toLocaleString()}건</span>
-                                      <span className="d-metric-unit">객단가: {formatCurrency(unitPrice)}</span>
+                                <div key={i} className="detailed-table-row">
+                                  <div className="d-table-name">{row.name}</div>
+                                  <div className="d-table-stats-grid">
+                                    <div className="stat-col">
+                                      <span className="stat-label">점유율</span>
+                                      <span className="stat-val" style={{ color: '#3b82f6' }}>{pct.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="stat-col">
+                                      <span className="stat-label">건수</span>
+                                      <span className="stat-val">{qty.toLocaleString()}건</span>
+                                    </div>
+                                    <div className="stat-col">
+                                      <span className="stat-label">객단가</span>
+                                      <span className="stat-val">{formatCurrency(unitPrice)}</span>
                                     </div>
                                   </div>
                                   <div className="d-bar-track">
