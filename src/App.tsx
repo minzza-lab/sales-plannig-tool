@@ -15,6 +15,7 @@ import Login from './components/Auth/Login'
 import Approvals from './components/Approvals'
 import TTSGenerator from './components/TTSGenerator'
 import ThumbnailGenerator from './components/ThumbnailGenerator'
+import SeasonPassTracker from './components/SeasonPassTracker'
 import './App.css'
 
 function App() {
@@ -62,6 +63,7 @@ function App() {
             <Route path="tools/approvals" element={<Approvals />} />
             <Route path="tools/tts-generator" element={<TTSGenerator />} />
             <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
+            <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}

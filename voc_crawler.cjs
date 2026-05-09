@@ -90,6 +90,10 @@ async function runCrawler() {
 
     console.log(`총 ${allLinks.length}개의 전체 VOC 링크를 수집했습니다.`);
     
+    // 가장 오래된 글(마지막 페이지의 마지막 글)부터 먼저 처리하도록 배열을 뒤집습니다.
+    // 그래야 새 글일수록 DB에 나중에 들어가 created_at(생성일시)이 가장 최신이 됩니다.
+    allLinks.reverse();
+    
     for (const item of allLinks) {
       console.log(`상세 페이지 파싱 중... (${item.url}) - 상태: ${item.status}`);
       await page.goto(item.url, { waitUntil: 'networkidle2' });
@@ -134,8 +138,7 @@ async function runCrawler() {
           title: vocData.title,
           content: vocData.vocContent,
           answer: vocData.answer,
-          status: item.status === 'N' ? 'unanswered' : 'answered',
-          created_at: new Date().toISOString()
+          status: item.status === 'N' ? 'unanswered' : 'answered'
         }, { onConflict: 'seq_id' });
         
       if (error) {

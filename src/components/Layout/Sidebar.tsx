@@ -54,6 +54,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">🌊</span> 워터파크 매출 관리
             </NavLink>
           </li>
+          <li className="menu-highlight">
+            <NavLink to="/tools/season-pass-tracker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🎟️</span> 시즌권 주문 추적 관리
+            </NavLink>
+          </li>
           <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🎧</span> 고객의 소리(VOC) 어시스턴트
