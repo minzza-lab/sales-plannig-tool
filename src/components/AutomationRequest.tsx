@@ -57,10 +57,15 @@ const AutomationRequest: React.FC = () => {
     
     const { data: { user } } = await supabase.auth.getUser();
     
+    const contentText = newRequest.trim();
+    // 제목(title) 컬럼이 필수(NOT NULL)인 기존 테이블을 위해 내용을 요약해서 제목으로 전송
+    const generatedTitle = contentText.length > 20 ? contentText.substring(0, 20) + '...' : contentText;
+
     const { error } = await supabase.from('automation_requests').insert([{
+      title: generatedTitle,
       user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
       department: user?.user_metadata?.department || '영업부',
-      content: newRequest.trim(),
+      content: contentText,
       likes: 0
     }]);
     
