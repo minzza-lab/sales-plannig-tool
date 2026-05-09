@@ -257,7 +257,7 @@ const VOCAssistant: React.FC = () => {
       </div>
 
       <div className="voc-workspace">
-        <div className="voc-input-section">
+        <div className="voc-list-section">
           {unansweredList.length > 0 && (
             <div className="unanswered-voc-list">
               <div className="section-label">🚨 새로 수집된 미답변 VOC ({unansweredList.length}건)</div>
@@ -326,7 +326,9 @@ const VOCAssistant: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
 
+        <div className="voc-input-section">
           <div className="input-field-group">
             <div className="section-label">고객 성함 (선택)</div>
             <input
