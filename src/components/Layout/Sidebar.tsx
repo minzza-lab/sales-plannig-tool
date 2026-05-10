@@ -74,6 +74,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">🪄</span> 공간 시뮬레이터 (AI)
             </NavLink>
           </li>
+          <li className="menu-highlight">
+            <NavLink to="/tools/photo-shorts-maker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🎬</span> AI 숏폼 자동 메이커
+            </NavLink>
+          </li>
+          <li className="menu-highlight">
+            <NavLink to="/tools/video-prompt-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🤖</span> 비디오 프롬프트 생성기
+            </NavLink>
+          </li>
           <li>
             <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🎙️</span> 안내방송용 TTS 생성기

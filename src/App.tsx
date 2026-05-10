@@ -17,6 +17,8 @@ import TTSGenerator from './components/TTSGenerator'
 import ThumbnailGenerator from './components/ThumbnailGenerator'
 import SeasonPassTracker from './components/SeasonPassTracker'
 import SpaceSimulator from './components/SpaceSimulator'
+import PhotoShortsMaker from './components/PhotoShortsMaker'
+import VideoPromptGenerator from './components/VideoPromptGenerator'
 import './App.css'
 
 function App() {
@@ -66,6 +68,8 @@ function App() {
             <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
             <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
             <Route path="tools/space-simulator" element={<SpaceSimulator />} />
+            <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
+            <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
