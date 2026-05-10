@@ -240,6 +240,16 @@ const SpaceSimulator: React.FC = () => {
               <p>• 슬라이더를 움직여 스티커를 원하는 위치와 크기로 완벽하게 맞춰보세요.</p>
               <p>• 원본 사진은 1px도 훼손되지 않으니 안심하고 여러 객체를 테스트해 보세요.</p>
             </div>
+
+            <div className="adobe-firefly-banner">
+              <div className="firefly-content">
+                <h4>✨ 더 완벽하고 정교한 합성이 필요하신가요?</h4>
+                <p>그림자나 빛 반사까지 계산된 <b>최종 보고서용 고퀄리티 작업</b>은 어도비 파이어플라이의 '생성형 채우기'를 활용해 보세요. (보유하신 어도비 계정으로 무료 이용 가능)</p>
+              </div>
+              <a href="https://firefly.adobe.com/upload/inpaint" target="_blank" rel="noopener noreferrer" className="firefly-btn">
+                <span className="icon">🚀</span> 어도비 파이어플라이 열기
+              </a>
+            </div>
           </div>
         </div>
       </div>
