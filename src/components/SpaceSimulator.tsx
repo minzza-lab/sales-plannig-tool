@@ -218,9 +218,9 @@ const SpaceSimulator: React.FC = () => {
                       alt="Sticker" 
                       className="ar-sticker" 
                       style={{
-                        left: \`\${stickerX}%\`,
-                        top: \`\${stickerY}%\`,
-                        width: \`\${stickerSize}%\`,
+                        left: `${stickerX}%`,
+                        top: `${stickerY}%`,
+                        width: `${stickerSize}%`,
                         mixBlendMode: blendMode as any
                       }}
                     />
