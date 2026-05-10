@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import './Login.css';
 
@@ -15,6 +15,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+
+  useEffect(() => {
+    // 모바일 기기인지 확인 (iOS 및 Android)
+    const isMobile = () => {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      return /android|iphone|ipad|ipod/.test(userAgent);
+    };
+
+    // 이미 PWA(홈 화면)로 실행 중인지 확인
+    const isStandalone = () => {
+      return ('standalone' in window.navigator && (window.navigator as any).standalone) || 
+             window.matchMedia('(display-mode: standalone)').matches;
+    };
+
+    if (isMobile() && !isStandalone()) {
+      setShowInstallPrompt(true);
+    }
+  }, []);
 
   // 아이디/사번을 시스템이 인식 가능한 이메일 형식으로 변환 (숫자만 있을 경우 Supabase 이메일 검증에서 튕길 수 있어 영문 접두사 추가)
   const formatEmail = (val: string) => {
@@ -190,6 +209,20 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               카카오로 간편 시작
             </button>
           </>
+        )}
+
+        {showInstallPrompt && (
+          <div className="ios-install-prompt">
+            <div className="ios-install-icon">📱</div>
+            <div className="ios-install-text">
+              <strong>스마트폰 빠른 접속 팁</strong>
+              <p>
+                <b>아이폰:</b> 하단 공유 버튼 ➔ '홈 화면에 추가'<br/>
+                <b>안드로이드:</b> 우측 상단 메뉴(⋮) ➔ '홈 화면에 추가'
+              </p>
+            </div>
+            <button className="ios-install-close" onClick={() => setShowInstallPrompt(false)}>✕</button>
+          </div>
         )}
 
         <div className="login-footer">

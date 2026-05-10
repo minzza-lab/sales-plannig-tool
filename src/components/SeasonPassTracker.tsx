@@ -131,31 +131,33 @@ const SeasonPassTracker: React.FC = () => {
     return { category1: cat1, category2: cat2, category3: cat3, target };
   };
 
-  const getGroupedData = () => {
+  const getGroupedData = (startDate?: Date, endDate?: Date) => {
     const groups: Record<string, BaselineData & { qty_today: number; revenue_today: number; qty_2026: number; revenue_2026: number }> = {};
     
     baselines.forEach(b => {
-      const bC1 = b.category1.replace(/\r\n|\n/g, '');
-      const bC2 = b.category2.replace(/\r\n|\n/g, '');
-      const bC3 = b.category3.replace(/\r\n|\n/g, '');
-      const bTarget = b.target.replace(/\r\n|\n/g, '');
+      const bC1 = b.category1.replace(/\s+/g, '');
+      const bC2 = b.category2.replace(/\s+/g, '');
+      const bC3 = b.category3.replace(/\s+/g, '');
+      const bTarget = b.target.replace(/\s+/g, '');
       const key = `${bC1}|${bC2}|${bC3}|${bTarget}`;
       groups[key] = { ...b, qty_today: 0, revenue_today: 0, qty_2026: 0, revenue_2026: 0 };
     });
 
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDay = now.getDate();
+    const effStart = startDate ? new Date(startDate) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const effEnd = endDate ? new Date(endDate) : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    effStart.setHours(0, 0, 0, 0);
+    effEnd.setHours(23, 59, 59, 999);
 
     const validOrders = orders.filter(o => o.status === '결제');
 
     validOrders.forEach(o => {
       const mapped = getMappedCategory(o);
-      const mC1 = mapped.category1.replace(/\r\n|\n/g, '');
-      const mC2 = mapped.category2.replace(/\r\n|\n/g, '');
-      const mC3 = mapped.category3.replace(/\r\n|\n/g, '');
-      const mTarget = mapped.target.replace(/\r\n|\n/g, '');
+      const mC1 = mapped.category1.replace(/\s+/g, '');
+      const mC2 = mapped.category2.replace(/\s+/g, '');
+      const mC3 = mapped.category3.replace(/\s+/g, '');
+      const mTarget = mapped.target.replace(/\s+/g, '');
       const key = `${mC1}|${mC2}|${mC3}|${mTarget}`;
       
       if (!groups[key]) {
@@ -176,11 +178,11 @@ const SeasonPassTracker: React.FC = () => {
       }
       
       const orderDate = new Date(o.order_date);
-      const isToday = (orderDate.getFullYear() === currentYear && orderDate.getMonth() === currentMonth && orderDate.getDate() === currentDay);
+      const isTargetPeriod = orderDate >= effStart && orderDate <= effEnd;
       
       const priceInThousands = (Number(o.price) || 0) / 1000; // 단위: 천원
       
-      if (isToday) {
+      if (isTargetPeriod) {
         groups[key].qty_today += 1;
         groups[key].revenue_today += priceInThousands;
       }
@@ -206,8 +208,29 @@ const SeasonPassTracker: React.FC = () => {
         ws = workbook.worksheets[workbook.worksheets.length - 2];
       }
 
-      // 시트 이름 및 타이틀 날짜 업데이트
+      let wsIndex = -1;
+      workbook.worksheets.forEach((sheet, idx) => {
+        if (sheet.id === ws.id) wsIndex = idx;
+      });
+      
+      let prevWs = wsIndex > 0 ? workbook.worksheets[wsIndex - 1] : null;
+
       const now = new Date();
+      const currentYear = now.getFullYear();
+      let gapStart = new Date(currentYear, now.getMonth(), now.getDate());
+
+      if (prevWs) {
+        const pMatch = prevWs.name.match(/^(\d{2})(\d{2})/);
+        if (pMatch) {
+          const pMonth = parseInt(pMatch[1], 10) - 1;
+          const pDay = parseInt(pMatch[2], 10);
+          gapStart = new Date(currentYear, pMonth, pDay + 1);
+        }
+      }
+
+      const groupedData = getGroupedData(gapStart, now);
+
+      // 시트 이름 및 타이틀 날짜 업데이트
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
       const hours = String(now.getHours()).padStart(2, '0');
@@ -225,25 +248,30 @@ const SeasonPassTracker: React.FC = () => {
 
       // 5행 헤더 날짜 업데이트
       const f5 = ws.getCell('F5');
-      f5.value = `日 판매\n(${month}/${day})`;
+      
+      const sMonth = String(gapStart.getMonth() + 1).padStart(2, '0');
+      const sDay = String(gapStart.getDate()).padStart(2, '0');
+      
+      if (sMonth === month && sDay === day) {
+        f5.value = `日 판매\n(${month}/${day})`;
+      } else {
+        f5.value = `누적 판매\n(${sMonth}/${sDay}~${month}/${day})`;
+      }
 
-      const currentYear = now.getFullYear();
       const startD = Date.UTC(currentYear, 3, 14); // 4월 14일
       const endD = Date.UTC(currentYear, now.getMonth(), now.getDate());
       const diffDays = Math.floor((endD - startD) / (1000 * 60 * 60 * 24)) + 1;
       
       const h5 = ws.getCell('H5');
       h5.value = `2026년\n(4/14~${month}/${day} ${diffDays}日)`;
-
-      const groupedData = getGroupedData();
       
       let currentC1 = '';
       let currentC2 = '';
       let currentC3 = '';
       
-      // 6행부터 시작 (1-indexed)
+      // 7행부터 시작 (1-indexed) - 6행은 헤더(수량/매출)
       const rowCount = ws.rowCount;
-      for (let i = 6; i <= rowCount; i++) {
+      for (let i = 7; i <= rowCount; i++) {
         const row = ws.getRow(i);
         
         const c1Val = row.getCell(1).text?.trim();
@@ -251,11 +279,28 @@ const SeasonPassTracker: React.FC = () => {
         const c3Val = row.getCell(3).text?.trim();
         const targetVal = row.getCell(4).text?.trim();
         
+        const c3NoSpace = c3Val?.replace(/\s+/g, '') || '';
+        
         if (c1Val) currentC1 = c1Val;
         if (c2Val) currentC2 = c2Val;
-        if (c3Val && !c3Val.includes('소 계') && !c3Val.includes('합 계')) currentC3 = c3Val;
+        if (c3Val && !c3NoSpace.includes('소계') && !c3NoSpace.includes('합계')) currentC3 = c3Val;
         
-        if (!targetVal || targetVal.includes('소 계') || targetVal.includes('합 계') || targetVal.includes('합계') || targetVal.includes('計') || c3Val === '소 계' || c1Val?.includes('합계') || c1Val?.includes('計')) {
+        const targetNoSpace = targetVal?.replace(/\s+/g, '') || '';
+        const c1NoSpace = c1Val?.replace(/\s+/g, '') || '';
+        
+        const isSubtotalRow = 
+          targetNoSpace.includes('소계') || 
+          targetNoSpace.includes('합계') || 
+          targetNoSpace.includes('총계') || 
+          targetVal?.includes('計') ||
+          c3NoSpace.includes('소계') ||
+          c3NoSpace.includes('합계') ||
+          c3Val?.includes('計') ||
+          c1NoSpace.includes('합계') || 
+          c1NoSpace.includes('총계') || 
+          c1Val?.includes('計');
+
+        if (!targetVal || isSubtotalRow) {
           continue;
         }
 
@@ -266,12 +311,17 @@ const SeasonPassTracker: React.FC = () => {
         const normTarget = targetVal.replace(/\r\n|\n/g, '');
 
         const matchingGroup = groupedData.find(g => {
-          const gC1 = g.category1.replace(/\r\n|\n/g, '');
-          const gC2 = g.category2.replace(/\r\n|\n/g, '');
-          const gC3 = g.category3.replace(/\r\n|\n/g, '');
-          const gTarget = g.target.replace(/\r\n|\n/g, '');
+          const gC1 = g.category1.replace(/\s+/g, '');
+          const gC2 = g.category2.replace(/\s+/g, '');
+          const gC3 = g.category3.replace(/\s+/g, '');
+          const gTarget = g.target.replace(/\s+/g, '');
           
-          return gC1 === normC1 && gC2 === normC2 && gC3 === normC3 && gTarget === normTarget;
+          const mC1NoSpace = normC1.replace(/\s+/g, '');
+          const mC2NoSpace = normC2.replace(/\s+/g, '');
+          const mC3NoSpace = normC3.replace(/\s+/g, '');
+          const mTargetNoSpace = normTarget.replace(/\s+/g, '');
+          
+          return gC1 === mC1NoSpace && gC2 === mC2NoSpace && gC3 === mC3NoSpace && gTarget === mTargetNoSpace;
         });
 
         if (matchingGroup) {
@@ -283,10 +333,13 @@ const SeasonPassTracker: React.FC = () => {
           row.getCell(9).value = matchingGroup.revenue_2026; 
         } else {
           // 일치하는 항목이 없을 경우 템플릿의 기존 찌꺼기 데이터 초기화
-          row.getCell(6).value = 0;
-          row.getCell(7).value = 0;
-          row.getCell(8).value = 0;
-          row.getCell(9).value = 0;
+          // 단, 수식(Formula)이 있는 셀은 덮어쓰지 않도록 보호
+          [6, 7, 8, 9].forEach(col => {
+            const cell = row.getCell(col);
+            if (!cell.formula && cell.type !== ExcelJS.ValueType.Formula) {
+              cell.value = 0;
+            }
+          });
         }
       }
 
