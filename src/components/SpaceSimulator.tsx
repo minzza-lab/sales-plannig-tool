@@ -42,7 +42,7 @@ const SpaceSimulator: React.FC = () => {
 
       // 1. Gemini로 원본 이미지 분석 및 합성 프롬프트 생성
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Use flash for speed
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' }); // Use flash for speed
 
       // Extract base64 data correctly
       const base64Data = selectedImage.split(',')[1];
