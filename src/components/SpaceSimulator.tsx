@@ -82,7 +82,7 @@ const SpaceSimulator: React.FC = () => {
       // 2. Pollinations.ai 무료 이미지 생성 API를 통해 이미지 합성
       const encodedPrompt = encodeURIComponent(englishPrompt);
       const seed = Math.floor(Math.random() * 1000000);
-      const imageUrl = \`https://image.pollinations.ai/prompt/\${encodedPrompt}?width=1024&height=1024&nologo=true&seed=\${seed}\`;
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${seed}`;
 
       // Pre-load image to avoid broken thumbnail during load
       const img = new Image();
