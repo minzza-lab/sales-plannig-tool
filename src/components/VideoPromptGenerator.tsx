@@ -12,9 +12,9 @@ const VideoPromptGenerator: React.FC = () => {
   const [topic, setTopic] = useState('');
   
   // Dropdown Options
-  const [shotType, setShotType] = useState('Wide Shot (넓은 풍경/전신)');
-  const [camera, setCamera] = useState('Slow Pan (천천히 옆으로 이동)');
-  const [lighting, setLighting] = useState('Bright Sunlight (밝고 쨍한 햇빛)');
+  const [shotType, setShotType] = useState('🤖 AI 자동 추천 (상황에 맞게 최적화)');
+  const [camera, setCamera] = useState('🤖 AI 자동 추천 (상황에 맞게 최적화)');
+  const [lighting, setLighting] = useState('🤖 AI 자동 추천 (상황에 맞게 최적화)');
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<PromptResult | null>(null);
@@ -70,6 +70,7 @@ const VideoPromptGenerator: React.FC = () => {
 1. 인물이 등장한다면, **반드시 한국인/동양인(Korean/East Asian)**으로 묘사해야 합니다. 서양인이 나오면 안 됩니다.
 2. 사용자가 첨부한 원본 사진의 배경(장소)과 자연스럽게 이어지도록 상세히 묘사하세요.
 3. 구글 Flow 등의 AI가 정확히 이해할 수 있도록 동작, 카메라 워크, 조명, 인종 정보를 영문으로 전문적이고 구체적으로 작성하세요.
+4. 만약 위 사용자 기획 중 'AI 자동 추천'으로 되어 있는 항목이 있다면, 현재 상황(${topic})을 극대화할 수 있는 **가장 영화같고 전문적인 연출(카메라, 조명 등)을 당신이 직접 판단하여 프롬프트에 적용**하세요.
 
 결과는 반드시 아래의 JSON 형식으로만 반환하세요.
 {
@@ -163,6 +164,7 @@ const VideoPromptGenerator: React.FC = () => {
               <div className="input-group">
                 <label>구도 및 화각 (Shot Type)</label>
                 <select value={shotType} onChange={(e) => setShotType(e.target.value)}>
+                  <option value="🤖 AI 자동 추천 (상황에 맞게 최적화)">🤖 AI 자동 추천 (알아서 최적화)</option>
                   <option value="Wide Shot (넓은 풍경/전신)">Wide Shot (넓은 풍경/전신)</option>
                   <option value="Medium Shot (상반신 중심)">Medium Shot (상반신 중심)</option>
                   <option value="Close-up (얼굴 표정 집중)">Close-up (얼굴 표정 집중)</option>
@@ -174,6 +176,7 @@ const VideoPromptGenerator: React.FC = () => {
               <div className="input-group">
                 <label>카메라 앵글 (Camera Movement)</label>
                 <select value={camera} onChange={(e) => setCamera(e.target.value)}>
+                  <option value="🤖 AI 자동 추천 (상황에 맞게 최적화)">🤖 AI 자동 추천 (알아서 최적화)</option>
                   <option value="Slow Pan (천천히 옆으로 이동)">Slow Pan (천천히 옆으로 이동)</option>
                   <option value="Slow Zoom In (서서히 다가가기)">Slow Zoom In (서서히 다가가기)</option>
                   <option value="Static & Steady (고정된 시선)">Static & Steady (고정된 시선)</option>
@@ -185,6 +188,7 @@ const VideoPromptGenerator: React.FC = () => {
               <div className="input-group full-width">
                 <label>조명 및 무드 (Lighting & Mood)</label>
                 <select value={lighting} onChange={(e) => setLighting(e.target.value)}>
+                  <option value="🤖 AI 자동 추천 (상황에 맞게 최적화)">🤖 AI 자동 추천 (알아서 최적화)</option>
                   <option value="Bright Sunlight (밝고 쨍한 햇빛)">Bright Sunlight (밝고 쨍한 여름 햇빛)</option>
                   <option value="Golden Hour (따뜻하고 낭만적인 노을빛)">Golden Hour (따뜻한 노을빛)</option>
                   <option value="Cinematic Lighting (영화같은 극적인 조명)">Cinematic Lighting (영화같은 조명)</option>
