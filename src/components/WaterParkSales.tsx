@@ -70,6 +70,26 @@ const WaterParkSales: React.FC = () => {
   const [weatherMap, setWeatherMap] = useState<Record<string, WeatherData>>({});
   const [detailSearchTerm, setDetailSearchTerm] = useState('');
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
+  const [manualWeathers, setManualWeathers] = useState<Record<string, number>>({});
+  const [calendarViewMode, setCalendarViewMode] = useState<'ADMISSION' | 'PRODUCT' | 'TOTAL'>('ADMISSION');
+
+  const handleWeatherOverride = async (dateStr: string, code: number) => {
+    if (code === -1) {
+      setManualWeathers(prev => {
+        const next = { ...prev };
+        delete next[dateStr];
+        return next;
+      });
+      await supabase.from('daily_reports').delete().match({ report_date: dateStr, report_type: 'WEATHER_OVERRIDE' });
+    } else {
+      setManualWeathers(prev => ({ ...prev, [dateStr]: code }));
+      await supabase.from('daily_reports').upsert({
+        report_date: dateStr,
+        report_type: 'WEATHER_OVERRIDE',
+        data: { code }
+      }, { onConflict: 'report_date, report_type' });
+    }
+  };
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -77,7 +97,17 @@ const WaterParkSales: React.FC = () => {
         const { data, error } = await supabase.from('daily_reports').select('*');
         if (error) throw error;
         if (data) {
-          const formatted = data.map(d => ({
+          const overrides: Record<string, number> = {};
+          const validData = data.filter(d => {
+            if (d.report_type === 'WEATHER_OVERRIDE') {
+              overrides[d.report_date] = d.data.code;
+              return false;
+            }
+            return true;
+          });
+          setManualWeathers(overrides);
+
+          const formatted = validData.map(d => ({
             id: d.id,
             report_date: d.report_date,
             type: d.report_type as ReportType,
@@ -353,13 +383,34 @@ const WaterParkSales: React.FC = () => {
         const cloneDay = day;
         const dateStr = format(day, 'yyyy-MM-dd');
         const dayReports = reports.filter(r => r.report_date === dateStr);
-        const mainReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE') || dayReports[0];
+        const admissionReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE');
+        const productReport = dayReports.find(r => r.type === 'HOURLY_SALES');
+        const mainReport = admissionReport || productReport || dayReports[0];
         const wInfo = weatherMap[dateStr];
 
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
-        const prevMainReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE') || prevDayReports[0];
+        const prevAdmissionReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE');
+        const prevProductReport = prevDayReports.find(r => r.type === 'HOURLY_SALES');
+        const prevMainReport = prevAdmissionReport || prevProductReport || prevDayReports[0];
         const prevWInfo = weatherMap[prevYearStr];
+
+        let currentDispAmt = 0;
+        let prevDispAmt = 0;
+        
+        if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
+          currentDispAmt += admissionReport?.summary?.totalAmount || 0;
+          prevDispAmt += prevAdmissionReport?.summary?.totalAmount || 0;
+        }
+        if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
+          currentDispAmt += productReport?.summary?.totalAmount || 0;
+          prevDispAmt += prevProductReport?.summary?.totalAmount || 0;
+        }
+
+        const hasCurrentData = !!admissionReport || !!productReport;
+        const hasPrevData = !!prevAdmissionReport || !!prevProductReport;
+        
+        const tooltipContent = `[올해]\n입장: ${(admissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(productReport?.summary?.totalAmount || 0).toLocaleString()}원\n\n[작년]\n입장: ${(prevAdmissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(prevProductReport?.summary?.totalAmount || 0).toLocaleString()}원`;
 
         const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
         const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -379,30 +430,68 @@ const WaterParkSales: React.FC = () => {
                 {isHoliday && <span className="holiday-badge">{holidayName}</span>}
               </span>
               <div className="cal-weathers" style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
-                {wInfo && (
-                  <div className="cal-weather" title={`[올해] 최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
-                    <span style={{ fontSize: '9px', marginRight: '2px', color: '#3b82f6' }}>올해</span>
-                    {getWeatherIcon(wInfo.code)}
-                    <span>{wInfo.temp}°</span>
-                  </div>
-                )}
-                {prevWInfo && (
-                  <div className="cal-weather" style={{ opacity: 0.75 }} title={`[작년] 최고기온 ${prevWInfo.temp}°C, 강수량 ${prevWInfo.rain}mm`}>
-                    <span style={{ fontSize: '9px', marginRight: '2px' }}>작년</span>
-                    {getWeatherIcon(prevWInfo.code)}
-                    <span>{prevWInfo.temp}°</span>
-                  </div>
-                )}
+                {wInfo && (() => {
+                  const currentCode = manualWeathers[dateStr] ?? wInfo.code;
+                  return (
+                    <div className="cal-weather" style={{ position: 'relative' }} title={`[올해] 최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
+                      <select 
+                        value={manualWeathers[dateStr] ?? -1} 
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleWeatherOverride(dateStr, Number(e.target.value));
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer', left: 0, top: 0 }}
+                        title="날씨 수정하기"
+                      >
+                        <option value={-1}>자동(API)</option>
+                        <option value={0}>☀️ 맑음</option>
+                        <option value={3}>☁️ 흐림</option>
+                        <option value={61}>🌧️ 비</option>
+                        <option value={71}>❄️ 눈</option>
+                      </select>
+                      <span style={{ fontSize: '9px', marginRight: '2px', color: '#3b82f6' }}>올해</span>
+                      {getWeatherIcon(currentCode)}
+                      <span>{wInfo.temp}°</span>
+                    </div>
+                  );
+                })()}
+                {prevWInfo && (() => {
+                  const prevCurrentCode = manualWeathers[prevYearStr] ?? prevWInfo.code;
+                  return (
+                    <div className="cal-weather" style={{ opacity: 0.75, position: 'relative' }} title={`[작년] 최고기온 ${prevWInfo.temp}°C, 강수량 ${prevWInfo.rain}mm`}>
+                      <select 
+                        value={manualWeathers[prevYearStr] ?? -1} 
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleWeatherOverride(prevYearStr, Number(e.target.value));
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer', left: 0, top: 0 }}
+                        title="작년 날씨 수정하기"
+                      >
+                        <option value={-1}>자동(API)</option>
+                        <option value={0}>☀️ 맑음</option>
+                        <option value={3}>☁️ 흐림</option>
+                        <option value={61}>🌧️ 비</option>
+                        <option value={71}>❄️ 눈</option>
+                      </select>
+                      <span style={{ fontSize: '9px', marginRight: '2px' }}>작년</span>
+                      {getWeatherIcon(prevCurrentCode)}
+                      <span>{prevWInfo.temp}°</span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
-            {(mainReport || prevMainReport) && (
-              <div className="cal-data-box">
-                {mainReport ? (
+            {(hasCurrentData || hasPrevData) && (
+              <div className="cal-data-box" title={tooltipContent}>
+                {hasCurrentData ? (
                   <div className="cal-data-row current">
                     <span className="year-label">올해</span>
-                    <span className="amt">{(mainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
-                    <span className="qty">{mainReport.summary.totalQty}명</span>
+                    <span className="amt">{(currentDispAmt / 10000).toFixed(0)}만</span>
+                    <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${admissionReport?.summary?.totalQty || 0}명`}</span>
                   </div>
                 ) : (
                   <div className="cal-data-row current" style={{ opacity: 0.5 }}>
@@ -412,28 +501,21 @@ const WaterParkSales: React.FC = () => {
                   </div>
                 )}
                 
-                {prevMainReport ? (() => {
-                  if (!mainReport) {
-                    return (
-                      <div className="cal-data-row prev">
-                        <span className="year-label">작년</span>
-                        <span className="amt">{(prevMainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
-                        <span className="qty">{prevMainReport.summary.totalQty}명</span>
-                      </div>
-                    );
-                  }
-                  const growthAmt = mainReport.summary.totalAmount - prevMainReport.summary.totalAmount;
-                  const pct = prevMainReport.summary.totalAmount > 0 ? (growthAmt / prevMainReport.summary.totalAmount * 100).toFixed(0) : 0;
+                {hasPrevData ? (() => {
+                  const growthAmt = currentDispAmt - prevDispAmt;
+                  const pct = prevDispAmt > 0 ? (growthAmt / prevDispAmt * 100).toFixed(0) : 0;
                   return (
                     <>
                       <div className="cal-data-row prev">
                         <span className="year-label">작년</span>
-                        <span className="amt">{(prevMainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
-                        <span className="qty">{prevMainReport.summary.totalQty}명</span>
+                        <span className="amt">{(prevDispAmt / 10000).toFixed(0)}만</span>
+                        <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${prevAdmissionReport?.summary?.totalQty || 0}명`}</span>
                       </div>
-                      <div className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`}>
-                        {growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(pct))}%
-                      </div>
+                      {hasCurrentData && (
+                        <div className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`}>
+                          {growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(pct))}%
+                        </div>
+                      )}
                     </>
                   )
                 })() : (
@@ -551,10 +633,17 @@ const WaterParkSales: React.FC = () => {
           </div>
         </div>
 
-        <div className="cal-header">
-          <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}><ChevronLeft /></button>
-          <h2>{format(currentMonth, 'yyyy년 MM월')}</h2>
-          <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}><ChevronRight /></button>
+        <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+          <div className="cal-header" style={{ marginBottom: 0 }}>
+            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}><ChevronLeft /></button>
+            <h2>{format(currentMonth, 'yyyy년 MM월')}</h2>
+            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}><ChevronRight /></button>
+          </div>
+          <div className="cal-view-toggle" style={{ display: 'flex', gap: '8px' }}>
+            <button className={`tab-button ${calendarViewMode === 'ADMISSION' ? 'active' : ''}`} onClick={() => setCalendarViewMode('ADMISSION')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>🎟️ 입장 매출</button>
+            <button className={`tab-button ${calendarViewMode === 'PRODUCT' ? 'active' : ''}`} onClick={() => setCalendarViewMode('PRODUCT')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>🍔 상품 매출</button>
+            <button className={`tab-button ${calendarViewMode === 'TOTAL' ? 'active' : ''}`} onClick={() => setCalendarViewMode('TOTAL')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>💰 전체 합산</button>
+          </div>
         </div>
         <div className="cal-grid">
           <div className="cal-days-header">
