@@ -385,14 +385,12 @@ const WaterParkSales: React.FC = () => {
         const dayReports = reports.filter(r => r.report_date === dateStr);
         const admissionReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE');
         const productReport = dayReports.find(r => r.type === 'HOURLY_SALES');
-        const mainReport = admissionReport || productReport || dayReports[0];
         const wInfo = weatherMap[dateStr];
 
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
         const prevAdmissionReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE');
         const prevProductReport = prevDayReports.find(r => r.type === 'HOURLY_SALES');
-        const prevMainReport = prevAdmissionReport || prevProductReport || prevDayReports[0];
         const prevWInfo = weatherMap[prevYearStr];
 
         let currentDispAmt = 0;
