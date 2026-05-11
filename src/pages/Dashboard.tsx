@@ -45,6 +45,38 @@ const Dashboard: React.FC = () => {
       status: 'active'
     },
     {
+      id: 'season-pass-tracker',
+      title: '시즌권 주문 추적 관리',
+      description: '시즌권 판매 실적을 분석하고 주문 데이터를 한눈에 관리합니다.',
+      icon: '🎟️',
+      path: '/tools/season-pass-tracker',
+      status: 'active'
+    },
+    {
+      id: 'space-simulator',
+      title: '공간 시뮬레이터 (AI)',
+      description: 'AI를 활용하여 새로운 공간 기획 및 렌더링 시뮬레이션을 진행합니다.',
+      icon: '🪄',
+      path: '/tools/space-simulator',
+      status: 'active'
+    },
+    {
+      id: 'photo-shorts-maker',
+      title: 'AI 숏폼 자동 메이커',
+      description: '사진과 텍스트만으로 눈길을 끄는 숏폼 영상 콘텐츠를 자동 생성합니다.',
+      icon: '🎬',
+      path: '/tools/photo-shorts-maker',
+      status: 'active'
+    },
+    {
+      id: 'video-prompt-generator',
+      title: '비디오 프롬프트 생성기',
+      description: 'AI 비디오 생성에 최적화된 프롬프트를 자동으로 작성해 줍니다.',
+      icon: '🤖',
+      path: '/tools/video-prompt-generator',
+      status: 'active'
+    },
+    {
       id: 'field-sketch',
       title: '현장 스케치 생성기',
       description: '현장 사진과 소식을 생생하고 매력적인 마케팅 문구로 변환합니다.',
