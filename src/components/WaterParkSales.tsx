@@ -359,6 +359,7 @@ const WaterParkSales: React.FC = () => {
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
         const prevMainReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE') || prevDayReports[0];
+        const prevWInfo = weatherMap[prevYearStr];
 
         const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
         const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -377,23 +378,50 @@ const WaterParkSales: React.FC = () => {
                 {format(day, "d")}
                 {isHoliday && <span className="holiday-badge">{holidayName}</span>}
               </span>
-              {wInfo && (
-                <div className="cal-weather" title={`최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
-                  {getWeatherIcon(wInfo.code)}
-                  <span>{wInfo.temp}°</span>
-                </div>
-              )}
+              <div className="cal-weathers" style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+                {wInfo && (
+                  <div className="cal-weather" title={`[올해] 최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
+                    <span style={{ fontSize: '9px', marginRight: '2px', color: '#3b82f6' }}>올해</span>
+                    {getWeatherIcon(wInfo.code)}
+                    <span>{wInfo.temp}°</span>
+                  </div>
+                )}
+                {prevWInfo && (
+                  <div className="cal-weather" style={{ opacity: 0.75 }} title={`[작년] 최고기온 ${prevWInfo.temp}°C, 강수량 ${prevWInfo.rain}mm`}>
+                    <span style={{ fontSize: '9px', marginRight: '2px' }}>작년</span>
+                    {getWeatherIcon(prevWInfo.code)}
+                    <span>{prevWInfo.temp}°</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {mainReport && (
+            {(mainReport || prevMainReport) && (
               <div className="cal-data-box">
-                <div className="cal-data-row current">
-                  <span className="year-label">올해</span>
-                  <span className="amt">{(mainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
-                  <span className="qty">{mainReport.summary.totalQty}명</span>
-                </div>
+                {mainReport ? (
+                  <div className="cal-data-row current">
+                    <span className="year-label">올해</span>
+                    <span className="amt">{(mainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
+                    <span className="qty">{mainReport.summary.totalQty}명</span>
+                  </div>
+                ) : (
+                  <div className="cal-data-row current" style={{ opacity: 0.5 }}>
+                    <span className="year-label">올해</span>
+                    <span className="amt">-</span>
+                    <span className="qty">-</span>
+                  </div>
+                )}
                 
                 {prevMainReport ? (() => {
+                  if (!mainReport) {
+                    return (
+                      <div className="cal-data-row prev">
+                        <span className="year-label">작년</span>
+                        <span className="amt">{(prevMainReport.summary.totalAmount / 10000).toFixed(0)}만</span>
+                        <span className="qty">{prevMainReport.summary.totalQty}명</span>
+                      </div>
+                    );
+                  }
                   const growthAmt = mainReport.summary.totalAmount - prevMainReport.summary.totalAmount;
                   const pct = prevMainReport.summary.totalAmount > 0 ? (growthAmt / prevMainReport.summary.totalAmount * 100).toFixed(0) : 0;
                   return (
