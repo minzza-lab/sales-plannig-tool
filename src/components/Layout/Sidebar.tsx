@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import './Sidebar.css';
@@ -10,6 +10,15 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    sales: true,
+    promo: true,
+    util: true
+  });
+
+  const toggleGroup = (group: string) => {
+    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -48,67 +57,103 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <span className="icon">📄</span> 품의서 보관함
             </NavLink>
           </li>
-          <hr className="sidebar-divider" />
-          <li className="menu-highlight">
-            <NavLink to="/tools/waterpark-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🌊</span> 워터파크 매출 관리
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/season-pass-tracker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎟️</span> 시즌권 주문 추적 관리
-            </NavLink>
-          </li>
           <li>
             <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🎧</span> 고객의 소리(VOC) 어시스턴트
             </NavLink>
           </li>
-          <li>
-            <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📸</span> 현장 스케치 생성기
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/space-simulator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🪄</span> 공간 시뮬레이터 (AI)
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/photo-shorts-maker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎬</span> AI 숏폼 자동 메이커
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/video-prompt-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🤖</span> 비디오 프롬프트 생성기
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎙️</span> 안내방송용 TTS 생성기
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/thumbnail-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎨</span> 상품 썸네일 제작기
-            </NavLink>
-          </li>
           <hr className="sidebar-divider" />
-          <li>
-            <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🔍</span> QR 코드 생성기
-            </NavLink>
+          
+          <li className="accordion-group">
+            <div className="accordion-header" onClick={() => toggleGroup('sales')}>
+              <span>📊 매출/운영 관리</span>
+              <span className={`chevron ${openGroups.sales ? 'open' : ''}`}>▼</span>
+            </div>
+            {openGroups.sales && (
+              <ul className="accordion-content">
+                <li className="menu-highlight">
+                  <NavLink to="/tools/waterpark-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🌊</span> 워터파크 매출 관리
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
+                  <NavLink to="/tools/season-pass-tracker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎟️</span> 시즌권 주문 추적 관리
+                  </NavLink>
+                </li>
+              </ul>
+            )}
           </li>
-          <li>
-            <NavLink to="/tools/url-shortener" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🔗</span> URL 단축기
-            </NavLink>
+          
+          <hr className="sidebar-divider" />
+          
+          <li className="accordion-group">
+            <div className="accordion-header" onClick={() => toggleGroup('promo')}>
+              <span>📢 홍보/마케팅 파트</span>
+              <span className={`chevron ${openGroups.promo ? 'open' : ''}`}>▼</span>
+            </div>
+            {openGroups.promo && (
+              <ul className="accordion-content">
+                <li>
+                  <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">📸</span> 현장 스케치 생성기
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
+                  <NavLink to="/tools/photo-shorts-maker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎬</span> AI 숏폼 자동 메이커
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
+                  <NavLink to="/tools/video-prompt-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🤖</span> 비디오 프롬프트 생성기
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎙️</span> 안내방송용 TTS 생성기
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/tools/thumbnail-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎨</span> 상품 썸네일 제작기
+                  </NavLink>
+                </li>
+              </ul>
+            )}
           </li>
-          <li>
-            <NavLink to="/tools/barcode-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📊</span> 바코드 생성기
-            </NavLink>
+          
+          <hr className="sidebar-divider" />
+          
+          <li className="accordion-group">
+            <div className="accordion-header" onClick={() => toggleGroup('util')}>
+              <span>🛠️ 유틸리티 모음</span>
+              <span className={`chevron ${openGroups.util ? 'open' : ''}`}>▼</span>
+            </div>
+            {openGroups.util && (
+              <ul className="accordion-content">
+                <li className="menu-highlight">
+                  <NavLink to="/tools/space-simulator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🪄</span> 공간 시뮬레이터 (AI)
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🔍</span> QR 코드 생성기
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/tools/url-shortener" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🔗</span> URL 단축기
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/tools/barcode-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">📊</span> 바코드 생성기
+                  </NavLink>
+                </li>
+              </ul>
+            )}
           </li>
         </ul>
       </nav>

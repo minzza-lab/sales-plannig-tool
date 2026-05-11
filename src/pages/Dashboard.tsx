@@ -126,31 +126,59 @@ const Dashboard: React.FC = () => {
     }
   ];
 
+  const categories = [
+    {
+      title: '✨ 핵심 업무 도구',
+      id: 'common',
+      tools: tools.filter(t => ['automation-request', 'knowledge-base', 'approvals', 'voc-assistant'].includes(t.id))
+    },
+    {
+      title: '📊 매출/운영 관리',
+      id: 'sales',
+      tools: tools.filter(t => ['waterpark-sales', 'season-pass-tracker'].includes(t.id))
+    },
+    {
+      title: '📢 홍보/마케팅 파트',
+      id: 'promo',
+      tools: tools.filter(t => ['field-sketch', 'photo-shorts-maker', 'video-prompt-generator', 'tts-generator', 'thumbnail-generator'].includes(t.id))
+    },
+    {
+      title: '🛠️ 유틸리티 모음',
+      id: 'util',
+      tools: tools.filter(t => ['space-simulator', 'qr-generator', 'url-shortener', 'barcode-generator'].includes(t.id))
+    }
+  ];
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>영업기획 도구 대시보드</h1>
-        <p>업무 효율을 높여주는 다양한 도구들을 확인해보세요.</p>
+        <p>업무 효율을 높여주는 다양한 카테고리별 도구들을 확인해보세요.</p>
       </header>
 
-      <div className="tool-grid">
-        {tools.map((tool) => (
-          <div key={tool.id} className={`tool-card ${tool.status}`}>
-            <div className="tool-icon">{tool.icon}</div>
-            <div className="tool-info">
-              <h3>{tool.title}</h3>
-              <p>{tool.description}</p>
-              {tool.status === 'active' ? (
-                <Link to={tool.path} className="tool-link">
-                  이동하기 <span>→</span>
-                </Link>
-              ) : (
-                <span className="upcoming-badge">준비 중</span>
-              )}
-            </div>
+      {categories.map(category => (
+        <section key={category.id} className="dashboard-section">
+          <h2 className="section-title">{category.title}</h2>
+          <div className="tool-grid">
+            {category.tools.map((tool) => (
+              <div key={tool.id} className={`tool-card ${tool.status}`}>
+                <div className="tool-icon">{tool.icon}</div>
+                <div className="tool-info">
+                  <h3>{tool.title}</h3>
+                  <p>{tool.description}</p>
+                  {tool.status === 'active' ? (
+                    <Link to={tool.path} className="tool-link">
+                      이동하기 <span>→</span>
+                    </Link>
+                  ) : (
+                    <span className="upcoming-badge">준비 중</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </section>
+      ))}
     </div>
   );
 };

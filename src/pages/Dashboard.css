@@ -35,6 +35,27 @@
   margin: 0 auto;
 }
 
+.dashboard-section {
+  margin-bottom: 3.5rem;
+  animation: fadeUp 0.6s ease-out backwards;
+}
+
+/* 약간의 딜레이를 주어 순차적으로 나타나는 효과 */
+.dashboard-section:nth-child(2) { animation-delay: 0.1s; }
+.dashboard-section:nth-child(3) { animation-delay: 0.2s; }
+.dashboard-section:nth-child(4) { animation-delay: 0.3s; }
+.dashboard-section:nth-child(5) { animation-delay: 0.4s; }
+
+.section-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--border-color);
+  letter-spacing: -0.01em;
+}
+
 .tool-grid {
   display: grid;
   /* 3열 레이아웃을 기본으로 하되 모바일에서 1열로 붕괴되도록 최적화 */

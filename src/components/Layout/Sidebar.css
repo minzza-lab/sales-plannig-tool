@@ -93,6 +93,44 @@
   margin: 12px 20px;
 }
 
+/* 아코디언 메뉴 스타일 */
+.accordion-group {
+  margin-bottom: 2px;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  color: #f8fafc;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0 12px 4px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.accordion-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.accordion-header .chevron {
+  font-size: 0.7rem;
+  transition: transform 0.3s;
+}
+
+.accordion-header .chevron.open {
+  transform: rotate(180deg);
+}
+
+.accordion-content {
+  overflow: hidden;
+  padding-left: 8px;
+}
+
 .sidebar-footer {
   padding: 15px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
