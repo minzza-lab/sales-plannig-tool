@@ -628,18 +628,18 @@ const SeasonPassTracker: React.FC = () => {
         </div>
         
         {/* 권종별/타겟별/지역별 파이 차트 추가 */}
-        <div className="chart-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginTop: '24px' }}>
+        <div className="chart-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '40px', marginTop: '24px' }}>
           <div>
             <h3 className="chart-title">권종별(소분류) 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '400px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieCategory3Data}
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={110}
+                    innerRadius={70}
+                    outerRadius={140}
                     paddingAngle={2}
                     dataKey="value"
                     labelLine={false}
@@ -658,15 +658,15 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">타겟별(인원권) 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '400px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieTargetData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={110}
+                    innerRadius={70}
+                    outerRadius={140}
                     paddingAngle={2}
                     dataKey="value"
                     labelLine={false}
@@ -685,15 +685,15 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">구매자 지역/유형 비중 (상품 기반)</h3>
-            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '400px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieRegionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={110}
+                    innerRadius={70}
+                    outerRadius={140}
                     paddingAngle={2}
                     dataKey="value"
                     labelLine={false}
@@ -712,15 +712,15 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">실거주지(시·군·구) 기준 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '400px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieRealRegionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={110}
+                    innerRadius={70}
+                    outerRadius={140}
                     paddingAngle={2}
                     dataKey="value"
                     labelLine={false}
