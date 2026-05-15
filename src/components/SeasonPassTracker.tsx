@@ -4,7 +4,8 @@ import { Download, TrendingUp, Users, CreditCard } from 'lucide-react';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList,
+  PieChart, Pie, Cell, Tooltip
 } from 'recharts';
 import './SeasonPassTracker.css';
 
@@ -30,12 +31,22 @@ interface OrderData {
   customer_name: string;
   status: string;
   price: number;
+  address?: string; // 주소 컬럼 추가
 }
 
 const SeasonPassTracker: React.FC = () => {
   const [baselines, setBaselines] = useState<BaselineData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // 날짜 검색 필터 상태
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [activeStartDate, setActiveStartDate] = useState('');
+  const [activeEndDate, setActiveEndDate] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1', '#14b8a6', '#f43f5e'];
 
   useEffect(() => {
     fetchData();
@@ -65,16 +76,43 @@ const SeasonPassTracker: React.FC = () => {
     }
   };
 
-  const totalRevenue2025 = baselines.reduce((acc, curr) => acc + Number(curr.revenue_2025), 0) * 1000; // 원 단위 변환 (천원 단위 -> 원)
+  const totalRevenue2025 = baselines.reduce((acc, curr) => acc + Number(curr.revenue_2025), 0) * 1000;
   const totalQty2025 = baselines.reduce((acc, curr) => acc + Number(curr.qty_2025), 0);
   
-  const validOrders = orders.filter(o => o.status === '결제');
+  let validOrders = orders.filter(o => o.status === '결제');
   
-  const totalRevenue2026 = validOrders.reduce((acc, curr) => acc + Number(curr.price), 0); // 원 단위
+  if (activeStartDate && activeEndDate) {
+    const start = new Date(activeStartDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(activeEndDate);
+    end.setHours(23, 59, 59, 999);
+    validOrders = validOrders.filter(o => {
+      const d = new Date(o.order_date);
+      return d >= start && d <= end;
+    });
+  }
+
+  const totalRevenue2026 = validOrders.reduce((acc, curr) => acc + Number(curr.price), 0);
   const totalQty2026 = validOrders.length;
 
   const achievementRate = totalRevenue2025 > 0 ? ((totalRevenue2026 / totalRevenue2025) * 100).toFixed(1) : '0';
   const qtyGrowthRate = totalQty2025 > 0 ? (((totalQty2026 - totalQty2025) / totalQty2025) * 100).toFixed(1) : '0';
+  
+  const handleSearch = () => {
+    setIsSearching(true);
+    setTimeout(() => {
+      setIsSearching(false);
+      setActiveStartDate(customStartDate);
+      setActiveEndDate(customEndDate);
+    }, 1000);
+  };
+
+  const handleReset = () => {
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setActiveStartDate('');
+    setActiveEndDate('');
+  };
   
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -149,8 +187,6 @@ const SeasonPassTracker: React.FC = () => {
 
     effStart.setHours(0, 0, 0, 0);
     effEnd.setHours(23, 59, 59, 999);
-
-    const validOrders = orders.filter(o => o.status === '결제');
 
     validOrders.forEach(o => {
       const mapped = getMappedCategory(o);
@@ -355,9 +391,7 @@ const SeasonPassTracker: React.FC = () => {
     return <div className="tracker-loading">데이터를 불러오는 중입니다...</div>;
   }
 
-  // 차트용 데이터 가공
   const chartData = getGroupedData().reduce((acc: any[], curr) => {
-    // To make chart readable, group by category1
     const name = curr.category1.replace(/\r\n|\n/g, '');
     const existing = acc.find(item => item.name === name);
     if (existing) {
@@ -377,6 +411,68 @@ const SeasonPassTracker: React.FC = () => {
     return acc;
   }, []);
 
+  const category3Map = new Map();
+  const targetMap = new Map();
+  const regionMap = new Map(); // 기존 구매자 유형(일반/지역주민/임직원)
+  const realRegionMap = new Map(); // 실제 주소지 기반 시/군/구 지역
+
+  validOrders.forEach(o => {
+    const mapped = getMappedCategory(o);
+    
+    // 1. 소분류 (권종)
+    const cat3 = mapped.category3.replace(/\r\n|\n/g, '');
+    const currentCat3 = category3Map.get(cat3) || { name: cat3, value: 0 };
+    currentCat3.value += 1;
+    category3Map.set(cat3, currentCat3);
+
+    // 2. 타겟별 (인원권)
+    const tgt = mapped.target.replace(/\r\n|\n/g, '');
+    const currentTgt = targetMap.get(tgt) || { name: tgt, value: 0 };
+    currentTgt.value += 1;
+    targetMap.set(tgt, currentTgt);
+
+    // 3. 구매자 유형 (category2 기반)
+    let regionName = mapped.category2.replace(/\r\n|\n/g, '');
+    if (regionName === '일반') regionName = '일반(타지역)';
+    else if (regionName === '지역주민') regionName = '지역주민(강원)';
+    
+    const currentRegion = regionMap.get(regionName) || { name: regionName, value: 0 };
+    currentRegion.value += 1;
+    regionMap.set(regionName, currentRegion);
+
+    // 4. 실제 거주지 지역 (address 컬럼 기반 시/군/구 파싱)
+    let realRegionKey = '주소 미상';
+    if (o.address && o.address.trim() !== '') {
+      const parts = o.address.split(' ').filter(Boolean);
+      // 시, 군, 구로 끝나는 단어 찾기 (예: 원주시, 송파구, 홍천군)
+      const cityToken = parts.find(p => p.endsWith('시') || p.endsWith('군') || p.endsWith('구'));
+      if (cityToken) {
+        realRegionKey = cityToken;
+      } else if (parts.length >= 1) {
+        realRegionKey = parts[0]; // 시군구가 없으면 첫 단어(도/광역시) 사용
+      }
+    }
+    const currentRealRegion = realRegionMap.get(realRegionKey) || { name: realRegionKey, value: 0 };
+    currentRealRegion.value += 1;
+    realRegionMap.set(realRegionKey, currentRealRegion);
+  });
+
+  const pieCategory3Data = Array.from(category3Map.values()).sort((a,b) => b.value - a.value);
+  const pieTargetData = Array.from(targetMap.values()).sort((a,b) => b.value - a.value);
+  const pieRegionData = Array.from(regionMap.values()).sort((a,b) => b.value - a.value);
+  
+  // 데이터가 너무 잘게 쪼개지지 않도록 상위 10개만 보여주고 나머지는 '기타'로 묶기
+  let sortedRealRegion = Array.from(realRegionMap.values()).sort((a,b) => b.value - a.value);
+  if (sortedRealRegion.length > 8) {
+    const top8 = sortedRealRegion.slice(0, 8);
+    const othersValue = sortedRealRegion.slice(8).reduce((sum, item) => sum + item.value, 0);
+    if (othersValue > 0) {
+      top8.push({ name: '기타 지역', value: othersValue });
+    }
+    sortedRealRegion = top8;
+  }
+  const pieRealRegionData = sortedRealRegion;
+
   return (
     <div className="tracker-container">
       <header className="tracker-header">
@@ -393,16 +489,43 @@ const SeasonPassTracker: React.FC = () => {
         </button>
       </header>
 
-      <div className="tracker-kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-icon-wrapper blue">
-            <CreditCard size={24} />
+      <div className="tracker-filter-bar">
+        <div className="filter-group">
+          <span className="filter-label">기간 검색</span>
+          <input type="date" className="filter-input" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
+          <span className="filter-separator">~</span>
+          <input type="date" className="filter-input" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
+          <button 
+            className="filter-btn primary"
+            onClick={handleSearch}
+            disabled={isSearching || !customStartDate || !customEndDate}
+          >
+            {isSearching ? <div className="spinner-small" /> : '조회'}
+          </button>
+          {(activeStartDate || activeEndDate) && (
+            <button className="filter-btn secondary" onClick={handleReset}>초기화</button>
+          )}
+        </div>
+      </div>
+
+      {isSearching ? (
+        <div style={{ textAlign: 'center', padding: '100px 0', animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }}></div>
+          <p style={{ fontWeight: 700, fontSize: '18px', color: '#475569', margin: 0 }}>조건에 맞는 데이터를 집계하고 있습니다...</p>
+          <p style={{ fontSize: '14px', color: '#94a3b8', marginTop: '8px' }}>잠시만 기다려 주세요.</p>
+        </div>
+      ) : (
+        <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
+          <div className="tracker-kpi-grid">
+            <div className="kpi-card">
+              <div className="kpi-icon-wrapper blue">
+                <CreditCard size={24} />
           </div>
           <div className="kpi-content">
             <p className="kpi-label">총 누적 매출액 (26년)</p>
             <h3 className="kpi-value">{totalRevenue2026.toLocaleString()} 원</h3>
             <p className="kpi-comparison">
-              <span className="text-gray">25년: {totalRevenue2025.toLocaleString()} 원</span>
+              <span className="text-gray">25년 베이스: {totalRevenue2025.toLocaleString()} 원</span>
             </p>
           </div>
         </div>
@@ -415,7 +538,7 @@ const SeasonPassTracker: React.FC = () => {
             <p className="kpi-label">총 누적 판매 수량 (26년)</p>
             <h3 className="kpi-value">{totalQty2026.toLocaleString()} 매</h3>
             <p className="kpi-comparison" style={{ color: Number(qtyGrowthRate) >= 0 ? '#10b981' : '#ef4444' }}>
-              <span>전년 대비 수량 증감율: {Number(qtyGrowthRate) > 0 ? '+' : ''}{qtyGrowthRate}%</span>
+              <span>25년 대비 성장률: {Number(qtyGrowthRate) > 0 ? '+' : ''}{qtyGrowthRate}%</span>
             </p>
           </div>
         </div>
@@ -425,10 +548,10 @@ const SeasonPassTracker: React.FC = () => {
             <TrendingUp size={24} />
           </div>
           <div className="kpi-content">
-            <p className="kpi-label">전년 대비 매출 달성률</p>
+            <p className="kpi-label">25년 목표 대비 매출 달성률</p>
             <h3 className="kpi-value">{achievementRate}%</h3>
             <p className="kpi-comparison">
-              <span className="text-gray">목표(25년) 매출: {totalRevenue2025.toLocaleString()} 원</span>
+              <span className="text-gray">{activeStartDate ? '해당 기간 내 달성 비중' : '전체 기준'}</span>
             </p>
           </div>
         </div>
@@ -482,6 +605,113 @@ const SeasonPassTracker: React.FC = () => {
                     <LabelList dataKey="수량_2026" position="right" formatter={(val: any) => val > 0 ? `${val}매` : ''} fill="#2563eb" fontSize={12} fontWeight="bold" />
                   </Bar>
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+        
+        {/* 권종별/타겟별/지역별 파이 차트 추가 */}
+        <div className="chart-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginTop: '24px' }}>
+          <div>
+            <h3 className="chart-title">권종별(소분류) 판매 비중</h3>
+            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieCategory3Data}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                  >
+                    {pieCategory3Data.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="chart-title">타겟별(인원권) 판매 비중</h3>
+            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieTargetData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                  >
+                    {pieTargetData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="chart-title">구매자 지역/유형 비중 (상품 기반)</h3>
+            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieRegionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                  >
+                    {pieRegionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="chart-title">실거주지(시·군·구) 기준 판매 비중</h3>
+            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieRealRegionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                  >
+                    {pieRealRegionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[(index + 7) % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -554,11 +784,13 @@ const SeasonPassTracker: React.FC = () => {
                     </tr>
                   );
                 })()}
-              </tbody>
-            </table>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

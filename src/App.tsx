@@ -13,12 +13,14 @@ import AutomationRequest from './components/AutomationRequest'
 import WaterParkSales from './components/WaterParkSales'
 import Login from './components/Auth/Login'
 import Approvals from './components/Approvals'
+import ProductProposals from './components/ProductProposals'
 import TTSGenerator from './components/TTSGenerator'
 import ThumbnailGenerator from './components/ThumbnailGenerator'
 import SeasonPassTracker from './components/SeasonPassTracker'
 import SpaceSimulator from './components/SpaceSimulator'
 import PhotoShortsMaker from './components/PhotoShortsMaker'
 import VideoPromptGenerator from './components/VideoPromptGenerator'
+import RoomReservationAutomator from './components/RoomReservationAutomator'
 import './App.css'
 
 function App() {
@@ -64,12 +66,14 @@ function App() {
             <Route path="tools/knowledge-base" element={<ManualTips />} />
             <Route path="tools/automation-request" element={<AutomationRequest />} />
             <Route path="tools/approvals" element={<Approvals />} />
+            <Route path="tools/product-proposals" element={<ProductProposals />} />
             <Route path="tools/tts-generator" element={<TTSGenerator />} />
             <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
             <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
             <Route path="tools/space-simulator" element={<SpaceSimulator />} />
             <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
             <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
+            <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}

@@ -72,6 +72,20 @@ const WaterParkSales: React.FC = () => {
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
   const [manualWeathers, setManualWeathers] = useState<Record<string, number>>({});
   const [calendarViewMode, setCalendarViewMode] = useState<'ADMISSION' | 'PRODUCT' | 'TOTAL'>('ADMISSION');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showCustomResults, setShowCustomResults] = useState(false);
+
+  const handleCustomSearch = () => {
+    if (!customStartDate || !customEndDate) return;
+    setIsSearching(true);
+    setShowCustomResults(false);
+    setTimeout(() => {
+      setIsSearching(false);
+      setShowCustomResults(true);
+    }, 1200); // 1.2초 로딩 애니메이션
+  };
 
   const handleWeatherOverride = async (dateStr: string, code: number) => {
     if (code === -1) {
@@ -368,6 +382,39 @@ const WaterParkSales: React.FC = () => {
   };
   const { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl } = getCumulativeStats();
 
+  const getCustomRangeStats = () => {
+    if (!customStartDate || !customEndDate) return null;
+    const start = new Date(customStartDate);
+    const end = new Date(customEndDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+    if (start > end) return null;
+
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    let currentAmt = 0; let currentPpl = 0;
+    let prevAmt = 0; let prevPpl = 0;
+
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
+    const prevStartStr = format(subMonths(start, 12), 'yyyy-MM-dd');
+    const prevEndStr = format(subMonths(end, 12), 'yyyy-MM-dd');
+
+    reports.forEach(r => {
+      if (r.type === 'CUSTOMER_TYPE') {
+        if (r.report_date >= startStr && r.report_date <= endStr) {
+          currentAmt += r.summary.totalAmount;
+          currentPpl += r.summary.totalQty;
+        } else if (r.report_date >= prevStartStr && r.report_date <= prevEndStr) {
+          prevAmt += r.summary.totalAmount;
+          prevPpl += r.summary.totalQty;
+        }
+      }
+    });
+
+    return { currentAmt, currentPpl, prevAmt, prevPpl, diffDays, prevStartStr, prevEndStr };
+  };
+
   const renderCalendar = () => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
@@ -629,6 +676,85 @@ const WaterParkSales: React.FC = () => {
               </div>
             </div>
           </div>
+
+          <div className="custom-range-selector" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', marginTop: '12px' }}>
+            <h3 style={{ margin: 0 }}>🔍 특정 기간 누적 실적 검색</h3>
+            <input type="date" value={customStartDate} onChange={(e) => { setCustomStartDate(e.target.value); setShowCustomResults(false); }} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontFamily: 'inherit', color: '#1e293b' }} />
+            <span style={{ fontWeight: 600 }}>~</span>
+            <input type="date" value={customEndDate} onChange={(e) => { setCustomEndDate(e.target.value); setShowCustomResults(false); }} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontFamily: 'inherit', color: '#1e293b' }} />
+            <button 
+              onClick={handleCustomSearch}
+              disabled={isSearching || !customStartDate || !customEndDate}
+              style={{ padding: '8px 20px', borderRadius: '6px', background: '#f59e0b', color: 'white', border: 'none', fontWeight: 800, cursor: (isSearching || !customStartDate || !customEndDate) ? 'not-allowed' : 'pointer', opacity: (isSearching || !customStartDate || !customEndDate) ? 0.7 : 1, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {isSearching ? <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div> : null}
+              {isSearching ? '검색 중...' : '검색하기'}
+            </button>
+          </div>
+          
+          <style>{`
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          `}</style>
+
+          {isSearching && (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'white', animation: 'fadeUp 0.3s ease-out' }}>
+              <div style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.2)', borderTop: '3px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px auto' }}></div>
+              <p style={{ fontWeight: 600, margin: 0, opacity: 0.9 }}>데이터를 집계하고 있습니다...</p>
+            </div>
+          )}
+
+          {showCustomResults && customStartDate && customEndDate && (() => {
+            const stats = getCustomRangeStats();
+            if (!stats) return <p style={{ color: '#ef4444', marginBottom: '24px', fontWeight: 'bold' }}>⚠️ 시작일이 종료일보다 클 수 없습니다.</p>;
+            
+            return (
+              <div className="dash-compare-container animate-fade-in" style={{ marginBottom: '24px' }}>
+                {/* 지정 기간 전년도 */}
+                <div className="dash-column prev">
+                  <h4>{stats.prevStartStr} ~ {stats.prevEndStr} (전년 동기간, {stats.diffDays}일간)</h4>
+                  <div className="cum-cards">
+                    <div className="cum-card">
+                      <span className="cum-label">입장 발권 매출액</span>
+                      <span className="cum-value">{formatCurrency(stats.prevAmt)}</span>
+                    </div>
+                    <div className="cum-card">
+                      <span className="cum-label">총 입장 발권수</span>
+                      <span className="cum-value">{stats.prevPpl.toLocaleString()} 명</span>
+                    </div>
+                    <div className="cum-card">
+                      <span className="cum-label">발권 평균 객단가</span>
+                      <span className="cum-value">{stats.prevPpl > 0 ? formatCurrency(Math.round(stats.prevAmt/stats.prevPpl)) : '0원'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 지정 기간 올해 */}
+                <div className="dash-column current">
+                  <h4>{customStartDate} ~ {customEndDate} (지정 기간, {stats.diffDays}일간)</h4>
+                  <div className="cum-cards">
+                    <div className="cum-card highlight">
+                      <span className="cum-label">입장 발권 매출액</span>
+                      <div className="cum-val-row">
+                        <span className="cum-value">{formatCurrency(stats.currentAmt)}</span>
+                        {stats.prevAmt > 0 && <span className={`dash-badge ${stats.currentAmt >= stats.prevAmt ? 'up' : 'down'}`}>{stats.currentAmt >= stats.prevAmt ? '▲' : '▼'} {Math.abs((stats.currentAmt-stats.prevAmt)/stats.prevAmt*100).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+                    <div className="cum-card highlight">
+                      <span className="cum-label">총 입장 발권수</span>
+                      <div className="cum-val-row">
+                        <span className="cum-value">{stats.currentPpl.toLocaleString()} 명</span>
+                        {stats.prevPpl > 0 && <span className={`dash-badge ${stats.currentPpl >= stats.prevPpl ? 'up' : 'down'}`}>{stats.currentPpl >= stats.prevPpl ? '▲' : '▼'} {Math.abs((stats.currentPpl-stats.prevPpl)/stats.prevPpl*100).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+                    <div className="cum-card highlight">
+                      <span className="cum-label">발권 평균 객단가</span>
+                      <span className="cum-value">{stats.currentPpl > 0 ? formatCurrency(Math.round(stats.currentAmt/stats.currentPpl)) : '0원'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>

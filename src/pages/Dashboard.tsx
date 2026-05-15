@@ -37,6 +37,14 @@ const Dashboard: React.FC = () => {
       status: 'active'
     },
     {
+      id: 'product-proposals',
+      title: '상품안 보관함',
+      description: '부서별 상품안을 체계적으로 관리하고 핵심 내용을 요약합니다.',
+      icon: '💡',
+      path: '/tools/product-proposals',
+      status: 'active'
+    },
+    {
       id: 'voc-assistant',
       title: '고객의 소리(VOC) 어시스턴트',
       description: '고객 문의사항을 분석하고 담당자에게 알맞은 답변 초안을 제안합니다.',
@@ -50,6 +58,14 @@ const Dashboard: React.FC = () => {
       description: '시즌권 판매 실적을 분석하고 주문 데이터를 한눈에 관리합니다.',
       icon: '🎟️',
       path: '/tools/season-pass-tracker',
+      status: 'active'
+    },
+    {
+      id: 'room-reservation',
+      title: '객실 예약 메일 자동화',
+      description: '네이버 메일로 들어온 예약 요청을 파싱해 엑셀로 변환하고 발송합니다.',
+      icon: '🏨',
+      path: '/tools/room-reservation',
       status: 'active'
     },
     {
@@ -130,12 +146,12 @@ const Dashboard: React.FC = () => {
     {
       title: '✨ 핵심 업무 도구',
       id: 'common',
-      tools: tools.filter(t => ['automation-request', 'knowledge-base', 'approvals', 'voc-assistant'].includes(t.id))
+      tools: tools.filter(t => ['automation-request', 'knowledge-base', 'approvals', 'product-proposals', 'voc-assistant'].includes(t.id))
     },
     {
       title: '📊 매출/운영 관리',
       id: 'sales',
-      tools: tools.filter(t => ['waterpark-sales', 'season-pass-tracker'].includes(t.id))
+      tools: tools.filter(t => ['waterpark-sales', 'season-pass-tracker', 'room-reservation'].includes(t.id))
     },
     {
       title: '📢 홍보/마케팅 파트',

@@ -206,6 +206,7 @@ async function runSeasonPassCrawler() {
         customer_name: getVal(['주문자명', '고객명', '이름', '성명']) || '',
         ssn: String(getVal(['주민번호', '생년월일'])),
         phone: String(getVal(['휴대번호', '전화번호', '연락처', '휴대폰'])),
+        address: getVal(['주소', '거주지', '기본주소', '상세주소', '배송지']) || '',
         status: getVal(['결제여부', '상태', '진행상태']) || '완료',
         price: price
       };

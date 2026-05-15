@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import './Approvals.css';
+import './ProductProposals.css';
 
-interface Approval {
+interface ProductProposal {
   id: string;
   title: string;
   doc_date: string;
@@ -16,24 +16,24 @@ interface Approval {
 
 interface Comment {
   id: string;
-  approval_id: string;
+  proposal_id: string;
   content: string;
   author: string;
   created_at: string;
 }
 
-const Approvals: React.FC = () => {
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [filteredApprovals, setFilteredApprovals] = useState<Approval[]>([]);
+const ProductProposals: React.FC = () => {
+  const [product_proposals, setProductProposals] = useState<ProductProposal[]>([]);
+  const [filteredProductProposals, setFilteredProductProposals] = useState<ProductProposal[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedYear, setSelectedYear] = useState<string>('all');
-  const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [selectedProductProposal, setSelectedProductProposal] = useState<ProductProposal | null>(null);
   const [groupBy, setGroupBy] = useState<'year' | 'type'>('year');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<Approval>>({});
+  const [editForm, setEditForm] = useState<Partial<ProductProposal>>({});
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
@@ -51,18 +51,18 @@ const Approvals: React.FC = () => {
 
   useEffect(() => {
     fetchUser();
-    fetchApprovals();
+    fetchProductProposals();
   }, []);
 
   useEffect(() => {
-    filterApprovals();
-  }, [approvals, searchTerm, selectedYear]);
+    filterProductProposals();
+  }, [product_proposals, searchTerm, selectedYear]);
 
   useEffect(() => {
-    if (selectedApproval) {
-      fetchComments(selectedApproval.id);
+    if (selectedProductProposal) {
+      fetchComments(selectedProductProposal.id);
     }
-  }, [selectedApproval]);
+  }, [selectedProductProposal]);
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -74,22 +74,22 @@ const Approvals: React.FC = () => {
     }
   };
 
-  const fetchApprovals = async () => {
+  const fetchProductProposals = async () => {
     const { data, error } = await supabase
-      .from('approvals')
+      .from('product_proposals')
       .select('*')
       .order('doc_date', { ascending: false });
     
     if (data && !error) {
-      setApprovals(data);
+      setProductProposals(data);
     }
   };
 
-  const fetchComments = async (approvalId: string) => {
+  const fetchComments = async (proposalId: string) => {
     const { data, error } = await supabase
-      .from('approval_comments')
+      .from('product_proposal_comments')
       .select('*')
-      .eq('approval_id', approvalId)
+      .eq('proposal_id', proposalId)
       .order('created_at', { ascending: true });
       
     if (data && !error) {
@@ -97,8 +97,8 @@ const Approvals: React.FC = () => {
     }
   };
 
-  const filterApprovals = () => {
-    let result = approvals;
+  const filterProductProposals = () => {
+    let result = product_proposals;
     
     if (selectedYear !== 'all') {
       result = result.filter(a => a.doc_date && a.doc_date.startsWith(selectedYear));
@@ -120,7 +120,7 @@ const Approvals: React.FC = () => {
       });
     }
     
-    setFilteredApprovals(result);
+    setFilteredProductProposals(result);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,17 +203,17 @@ const Approvals: React.FC = () => {
         const filePath = `documents/${finalDate.substring(0,4)}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from('approvals')
+          .from('product_proposals')
           .upload(filePath, file);
 
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage
-          .from('approvals')
+          .from('product_proposals')
           .getPublicUrl(filePath);
 
         // 2. DB에 메타데이터 저장
-        const { error: dbError } = await supabase.from('approvals').insert({
+        const { error: dbError } = await supabase.from('product_proposals').insert({
           title: finalTitle,
           doc_date: finalDate,
           department: currentUser?.dept || '기획팀',
@@ -227,7 +227,7 @@ const Approvals: React.FC = () => {
         successCount++;
       }
 
-      alert(`총 ${successCount}개의 품의서가 성공적으로 업로드되었습니다!`);
+      alert(`총 ${successCount}개의 상품안가 성공적으로 업로드되었습니다!`);
       setIsUploadModalOpen(false);
       setUploadFiles([]);
       setUploadTitle('');
@@ -235,7 +235,7 @@ const Approvals: React.FC = () => {
       setUploadDate('');
       setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      fetchApprovals();
+      fetchProductProposals();
 
     } catch (error: any) {
       console.error(error);
@@ -247,17 +247,17 @@ const Approvals: React.FC = () => {
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() || !selectedApproval) return;
+    if (!newComment.trim() || !selectedProductProposal) return;
 
-    const { error } = await supabase.from('approval_comments').insert({
-      approval_id: selectedApproval.id,
+    const { error } = await supabase.from('product_proposal_comments').insert({
+      proposal_id: selectedProductProposal.id,
       content: newComment.trim(),
       author: `${currentUser?.dept} ${currentUser?.name}`
     });
 
     if (!error) {
       setNewComment('');
-      fetchComments(selectedApproval.id);
+      fetchComments(selectedProductProposal.id);
     } else {
       alert('댓글 등록 실패');
     }
@@ -271,24 +271,24 @@ const Approvals: React.FC = () => {
   };
 
   const openEditModal = () => {
-    if (selectedApproval) {
-      setEditForm(selectedApproval);
+    if (selectedProductProposal) {
+      setEditForm(selectedProductProposal);
       setIsEditModalOpen(true);
     }
   };
 
   const handleDelete = async () => {
-    if (!selectedApproval) return;
-    if (!window.confirm(`'${selectedApproval.title}' 문서를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!selectedProductProposal) return;
+    if (!window.confirm(`'${selectedProductProposal.title}' 문서를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
 
-    await supabase.from('approval_comments').delete().eq('approval_id', selectedApproval.id);
-    const { error } = await supabase.from('approvals').delete().eq('id', selectedApproval.id);
+    await supabase.from('product_proposal_comments').delete().eq('proposal_id', selectedProductProposal.id);
+    const { error } = await supabase.from('product_proposals').delete().eq('id', selectedProductProposal.id);
     
     if (error) {
       alert("삭제 실패: " + error.message);
     } else {
-      setSelectedApproval(null);
-      fetchApprovals();
+      setSelectedProductProposal(null);
+      fetchProductProposals();
     }
   };
 
@@ -297,7 +297,7 @@ const Approvals: React.FC = () => {
     if (!editForm.id || !editForm.title || !editForm.doc_date) return;
     
     const { error } = await supabase
-      .from('approvals')
+      .from('product_proposals')
       .update({
         title: editForm.title,
         doc_date: editForm.doc_date,
@@ -311,16 +311,16 @@ const Approvals: React.FC = () => {
       alert("수정 실패: " + error.message);
     } else {
       setIsEditModalOpen(false);
-      fetchApprovals();
-      setSelectedApproval({ ...selectedApproval, ...editForm } as Approval);
+      fetchProductProposals();
+      setSelectedProductProposal({ ...selectedProductProposal, ...editForm } as ProductProposal);
     }
   };
 
   const handleAiSummarize = async () => {
-    if (!selectedApproval || !selectedApproval.file_url) return;
+    if (!selectedProductProposal || !selectedProductProposal.file_url) return;
     
     // Check if the file is a PDF
-    if (!selectedApproval.file_url.toLowerCase().includes('.pdf')) {
+    if (!selectedProductProposal.file_url.toLowerCase().includes('.pdf')) {
       alert('PDF 파일만 AI 요약이 가능합니다.');
       return;
     }
@@ -329,7 +329,7 @@ const Approvals: React.FC = () => {
     
     try {
       // 1. Fetch PDF Blob
-      const response = await fetch(selectedApproval.file_url);
+      const response = await fetch(selectedProductProposal.file_url);
       const blob = await response.blob();
       
       // 2. Convert Blob to Base64
@@ -349,7 +349,7 @@ const Approvals: React.FC = () => {
           const genAI = new GoogleGenerativeAI(apiKey);
           const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
           
-          const prompt = "이 품의서(결재 문서)의 핵심 내용을 2~3줄 분량으로 요약해줘. 글머리 기호(1. 2.)를 사용해서 직관적이고 짧게 작성해.";
+          const prompt = "이 상품안(결재 문서)의 핵심 내용을 2~3줄 분량으로 요약해줘. 글머리 기호(1. 2.)를 사용해서 직관적이고 짧게 작성해.";
           
           const result = await model.generateContent([
             prompt,
@@ -365,15 +365,15 @@ const Approvals: React.FC = () => {
           
           // 4. Update DB
           const { error } = await supabase
-            .from('approvals')
+            .from('product_proposals')
             .update({ description: summaryText })
-            .eq('id', selectedApproval.id);
+            .eq('id', selectedProductProposal.id);
             
           if (error) throw error;
           
           // Update Local State
-          setSelectedApproval({...selectedApproval, description: summaryText});
-          setApprovals(prev => prev.map(a => a.id === selectedApproval.id ? {...a, description: summaryText} : a));
+          setSelectedProductProposal({...selectedProductProposal, description: summaryText});
+          setProductProposals(prev => prev.map(a => a.id === selectedProductProposal.id ? {...a, description: summaryText} : a));
           
           setIsSummarizing(false);
         } catch (e: any) {
@@ -395,23 +395,23 @@ const Approvals: React.FC = () => {
   };
 
   return (
-    <div className="approvals-container animate-fade-in">
-      <div className="approvals-header">
+    <div className="product_proposals-container animate-fade-in">
+      <div className="product_proposals-header">
         <div className="header-titles">
-          <h1>품의서 보관함</h1>
-          <p>과거의 품의서를 검색하고 다운로드하여 업무에 참고하세요.</p>
+          <h1>상품안 보관함</h1>
+          <p>과거의 상품안를 검색하고 다운로드하여 업무에 참고하세요.</p>
         </div>
         <button className="upload-btn" onClick={() => setIsUploadModalOpen(true)}>
-          <span className="icon">📄</span> 새 품의서 등록
+          <span className="icon">📄</span> 새 상품안 등록
         </button>
       </div>
 
-      <div className="approvals-controls">
+      <div className="product_proposals-controls">
         <div className="search-box">
           <span className="icon">🔍</span>
           <input 
             type="text" 
-            placeholder="품의서 제목, 키워드, 작성자 검색..." 
+            placeholder="상품안 제목, 키워드, 작성자 검색..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -440,13 +440,13 @@ const Approvals: React.FC = () => {
         </div>
       </div>
 
-      <div className="approvals-content">
-        <div className="approvals-list">
-          {filteredApprovals.length === 0 ? (
-            <div className="empty-state">조건에 맞는 품의서가 없습니다.</div>
+      <div className="product_proposals-content">
+        <div className="product_proposals-list">
+          {filteredProductProposals.length === 0 ? (
+            <div className="empty-state">조건에 맞는 상품안가 없습니다.</div>
           ) : (
             Object.entries(
-              filteredApprovals.reduce((acc, curr) => {
+              filteredProductProposals.reduce((acc, curr) => {
                 let key = '기타';
                 if (groupBy === 'year') {
                   key = curr.doc_date.substring(0, 4) + '년';
@@ -460,7 +460,7 @@ const Approvals: React.FC = () => {
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(curr);
                 return acc;
-              }, {} as Record<string, Approval[]>)
+              }, {} as Record<string, ProductProposal[]>)
             )
             .sort(([keyA], [keyB]) => keyB.localeCompare(keyA))
             .map(([groupKey, items]) => {
@@ -468,7 +468,7 @@ const Approvals: React.FC = () => {
               const isExpanded = searchTerm.length > 0 || !!expandedGroups[groupKey];
               
               return (
-              <div key={groupKey} className="approval-group">
+              <div key={groupKey} className="proposal-group">
                 <div 
                   className="group-header accordion-header" 
                   onClick={() => toggleGroup(groupKey)}
@@ -487,18 +487,18 @@ const Approvals: React.FC = () => {
                     {items.map(approval => (
                       <div 
                         key={approval.id} 
-                        className={`approval-card ${selectedApproval?.id === approval.id ? 'active' : ''}`}
-                        onClick={() => setSelectedApproval(approval)}
+                        className={`proposal-card ${selectedProductProposal?.id === approval.id ? 'active' : ''}`}
+                        onClick={() => setSelectedProductProposal(approval)}
                       >
-                        <div className="approval-card-header">
-                          <span className="approval-dept">{approval.department}</span>
-                          <span className="approval-date">{approval.doc_date}</span>
+                        <div className="proposal-card-header">
+                          <span className="proposal-dept">{approval.department}</span>
+                          <span className="proposal-date">{approval.doc_date}</span>
                         </div>
-                        <h3 className="approval-title">{approval.title}</h3>
-                        <p className="approval-desc">{approval.description || '내용 없음'}</p>
-                        <div className="approval-card-footer">
-                          <span className="approval-author">✍️ {approval.author}</span>
-                          <span className="approval-filename">📎 {approval.file_name}</span>
+                        <h3 className="proposal-title">{approval.title}</h3>
+                        <p className="proposal-desc">{approval.description || '내용 없음'}</p>
+                        <div className="proposal-card-footer">
+                          <span className="proposal-author">✍️ {approval.author}</span>
+                          <span className="proposal-filename">📎 {approval.file_name}</span>
                         </div>
                       </div>
                     ))}
@@ -509,45 +509,45 @@ const Approvals: React.FC = () => {
           )}
         </div>
 
-        {selectedApproval && (
-          <div className="approval-detail">
+        {selectedProductProposal && (
+          <div className="proposal-detail">
             <div className="detail-header">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <h2 style={{ flex: 1, margin: 0, marginBottom: '10px' }}>{selectedApproval.title}</h2>
+                <h2 style={{ flex: 1, margin: 0, marginBottom: '10px' }}>{selectedProductProposal.title}</h2>
                 <div className="detail-actions" style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: '15px' }}>
                   <button onClick={openEditModal} className="edit-btn">수정</button>
                   <button onClick={handleDelete} className="delete-btn">삭제</button>
                 </div>
               </div>
               <div className="detail-meta">
-                <span>{selectedApproval.department} {selectedApproval.author}</span>
+                <span>{selectedProductProposal.department} {selectedProductProposal.author}</span>
                 <span>•</span>
-                <span>{selectedApproval.doc_date}</span>
+                <span>{selectedProductProposal.doc_date}</span>
               </div>
             </div>
             
             <div className="detail-body">
               <div className="detail-desc-box">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h4 style={{ margin: 0 }}>품의 요약 및 배경</h4>
+                  <h4 style={{ margin: 0 }}>상품안 요약 및 배경</h4>
                   <button 
                     onClick={handleAiSummarize} 
-                    disabled={isSummarizing || !selectedApproval.file_url.toLowerCase().includes('.pdf')}
+                    disabled={isSummarizing || !selectedProductProposal.file_url.toLowerCase().includes('.pdf')}
                     className="ai-summarize-btn"
                   >
                     {isSummarizing ? '✨ 요약 중...' : '✨ AI 자동 요약'}
                   </button>
                 </div>
-                <p>{selectedApproval.description || '등록된 요약이 없습니다. 우측 상단의 AI 자동 요약 버튼을 눌러보세요.'}</p>
+                <p>{selectedProductProposal.description || '등록된 요약이 없습니다. 우측 상단의 AI 자동 요약 버튼을 눌러보세요.'}</p>
               </div>
 
-              {selectedApproval.file_url.toLowerCase().includes('.pdf') && (
+              {selectedProductProposal.file_url.toLowerCase().includes('.pdf') && (
                 <div className="detail-pdf-preview">
                   <iframe 
                     src={
                       window.innerWidth <= 768 
-                        ? `https://docs.google.com/gview?url=${encodeURIComponent(selectedApproval.file_url)}&embedded=true`
-                        : `${selectedApproval.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`
+                        ? `https://docs.google.com/gview?url=${encodeURIComponent(selectedProductProposal.file_url)}&embedded=true`
+                        : `${selectedProductProposal.file_url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`
                     } 
                     title="PDF Preview"
                   />
@@ -557,10 +557,10 @@ const Approvals: React.FC = () => {
               <div className="detail-file-box">
                 <div className="file-info">
                   <span className="icon">📎</span>
-                  <span className="filename">{selectedApproval.file_name}</span>
+                  <span className="filename">{selectedProductProposal.file_name}</span>
                 </div>
                 <a 
-                  href={selectedApproval.file_url} 
+                  href={selectedProductProposal.file_url} 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="download-btn"
@@ -590,7 +590,7 @@ const Approvals: React.FC = () => {
               </div>
               <div className="comment-input-box">
                 <textarea 
-                  placeholder="이 품의서에 대한 의견이나 참고할 점을 남겨주세요..."
+                  placeholder="이 상품안에 대한 의견이나 참고할 점을 남겨주세요..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                 />
@@ -600,11 +600,11 @@ const Approvals: React.FC = () => {
           </div>
         )}
         
-        {!selectedApproval && filteredApprovals.length > 0 && (
-          <div className="approval-detail empty-detail">
+        {!selectedProductProposal && filteredProductProposals.length > 0 && (
+          <div className="proposal-detail empty-detail">
             <div className="icon">📄</div>
-            <h3>품의서를 선택해주세요</h3>
-            <p>좌측 목록에서 품의서를 클릭하면 상세 내용과 첨부파일, 팀원들의 의견을 확인할 수 있습니다.</p>
+            <h3>상품안를 선택해주세요</h3>
+            <p>좌측 목록에서 상품안를 클릭하면 상세 내용과 첨부파일, 팀원들의 의견을 확인할 수 있습니다.</p>
           </div>
         )}
       </div>
@@ -613,16 +613,16 @@ const Approvals: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h2>새 품의서 등록</h2>
+              <h2>새 상품안 등록</h2>
               <button onClick={() => setIsUploadModalOpen(false)}>✕</button>
             </div>
             <form onSubmit={handleUpload}>
               <div className="form-group">
-                <label>품의서 제목</label>
+                <label>상품안 제목</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="예: [영업기획] 2025년 여름 성수기 패키지 요금 책정 품의" 
+                  placeholder="예: [영업기획] 2025년 여름 성수기 패키지 요금 책정 상품안" 
                   value={uploadTitle}
                   onChange={e => setUploadTitle(e.target.value)}
                 />
@@ -639,7 +639,7 @@ const Approvals: React.FC = () => {
               <div className="form-group">
                 <label>배경 및 요약 (검색 키워드)</label>
                 <textarea 
-                  placeholder="추후 검색 시 찾기 쉽도록 핵심 키워드나 품의 배경을 적어주세요." 
+                  placeholder="추후 검색 시 찾기 쉽도록 핵심 키워드나 기획 배경을 적어주세요." 
                   value={uploadDesc}
                   onChange={e => setUploadDesc(e.target.value)}
                   rows={3}
@@ -676,12 +676,12 @@ const Approvals: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h2>품의서 정보 수정</h2>
+              <h2>상품안 정보 수정</h2>
               <button onClick={() => setIsEditModalOpen(false)}>✕</button>
             </div>
             <form onSubmit={handleEditSubmit}>
               <div className="form-group">
-                <label>품의서 제목</label>
+                <label>상품안 제목</label>
                 <input 
                   type="text" 
                   required
@@ -737,4 +737,4 @@ const Approvals: React.FC = () => {
   );
 };
 
-export default Approvals;
+export default ProductProposals;
