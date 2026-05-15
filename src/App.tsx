@@ -21,6 +21,7 @@ import SpaceSimulator from './components/SpaceSimulator'
 import PhotoShortsMaker from './components/PhotoShortsMaker'
 import VideoPromptGenerator from './components/VideoPromptGenerator'
 import RoomReservationAutomator from './components/RoomReservationAutomator'
+import ProductProposalGenerator from './components/ProductProposalGenerator'
 import './App.css'
 
 function App() {
@@ -74,6 +75,7 @@ function App() {
             <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
             <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
             <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
+            <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
