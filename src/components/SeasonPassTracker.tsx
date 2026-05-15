@@ -457,6 +457,23 @@ const SeasonPassTracker: React.FC = () => {
     realRegionMap.set(realRegionKey, currentRealRegion);
   });
 
+  const renderCustomizedLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent, name, value } = props;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    if (percent < 0.05) return null; // 5% 미만은 라벨 생략 (혼잡 방지)
+
+    return (
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" style={{ pointerEvents: 'none', filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.3))' }}>
+        <tspan x={x} dy="-0.4em" fontSize="13" fontWeight="700">{name}</tspan>
+        <tspan x={x} dy="1.4em" fontSize="11" fontWeight="600">{value}매 ({(percent * 100).toFixed(0)}%)</tspan>
+      </text>
+    );
+  };
+
   const pieCategory3Data = Array.from(category3Map.values()).sort((a,b) => b.value - a.value);
   const pieTargetData = Array.from(targetMap.values()).sort((a,b) => b.value - a.value);
   const pieRegionData = Array.from(regionMap.values()).sort((a,b) => b.value - a.value);
@@ -614,25 +631,26 @@ const SeasonPassTracker: React.FC = () => {
         <div className="chart-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginTop: '24px' }}>
           <div>
             <h3 className="chart-title">권종별(소분류) 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieCategory3Data}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={50}
+                    outerRadius={110}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
-                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                    labelLine={false}
+                    label={renderCustomizedLabel}
                   >
                     {pieCategory3Data.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -640,25 +658,26 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">타겟별(인원권) 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieTargetData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={50}
+                    outerRadius={110}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
-                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                    labelLine={false}
+                    label={renderCustomizedLabel}
                   >
                     {pieTargetData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -666,25 +685,26 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">구매자 지역/유형 비중 (상품 기반)</h3>
-            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieRegionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={50}
+                    outerRadius={110}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
-                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                    labelLine={false}
+                    label={renderCustomizedLabel}
                   >
                     {pieRegionData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -692,25 +712,26 @@ const SeasonPassTracker: React.FC = () => {
 
           <div>
             <h3 className="chart-title">실거주지(시·군·구) 기준 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '300px' }}>
+            <div className="chart-wrapper" style={{ minHeight: '320px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieRealRegionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={50}
+                    outerRadius={110}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
-                    labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                    labelLine={false}
+                    label={renderCustomizedLabel}
                   >
                     {pieRealRegionData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 7) % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} />
+                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
