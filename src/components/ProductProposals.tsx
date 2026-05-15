@@ -132,21 +132,37 @@ const ProductProposals: React.FC = () => {
         // 단일 파일인 경우에만 폼에 미리 채워줌
         const file = files[0];
         const parts = file.name.split('_');
-        
-        if (parts.length >= 3) {
+        if (parts.length >= 2) {
           const datePart = parts[0];
-          const typePart = parts[1];
-          let titlePart = parts.slice(2).join('_');
-          const extIndex = titlePart.lastIndexOf('.');
-          if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
-          
           if (datePart.length === 6 && !isNaN(Number(datePart))) {
             const year = '20' + datePart.substring(0, 2);
             const month = datePart.substring(2, 4);
             const day = datePart.substring(4, 6);
             setUploadDate(`${year}-${month}-${day}`);
+            
+            if (parts.length >= 3) {
+              const typePart = parts[1];
+              let titlePart = parts.slice(2).join('_');
+              const extIndex = titlePart.lastIndexOf('.');
+              if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+              setUploadTitle(`[${typePart}] ${titlePart}`);
+            } else {
+              let titlePart = parts[1];
+              const extIndex = titlePart.lastIndexOf('.');
+              if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+              setUploadTitle(titlePart);
+            }
+          } else {
+            let fileNameWithoutExt = file.name;
+            const extIndex = fileNameWithoutExt.lastIndexOf('.');
+            if (extIndex > -1) fileNameWithoutExt = fileNameWithoutExt.substring(0, extIndex);
+            setUploadTitle(fileNameWithoutExt);
           }
-          setUploadTitle(`[${typePart}] ${titlePart}`);
+        } else {
+          let fileNameWithoutExt = file.name;
+          const extIndex = fileNameWithoutExt.lastIndexOf('.');
+          if (extIndex > -1) fileNameWithoutExt = fileNameWithoutExt.substring(0, extIndex);
+          setUploadTitle(fileNameWithoutExt);
         }
       } else {
         // 대량 업로드 시 폼을 초기화 (각 파일마다 개별 파싱됨)
@@ -176,20 +192,34 @@ const ProductProposals: React.FC = () => {
         let finalDate = uploadDate;
         
         const parts = file.name.split('_');
-        if (parts.length >= 3) {
+        if (parts.length >= 2) {
           const datePart = parts[0];
-          const typePart = parts[1];
-          let titlePart = parts.slice(2).join('_');
-          const extIndex = titlePart.lastIndexOf('.');
-          if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
-          
           if (datePart.length === 6 && !isNaN(Number(datePart))) {
             const year = '20' + datePart.substring(0, 2);
             const month = datePart.substring(2, 4);
             const day = datePart.substring(4, 6);
             finalDate = `${year}-${month}-${day}`;
+            
+            if (uploadTitle === '대량 업로드 진행 중...' || uploadFiles.length > 1) {
+              if (parts.length >= 3) {
+                const typePart = parts[1];
+                let titlePart = parts.slice(2).join('_');
+                const extIndex = titlePart.lastIndexOf('.');
+                if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+                finalTitle = `[${typePart}] ${titlePart}`;
+              } else {
+                let titlePart = parts[1];
+                const extIndex = titlePart.lastIndexOf('.');
+                if (extIndex > -1) titlePart = titlePart.substring(0, extIndex);
+                finalTitle = titlePart;
+              }
+            }
+          } else if (uploadTitle === '대량 업로드 진행 중...' || uploadFiles.length > 1) {
+            let fileNameWithoutExt = file.name;
+            const extIndex = fileNameWithoutExt.lastIndexOf('.');
+            if (extIndex > -1) fileNameWithoutExt = fileNameWithoutExt.substring(0, extIndex);
+            finalTitle = fileNameWithoutExt;
           }
-          finalTitle = `[${typePart}] ${titlePart}`;
         } else if (uploadTitle === '대량 업로드 진행 중...' || uploadFiles.length > 1) {
           let fileNameWithoutExt = file.name;
           const extIndex = fileNameWithoutExt.lastIndexOf('.');
