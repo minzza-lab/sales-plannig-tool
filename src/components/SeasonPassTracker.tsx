@@ -5,7 +5,7 @@ import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList,
-  PieChart, Pie, Cell, Tooltip
+  PieChart, Pie, Cell
 } from 'recharts';
 import './SeasonPassTracker.css';
 
@@ -625,10 +625,10 @@ const SeasonPassTracker: React.FC = () => {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
                     labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                   >
-                    {pieCategory3Data.map((entry, index) => (
+                    {pieCategory3Data.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -651,10 +651,10 @@ const SeasonPassTracker: React.FC = () => {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
                     labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                   >
-                    {pieTargetData.map((entry, index) => (
+                    {pieTargetData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
                     ))}
                   </Pie>
@@ -677,10 +677,10 @@ const SeasonPassTracker: React.FC = () => {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
                     labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                   >
-                    {pieRegionData.map((entry, index) => (
+                    {pieRegionData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 5) % COLORS.length]} />
                     ))}
                   </Pie>
@@ -703,10 +703,10 @@ const SeasonPassTracker: React.FC = () => {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, value, percent }) => `${name} ${value}매 (${(percent * 100).toFixed(1)}%)`}
+                    label={({ name, value, percent }) => `${name} ${value}매 (${((percent || 0) * 100).toFixed(1)}%)`}
                     labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
                   >
-                    {pieRealRegionData.map((entry, index) => (
+                    {pieRealRegionData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[(index + 7) % COLORS.length]} />
                     ))}
                   </Pie>
