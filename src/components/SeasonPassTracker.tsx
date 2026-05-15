@@ -477,18 +477,7 @@ const SeasonPassTracker: React.FC = () => {
   const pieCategory3Data = Array.from(category3Map.values()).sort((a,b) => b.value - a.value);
   const pieTargetData = Array.from(targetMap.values()).sort((a,b) => b.value - a.value);
   const pieRegionData = Array.from(regionMap.values()).sort((a,b) => b.value - a.value);
-  
-  // 데이터가 너무 잘게 쪼개지지 않도록 상위 10개만 보여주고 나머지는 '기타'로 묶기
-  let sortedRealRegion = Array.from(realRegionMap.values()).sort((a,b) => b.value - a.value);
-  if (sortedRealRegion.length > 8) {
-    const top8 = sortedRealRegion.slice(0, 8);
-    const othersValue = sortedRealRegion.slice(8).reduce((sum, item) => sum + item.value, 0);
-    if (othersValue > 0) {
-      top8.push({ name: '기타 지역', value: othersValue });
-    }
-    sortedRealRegion = top8;
-  }
-  const pieRealRegionData = sortedRealRegion;
+  const pieRealRegionData = Array.from(realRegionMap.values()).sort((a,b) => b.value - a.value);
 
   return (
     <div className="tracker-container">
@@ -711,28 +700,22 @@ const SeasonPassTracker: React.FC = () => {
           </div>
 
           <div>
-            <h3 className="chart-title">실거주지(시·군·구) 기준 판매 비중</h3>
-            <div className="chart-wrapper" style={{ minHeight: '400px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieRealRegionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={140}
-                    paddingAngle={2}
-                    dataKey="value"
-                    labelLine={false}
-                    label={renderCustomizedLabel}
-                  >
-                    {pieRealRegionData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[(index + 7) % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip formatter={(value) => [`${value}매`, '수량']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} />
-                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
-                </PieChart>
+            <h3 className="chart-title">실거주지(시·군·구) 기준 전체 판매 수량</h3>
+            <div className="chart-wrapper" style={{ height: '400px', overflowY: 'auto', paddingRight: '10px' }}>
+              <ResponsiveContainer width="100%" height={Math.max(400, pieRealRegionData.length * 40)}>
+                <BarChart layout="vertical" data={pieRealRegionData} margin={{ top: 10, right: 40, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 13, fontWeight: 600 }} width={100} />
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    formatter={(value: any) => [`${value} 매`, '수량']}
+                  />
+                  <Bar dataKey="value" name="수량" fill="#10b981" radius={[0, 4, 4, 0]} maxBarSize={24}>
+                    <LabelList dataKey="value" position="right" formatter={(val: any) => val > 0 ? `${val}매` : ''} fill="#059669" fontSize={12} fontWeight="bold" />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
