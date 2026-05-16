@@ -269,7 +269,7 @@ const PackageSalesDashboard: React.FC = () => {
                     <YAxis type="category" dataKey="name" stroke="#94a3b8" width={140} tick={{fontSize: 12, fill: '#f8fafc'}} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Bar dataKey="revenue" fill="#8b5cf6" name="매출" radius={[0, 6, 6, 0]}>
-                      {packageChartData.slice(0, 10).map((entry, index) => (
+                      {packageChartData.slice(0, 10).map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Bar>
@@ -291,9 +291,9 @@ const PackageSalesDashboard: React.FC = () => {
                       outerRadius={120}
                       paddingAngle={5}
                       dataKey="value"
-                      label={({name, percent}) => `${name} ${(percent * 100).toFixed(1)}%`}
+                      label={({name, percent}) => `${name} ${((percent || 0) * 100).toFixed(1)}%`}
                     >
-                      {channelChartData.map((entry, index) => (
+                      {channelChartData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
