@@ -96,6 +96,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     <span className="icon">🏨</span> 객실 예약 메일 자동화
                   </NavLink>
                 </li>
+                <li className="menu-highlight">
+                  <NavLink to="/tools/package-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">📦</span> 패키지 판매 현황
+                  </NavLink>
+                </li>
               </ul>
             )}
           </li>
