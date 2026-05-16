@@ -73,7 +73,8 @@ const PackageSalesDashboard: React.FC = () => {
           orderDate: d.order_date || ''
         }));
         
-        setData(formatted);
+        const validOrders = formatted.filter(d => d.status.includes('결제완료') || d.status.includes('예약완료'));
+        setData(validOrders);
       }
     } catch (e) {
       console.error('Failed to fetch from Supabase', e);
@@ -186,8 +187,9 @@ const PackageSalesDashboard: React.FC = () => {
     const prevYearPrefix = format(subMonths(currentMonth, 12), 'yyyy');
     
     filteredData.forEach(r => {
-      // Use reservationDate for grouping
-      const rDate = r.reservationDate.replace(/\./g, '-').replace(/\//g, '-');
+      // Use reservationDate for grouping. Fallback to orderDate
+      const targetD = r.reservationDate || r.orderDate.split(' ')[0];
+      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
       let cleanDate = '';
       if (rDate.length === 8) cleanDate = `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}`;
       else cleanDate = rDate;
@@ -231,7 +233,8 @@ const PackageSalesDashboard: React.FC = () => {
         let prevDispAmt = 0; let prevDispQty = 0;
 
         filteredData.forEach(d => {
-          const rDate = d.reservationDate.replace(/\./g, '-').replace(/\//g, '-');
+          const targetD = d.reservationDate || d.orderDate.split(' ')[0];
+          const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
           let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
           
           if (cleanDate === dateStr) {
@@ -359,7 +362,7 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
 
           <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
-            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
+            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
             <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
               <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
@@ -395,7 +398,7 @@ const PackageSalesDashboard: React.FC = () => {
               </div>
             </div>
 
-            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (방문일 기준, {format(currentMonth, 'MM')}월)</h3>
+            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'MM')}월)</h3>
             <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
               <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
