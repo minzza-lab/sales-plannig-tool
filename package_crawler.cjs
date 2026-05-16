@@ -75,6 +75,12 @@ async function runPackageCrawler() {
     
     await new Promise(r => setTimeout(r, 5000)); 
 
+    // 다이얼로그(Alert) 자동 닫기 처리
+    page.on('dialog', async dialog => {
+      console.log('알림 팝업 발생:', dialog.message());
+      await dialog.dismiss();
+    });
+
     console.log('3. [90일] 버튼 클릭하여 최근 3달 데이터 조회...');
     await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button, div.v-btn, span'));
@@ -83,6 +89,8 @@ async function runPackageCrawler() {
     });
     
     await new Promise(r => setTimeout(r, 1000)); 
+
+    await page.screenshot({ path: 'debug_package_before_search.png', fullPage: true });
 
     console.log('4. [검색] 버튼 클릭...');
     await page.evaluate(() => {
@@ -96,24 +104,33 @@ async function runPackageCrawler() {
       await page.waitForFunction(() => {
         const activeOverlay = document.querySelector('.v-overlay--active, .v-dialog--active, .loading');
         return !activeOverlay;
-      }, { timeout: 40000 });
+      }, { timeout: 10000 });
     } catch (e) {
       console.log('오버레이 대기 타임아웃, 강제 진행합니다.');
     }
     
     await new Promise(r => setTimeout(r, 10000)); 
 
+    await page.screenshot({ path: 'debug_package_after_search.png', fullPage: true });
+
     console.log('6. [excel 다운로드] 버튼 클릭...');
     await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button, div.v-btn, a'));
-      const excelBtn = btns.find(b => b.innerText.toLowerCase().includes('excel') || b.innerText.includes('다운로드'));
-      if (excelBtn) excelBtn.click();
+      // 정확히 "EXCEL 다운로드" 텍스트를 포함한 버튼 찾기 (세부내역 제외)
+      const excelBtns = btns.filter(b => b.innerText && b.innerText.includes('EXCEL 다운로드') && !b.innerText.includes('세부내역'));
+      if (excelBtns.length > 0) {
+        excelBtns[0].click();
+      } else {
+        // fallback
+        const fallback = btns.find(b => b.innerText && b.innerText.toLowerCase().includes('excel'));
+        if (fallback) fallback.click();
+      }
     });
 
-    console.log('7. 엑셀 파일 다운로드 대기 중...');
+    console.log('7. 엑셀 파일 다운로드 대기 중 (최대 120초)...');
     let excelFile = null;
     let attempts = 0;
-    while (attempts < 30) {
+    while (attempts < 60) {
       await new Promise(r => setTimeout(r, 2000));
       const files = fs.readdirSync(downloadPath);
       const downloading = files.some(f => f.endsWith('.crdownload'));
@@ -219,12 +236,21 @@ async function runPackageCrawler() {
   }
 }
 
-console.log('⏰ 패키지 주문 스케줄러 세팅 완료. 매 시간 30분마다 크롤러가 자동으로 실행됩니다.');
-// 최초 1회 즉시 실행
-runPackageCrawler();
+const isManual = process.argv.includes('--manual');
 
-// 매 시간 30분에 실행
-cron.schedule('30 * * * *', () => {
-  console.log(`\n[${new Date().toLocaleString()}] 🔄 정기 패키지 주문 크롤링 작업을 시작합니다...`);
+if (isManual) {
+  console.log('⚡ 수동 크롤링 모드로 실행합니다. (1회 실행 후 종료)');
+  runPackageCrawler().then(() => {
+    process.exit(0);
+  });
+} else {
+  console.log('⏰ 패키지 주문 스케줄러 세팅 완료. 매 시간 30분마다 크롤러가 자동으로 실행됩니다.');
+  // 최초 1회 즉시 실행
   runPackageCrawler();
-});
+
+  // 매 시간 30분에 실행
+  cron.schedule('30 * * * *', () => {
+    console.log(`\n[${new Date().toLocaleString()}] 🔄 정기 패키지 주문 크롤링 작업을 시작합니다...`);
+    runPackageCrawler();
+  });
+}
