@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, addDays } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import './PackageSalesDashboard.css';
-
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-  Area, Cell, Line, ComposedChart
-} from 'recharts';
 
 interface PackageOrder {
   orderId: string;
@@ -24,7 +21,6 @@ interface PackageOrder {
   orderDate: string;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c'];
 
 const normalizePackageName = (name: string) => {
   if (!name) return '알 수 없음';
@@ -45,6 +41,7 @@ const PackageSalesDashboard: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
+  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
 
   useEffect(() => {
     fetchFromSupabase();
@@ -176,119 +173,152 @@ const PackageSalesDashboard: React.FC = () => {
     return match;
   });
 
-  const totalOrders = filteredData.length;
-  const totalRevenue = filteredData.reduce((sum, d) => sum + d.paymentAmount, 0);
-
-  const packageSales = filteredData.reduce((acc, d) => {
-    const key = d.normalizedPackageName;
-    if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0 };
-    acc[key].count += 1;
-    acc[key].revenue += d.paymentAmount;
-    return acc;
-  }, {} as Record<string, {name: string, count: number, revenue: number}>);
-  const packageChartData = Object.values(packageSales).sort((a, b) => b.revenue - a.revenue);
-
-  const dateSales = filteredData.reduce((acc, d) => {
-    const key = d.reservationDate;
-    if (!acc[key]) acc[key] = { date: key, count: 0, revenue: 0 };
-    acc[key].count += 1;
-    acc[key].revenue += d.paymentAmount;
-    return acc;
-  }, {} as Record<string, {date: string, count: number, revenue: number}>);
-  const dateChartData = Object.values(dateSales).sort((a, b) => a.date.localeCompare(b.date));
-
-  // 1. 리드타임 분석
-  const leadTimeBuckets: Record<string, number> = { '당일~3일': 0, '4~7일': 0, '8~14일': 0, '15~30일': 0, '31일 이상': 0 };
-  // 2. 구성품(옵션) 분석
-  const componentSales: Record<string, number> = {};
-  // 3. 요일별 패키지 선호도 (히트맵용)
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-  const heatMapData: Record<string, Record<string, number>> = {};
-  // 4. 회원/비회원 객단가
-  const memberStats: Record<string, { count: number, revenue: number }> = {};
-
-  filteredData.forEach(d => {
-    // 리드타임 및 히트맵 처리
-    const oDateStr = d.orderDate.split(' ')[0].replace(/\./g, '-').replace(/\//g, '-');
-    const rDateStr = d.reservationDate.replace(/\./g, '-').replace(/\//g, '-');
+  const formatCurrency = (val: number) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
+  const getCumulativeStats = () => {
+    let currentAmt = 0; let currentPpl = 0;
+    let prevAmt = 0; let prevPpl = 0;
+    let currentYearAmt = 0; let currentYearPpl = 0;
+    let prevYearAmt = 0; let prevYearPpl = 0;
     
-    // YYYY-MM-DD 형식이 아닐 수 있으므로 방어 로직 추가
-    const oDate = new Date(oDateStr.length === 8 ? `${oDateStr.slice(0,4)}-${oDateStr.slice(4,6)}-${oDateStr.slice(6,8)}` : oDateStr);
-    const rDate = new Date(rDateStr.length === 8 ? `${rDateStr.slice(0,4)}-${rDateStr.slice(4,6)}-${rDateStr.slice(6,8)}` : rDateStr);
+    const targetPrefix = format(currentMonth, 'yyyy-MM');
+    const prevPrefix = format(subMonths(currentMonth, 12), 'yyyy-MM');
+    const targetYearPrefix = format(currentMonth, 'yyyy');
+    const prevYearPrefix = format(subMonths(currentMonth, 12), 'yyyy');
     
-    if (!isNaN(oDate.getTime()) && !isNaN(rDate.getTime())) {
-      const diff = Math.ceil((rDate.getTime() - oDate.getTime()) / (1000 * 3600 * 24));
-      if (diff >= 0 && diff <= 3) leadTimeBuckets['당일~3일']++;
-      else if (diff <= 7) leadTimeBuckets['4~7일']++;
-      else if (diff <= 14) leadTimeBuckets['8~14일']++;
-      else if (diff <= 30) leadTimeBuckets['15~30일']++;
-      else if (diff > 30) leadTimeBuckets['31일 이상']++;
+    filteredData.forEach(r => {
+      // Use reservationDate for grouping
+      const rDate = r.reservationDate.replace(/\./g, '-').replace(/\//g, '-');
+      let cleanDate = '';
+      if (rDate.length === 8) cleanDate = `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}`;
+      else cleanDate = rDate;
 
-      const dayIdx = rDate.getDay();
-      const dayStr = dayNames[dayIdx];
-      const pkg = d.normalizedPackageName;
-      if (!heatMapData[pkg]) heatMapData[pkg] = { '일':0, '월':0, '화':0, '수':0, '목':0, '금':0, '토':0 };
-      heatMapData[pkg][dayStr]++;
+      if (cleanDate.startsWith(targetPrefix)) {
+        currentAmt += r.paymentAmount;
+        currentPpl += 1;
+      } else if (cleanDate.startsWith(prevPrefix)) {
+        prevAmt += r.paymentAmount;
+        prevPpl += 1;
+      }
+      
+      if (cleanDate.startsWith(targetYearPrefix)) {
+        currentYearAmt += r.paymentAmount;
+        currentYearPpl += 1;
+      } else if (cleanDate.startsWith(prevYearPrefix)) {
+        prevYearAmt += r.paymentAmount;
+        prevYearPpl += 1;
+      }
+    });
+    return { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl };
+  };
+  const { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl } = getCumulativeStats();
+
+  const renderCalendar = () => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(monthStart);
+    const startDate = startOfWeek(monthStart);
+    const endDate = endOfWeek(monthEnd);
+
+    const rows = [];
+    let days = [];
+    let day = startDate;
+
+    while (day <= endDate) {
+      for (let i = 0; i < 7; i++) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
+        
+        let currentDispAmt = 0; let currentDispQty = 0;
+        let prevDispAmt = 0; let prevDispQty = 0;
+
+        filteredData.forEach(d => {
+          const rDate = d.reservationDate.replace(/\./g, '-').replace(/\//g, '-');
+          let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
+          
+          if (cleanDate === dateStr) {
+            currentDispAmt += d.paymentAmount;
+            currentDispQty += 1;
+          } else if (cleanDate === prevYearStr) {
+            prevDispAmt += d.paymentAmount;
+            prevDispQty += 1;
+          }
+        });
+
+        const hasCurrentData = currentDispQty > 0;
+        const hasPrevData = prevDispQty > 0;
+
+        const isSunday = day.getDay() === 0;
+        const isSaturday = day.getDay() === 6;
+
+        days.push(
+          <div className={`cal-cell ${!isSameMonth(day, monthStart) ? 'disabled' : ''}`} key={day.toString()}>
+            <div className="cal-cell-header">
+              <span className={`cal-date ${isSunday ? 'red-day' : ''} ${isSaturday ? 'blue-day' : ''}`}>{format(day, "d")}</span>
+            </div>
+
+            {(hasCurrentData || hasPrevData) && (
+              <div className="cal-data-box">
+                {hasCurrentData ? (
+                  <div className="cal-data-row current">
+                    <span className="year-label">올해</span>
+                    <span className="amt">{(currentDispAmt / 10000).toFixed(0)}만</span>
+                    <span className="qty">{currentDispQty}건</span>
+                  </div>
+                ) : (
+                  <div className="cal-data-row current" style={{ opacity: 0.5 }}>
+                    <span className="year-label">올해</span><span className="amt">-</span><span className="qty">-</span>
+                  </div>
+                )}
+                
+                {hasPrevData ? (() => {
+                  const growthAmt = currentDispAmt - prevDispAmt;
+                  const pct = prevDispAmt > 0 ? (growthAmt / prevDispAmt * 100).toFixed(0) : 0;
+                  return (
+                    <>
+                      <div className="cal-data-row prev">
+                        <span className="year-label">작년</span>
+                        <span className="amt">{(prevDispAmt / 10000).toFixed(0)}만</span>
+                        <span className="qty">{prevDispQty}건</span>
+                      </div>
+                      {hasCurrentData && (
+                        <div className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`}>
+                          {growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(pct))}%
+                        </div>
+                      )}
+                    </>
+                  )
+                })() : (
+                  <div className="cal-yoy-bar empty">전년 비교데이터 없음</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+        day = addDays(day, 1);
+      }
+      rows.push(<div className="cal-row" key={day.toString()}>{days}</div>);
+      days = [];
     }
 
-    // 구성품
-    const comps = d.components.split(/[,+&]/).map(c => c.trim()).filter(Boolean);
-    comps.forEach(c => {
-      // 괄호 등 지저분한 문자 제거 (간단화)
-      const cleanComp = c.replace(/\[.*?\]|\(.*?\)/g, '').trim();
-      if (!cleanComp) return;
-      if (!componentSales[cleanComp]) componentSales[cleanComp] = 0;
-      componentSales[cleanComp] += d.paymentAmount;
-    });
-
-    // 회원 객단가
-    let mType = d.memberType || '비회원';
-    if (mType.includes('비회원')) mType = '비회원';
-    else if (mType.includes('회원') || mType.includes('주주')) mType = '회원/주주';
-    
-    if (!memberStats[mType]) memberStats[mType] = { count: 0, revenue: 0 };
-    memberStats[mType].count++;
-    memberStats[mType].revenue += d.paymentAmount;
-  });
-
-  const leadTimeChartData = Object.keys(leadTimeBuckets).map(k => ({ name: k, '예약건수': leadTimeBuckets[k] }));
-  
-  const componentChartData = Object.keys(componentSales)
-    .map(k => ({ name: k, revenue: componentSales[k] }))
-    .sort((a,b) => b.revenue - a.revenue)
-    .slice(0, 10);
-    
-  const memberChartData = Object.keys(memberStats).map(k => ({
-    name: k,
-    arppu: memberStats[k].count > 0 ? Math.round(memberStats[k].revenue / memberStats[k].count) : 0,
-    count: memberStats[k].count
-  })).sort((a, b) => b.arppu - a.arppu);
-
-  // 히트맵용 Top 5 패키지 추출
-  const topPackagesForHeatmap = packageChartData.slice(0, 8).map(p => p.name);
+    return (
+      <div className="calendar-container animate-fade-in">
+        <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '16px', gap: '16px' }}>
+          <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} style={{background:'transparent', border:'none', cursor:'pointer', color:'#f8fafc'}}><ChevronLeft size={32}/></button>
+          <h2 style={{margin:0, fontSize:'1.8rem', color:'#f8fafc'}}>{format(currentMonth, 'yyyy년 MM월')}</h2>
+          <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} style={{background:'transparent', border:'none', cursor:'pointer', color:'#f8fafc'}}><ChevronRight size={32}/></button>
+        </div>
+        <div className="cal-grid">
+          <div className="cal-days-header" style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', textAlign:'center', padding:'10px 0', fontWeight:700, color:'#94a3b8', background:'rgba(0,0,0,0.2)', borderRadius:'12px 12px 0 0' }}>
+            {['일','월','화','수','목','금','토'].map(d => <div key={d} style={{ color: d==='일'?'#ef4444':d==='토'?'#3b82f6':'' }}>{d}</div>)}
+          </div>
+          {rows}
+        </div>
+      </div>
+    );
+  };
 
   const uniquePackages = Array.from(new Set(data.map(d => d.normalizedPackageName))).sort();
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div style={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#fff' }}>
-          <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', color: '#60a5fa' }}>{label}</p>
-          {payload.map((entry: any, index: number) => {
-            const isCount = entry.name === '건수' || entry.name === '예약건수';
-            return (
-              <p key={index} style={{ margin: 0, color: entry.color || '#fff' }}>
-                {entry.name}: {entry.value.toLocaleString()} {isCount ? '건' : '원'}
-              </p>
-            );
-          })}
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="pkg-dashboard-container animate-fade-in">
@@ -328,161 +358,84 @@ const PackageSalesDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="pkg-summary-cards">
-            <div className="pkg-card">
-              <h3>총 주문 건수</h3>
-              <div className="pkg-card-value">{totalOrders.toLocaleString()}건</div>
-            </div>
-            <div className="pkg-card">
-              <h3>총 결제 금액 (매출)</h3>
-              <div className="pkg-card-value text-primary">{totalRevenue.toLocaleString()}원</div>
-            </div>
-            <div className="pkg-card">
-              <h3>통합된 상품 종류</h3>
-              <div className="pkg-card-value">{uniquePackages.length}개</div>
-            </div>
-          </div>
-
-          <div className="pkg-charts-grid">
-            <div className="pkg-chart-panel" style={{ gridColumn: '1 / -1' }}>
-              <h3>🗓️ 다가오는 방문일(예약일) 기준 혼잡도 및 매출 예측</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={350}>
-                  <ComposedChart data={dateChartData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
-                    <XAxis dataKey="date" stroke="#94a3b8" />
-                    <YAxis yAxisId="left" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ color: '#fff' }} />
-                    <Area yAxisId="left" type="monotone" dataKey="revenue" stroke="#3b82f6" fillOpacity={1} fill="url(#colorRevenue)" name="매출" />
-                    <Line yAxisId="right" type="monotone" dataKey="count" stroke="#10b981" strokeWidth={3} name="건수" activeDot={{ r: 8 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+          <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
+            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
+            <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
+              <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
+                <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
+                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#94a3b8' }}>매출액</span>
+                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevYearAmt)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#94a3b8' }}>주문건수</span>
+                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevYearPpl.toLocaleString()} 건</span>
+                  </div>
+                </div>
+              </div>
+              <div className="dash-column current" style={{ background:'rgba(16, 185, 129, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(16, 185, 129, 0.2)' }}>
+                <h4 style={{ color:'#10b981', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년')} 전체 누적 (올해)</h4>
+                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#6ee7b7' }}>매출액</span>
+                    <div style={{ textAlign:'right' }}>
+                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentYearAmt)}</span>
+                      {prevYearAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearAmt >= prevYearAmt ? '#34d399' : '#ef4444' }}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</span>}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#6ee7b7' }}>주문건수</span>
+                    <div style={{ textAlign:'right' }}>
+                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentYearPpl.toLocaleString()} 건</span>
+                      {prevYearPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearPpl >= prevYearPpl ? '#34d399' : '#ef4444' }}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</span>}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="pkg-chart-panel">
-              <h3>⏳ 예약 리드타임 분석 (마케팅 타점)</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={leadTimeChartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
-                    <XAxis dataKey="name" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Bar dataKey="예약건수" fill="#f59e0b" radius={[6, 6, 0, 0]}>
-                      {leadTimeChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (방문일 기준, {format(currentMonth, 'MM')}월)</h3>
+            <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
+              <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
+                <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
+                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#94a3b8' }}>매출액</span>
+                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevAmt)}</span>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#94a3b8' }}>주문건수</span>
+                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevPpl.toLocaleString()} 건</span>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div className="pkg-chart-panel">
-              <h3>💰 회원/비회원 객단가 비교 (ARPPU)</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={memberChartData} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
-                    <YAxis type="category" dataKey="name" stroke="#94a3b8" />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Bar dataKey="arppu" name="평균객단가" radius={[0, 6, 6, 0]}>
-                      {memberChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#ec4899' : '#8b5cf6'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="pkg-chart-panel">
-              <h3>🏆 상품별 매출 현황 (Top 10)</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={packageChartData.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
-                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={140} tick={{fontSize: 12, fill: '#f8fafc'}} />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Bar dataKey="revenue" fill="#8b5cf6" name="매출" radius={[0, 6, 6, 0]}>
-                      {packageChartData.slice(0, 10).map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="pkg-chart-panel">
-              <h3>🧩 패키지 세부 구성품 선호도 (매출 기여도)</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={componentChartData} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                    <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
-                    <YAxis type="category" dataKey="name" stroke="#94a3b8" width={120} tick={{fontSize: 12}} />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Bar dataKey="revenue" fill="#14b8a6" name="매출" radius={[0, 6, 6, 0]}>
-                      {componentChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="pkg-chart-panel" style={{ gridColumn: '1 / -1' }}>
-              <h3>🔥 방문 요일별 상품 선호도 히트맵 (Top 8)</h3>
-              <div className="heatmap-container">
-                <div className="heatmap-grid">
-                  <div className="heatmap-header-cell">상품명 \ 요일</div>
-                  {dayNames.map(day => <div key={day} className="heatmap-header-cell">{day}</div>)}
-                  
-                  {topPackagesForHeatmap.map(pkg => (
-                    <React.Fragment key={pkg}>
-                      <div className="heatmap-row-header">{pkg}</div>
-                      {dayNames.map(day => {
-                        const count = heatMapData[pkg]?.[day] || 0;
-                        // Calculate color intensity (0 to 1) based on max count
-                        // Assuming max count is roughly 50 for color scaling, cap at 1
-                        const intensity = Math.min(count / 20, 1);
-                        const bgOpacity = count > 0 ? 0.2 + (intensity * 0.8) : 0.05;
-                        return (
-                          <div 
-                            key={`${pkg}-${day}`} 
-                            className="heatmap-cell"
-                            style={{ 
-                              backgroundColor: `rgba(239, 68, 68, ${bgOpacity})`,
-                              color: count > 0 ? '#fff' : '#64748b'
-                            }}
-                          >
-                            {count}건
-                          </div>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
+              <div className="dash-column current" style={{ background:'rgba(59, 130, 246, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(59, 130, 246, 0.2)' }}>
+                <h4 style={{ color:'#3b82f6', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년 MM월')} (올해)</h4>
+                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#93c5fd' }}>매출액</span>
+                    <div style={{ textAlign:'right' }}>
+                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentAmt)}</span>
+                      {prevAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentAmt >= prevAmt ? '#3b82f6' : '#ef4444' }}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</span>}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                    <span style={{ color:'#93c5fd' }}>주문건수</span>
+                    <div style={{ textAlign:'right' }}>
+                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentPpl.toLocaleString()} 건</span>
+                      {prevPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentPpl >= prevPpl ? '#3b82f6' : '#ef4444' }}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</span>}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+
+          {renderCalendar()}
         </div>
       )}
     </div>
   );
 };
-
 export default PackageSalesDashboard;

@@ -260,6 +260,126 @@
   z-index: 10;
 }
 
+/* Calendar Styles matching WaterParkSales */
+.cal-grid {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cal-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.cal-row:last-child {
+  border-bottom: none;
+}
+
+.cal-cell {
+  min-height: 120px;
+  border-right: 1px solid rgba(255,255,255,0.05);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-cell:last-child {
+  border-right: none;
+}
+
+.cal-cell.disabled {
+  background-color: rgba(255,255,255,0.02);
+  opacity: 0.4;
+}
+
+.cal-cell-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cal-date {
+  font-weight: 700;
+  color: #e2e8f0;
+  font-size: 1.1rem;
+}
+
+.cal-date.red-day {
+  color: #ef4444;
+}
+
+.cal-date.blue-day {
+  color: #3b82f6;
+}
+
+.cal-data-box {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cal-data-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.cal-data-row .year-label {
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.cal-data-row.current .year-label {
+  background: #10b981;
+  color: white;
+}
+
+.cal-data-row.prev .year-label {
+  background: #64748b;
+  color: white;
+}
+
+.cal-data-row .amt {
+  font-weight: 800;
+  color: #f8fafc;
+  flex: 1;
+}
+
+.cal-data-row .qty {
+  color: #94a3b8;
+}
+
+.cal-yoy-bar {
+  text-align: right;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.cal-yoy-bar.up {
+  color: #ef4444;
+}
+
+.cal-yoy-bar.down {
+  color: #3b82f6;
+}
+
+.cal-yoy-bar.empty {
+  color: #64748b;
+  font-weight: 400;
+}
+
 @media (max-width: 768px) {
   .pkg-charts-grid {
     grid-template-columns: 1fr;
