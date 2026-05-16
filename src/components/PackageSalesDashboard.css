@@ -29,46 +29,58 @@
   font-size: 1.1rem;
 }
 
-.pkg-upload-card {
+.pkg-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+  padding: 1.5rem 2rem;
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(12px);
-  padding: 3rem 2rem;
   border-radius: 16px;
-  border: 2px dashed rgba(255, 255, 255, 0.15);
-  text-align: center;
-  margin-bottom: 2.5rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.pkg-upload-card:hover {
-  border-color: #60a5fa;
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-2px);
-}
-
-.pkg-upload-btn {
-  display: inline-block;
-  padding: 1.2rem 2.5rem;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+.pkg-refresh-btn {
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   border-radius: 12px;
   font-weight: 800;
   font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
   border: none;
+  transition: all 0.3s;
+  box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
 }
 
-.pkg-upload-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
+.pkg-refresh-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
 }
 
-.pkg-upload-help {
-  margin-top: 1.5rem;
-  color: #64748b;
+.pkg-refresh-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pkg-upload-btn-small {
+  display: inline-block;
+  padding: 0.8rem 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  border-radius: 8px;
+  font-weight: 600;
   font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pkg-upload-btn-small:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
 }
 
 .pkg-content {

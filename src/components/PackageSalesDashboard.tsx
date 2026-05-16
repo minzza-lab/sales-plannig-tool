@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { supabase } from '../lib/supabase';
 import './PackageSalesDashboard.css';
 
 import {
@@ -44,6 +45,45 @@ const PackageSalesDashboard: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
+
+  useEffect(() => {
+    fetchFromSupabase();
+  }, []);
+
+  const fetchFromSupabase = async () => {
+    setIsProcessing(true);
+    try {
+      const { data: dbData, error } = await supabase
+        .from('package_orders')
+        .select('*');
+        
+      if (error) throw error;
+      
+      if (dbData && dbData.length > 0) {
+        const formatted: PackageOrder[] = dbData.map(d => ({
+          orderId: d.order_id,
+          channel: d.channel || '',
+          packageType: d.package_type || '',
+          rawPackageName: d.raw_package_name || '',
+          normalizedPackageName: d.normalized_package_name || '',
+          reservationDate: d.reservation_date || '',
+          components: d.components || '',
+          memberType: d.member_type || '',
+          paymentMethod: d.payment_method || '',
+          orderAmount: Number(d.order_amount) || 0,
+          paymentAmount: Number(d.payment_amount) || 0,
+          status: d.status || '',
+          orderDate: d.order_date || ''
+        }));
+        
+        setData(formatted);
+      }
+    } catch (e) {
+      console.error('Failed to fetch from Supabase', e);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -189,15 +229,19 @@ const PackageSalesDashboard: React.FC = () => {
     <div className="pkg-dashboard-container animate-fade-in">
       <div className="pkg-header">
         <h1>📦 패키지 판매 현황 대시보드</h1>
-        <p>WADM 패키지 주문관리 엑셀 파일을 업로드하여 판매 추이를 분석합니다.</p>
+        <p>크롤러 봇이 실시간으로 수집한 Supabase 데이터를 바탕으로 판매 추이를 분석합니다.</p>
       </div>
 
-      <div className="pkg-upload-card">
-        <label className="pkg-upload-btn">
-          <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} hidden />
-          <span>{isProcessing ? '데이터 분석 중...' : '📊 패키지 엑셀 데이터 업로드'}</span>
-        </label>
-        <p className="pkg-upload-help">다운로드 받은 엑셀 파일을 그대로 올려주세요. (자동으로 결제완료 건만 분석하고, 날짜가 포함된 파생 상품명은 대표 상품명으로 자동 통합됩니다.)</p>
+      <div className="pkg-actions-bar">
+         <button onClick={fetchFromSupabase} className="pkg-refresh-btn" disabled={isProcessing}>
+           {isProcessing ? '🔄 데이터 불러오는 중...' : '🔄 최신 DB 데이터 새로고침'}
+         </button>
+         <div style={{ marginLeft: 'auto' }}>
+           <label className="pkg-upload-btn-small">
+             <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} hidden />
+             <span>📤 수동 엑셀 업로드 (백업용)</span>
+           </label>
+         </div>
       </div>
 
       {data.length > 0 && (
