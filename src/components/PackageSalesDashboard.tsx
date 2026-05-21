@@ -251,6 +251,17 @@ const PackageSalesDashboard: React.FC = () => {
   });
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
+
+  const extractCleanDate = (reservationDate: string, orderDate: string) => {
+    const targetD = reservationDate || (orderDate ? orderDate.split('T')[0].split(' ')[0] : '');
+    const rDate = targetD.replace(/\s/g, '').replace(/\./g, '-').replace(/\//g, '-');
+    const trimmedDate = rDate.replace(/-+$/, '');
+    if (trimmedDate.length === 8 && !trimmedDate.includes('-')) {
+      return `${trimmedDate.slice(0,4)}-${trimmedDate.slice(4,6)}-${trimmedDate.slice(6,8)}`;
+    }
+    return trimmedDate;
+  };
+
   const getCumulativeStats = () => {
     let currentAmt = 0; let currentPpl = 0;
     let prevAmt = 0; let prevPpl = 0;
@@ -264,11 +275,7 @@ const PackageSalesDashboard: React.FC = () => {
     
     filteredData.forEach(r => {
       // Use reservationDate for grouping. Fallback to orderDate
-      const targetD = r.reservationDate || r.orderDate.split(' ')[0];
-      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
-      let cleanDate = '';
-      if (rDate.length === 8) cleanDate = `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}`;
-      else cleanDate = rDate;
+      const cleanDate = extractCleanDate(r.reservationDate, r.orderDate);
 
       if (cleanDate.startsWith(targetPrefix)) {
         currentAmt += r.paymentAmount;
@@ -309,9 +316,7 @@ const PackageSalesDashboard: React.FC = () => {
         let prevDispAmt = 0; let prevDispQty = 0;
 
         filteredData.forEach(d => {
-          const targetD = d.reservationDate || d.orderDate.split(' ')[0];
-          const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
-          let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
+          const cleanDate = extractCleanDate(d.reservationDate, d.orderDate);
           
           if (cleanDate === dateStr) {
             currentDispAmt += d.paymentAmount;
@@ -425,11 +430,8 @@ const PackageSalesDashboard: React.FC = () => {
     if (!selectedDate) return null;
     
     // Filter data for the specific day
-    const dayData = data.filter(d => {
-      const targetD = d.reservationDate || d.orderDate.split(' ')[0];
-      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
-      let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
-      return cleanDate === selectedDate;
+    const dayData = filteredData.filter(d => {
+      return extractCleanDate(d.reservationDate, d.orderDate) === selectedDate;
     });
 
     const dayRevenue = dayData.reduce((sum, d) => sum + d.paymentAmount, 0);
@@ -526,10 +528,7 @@ const PackageSalesDashboard: React.FC = () => {
   const renderMonthlyOrderList = () => {
     const targetPrefix = format(currentMonth, 'yyyy-MM');
     const monthData = filteredData.filter(d => {
-      const targetD = d.reservationDate || d.orderDate.split(' ')[0];
-      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
-      let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
-      return cleanDate.startsWith(targetPrefix);
+      return extractCleanDate(d.reservationDate, d.orderDate).startsWith(targetPrefix);
     });
     
     // sorting by orderDate descending
