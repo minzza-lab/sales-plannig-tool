@@ -59,16 +59,36 @@ const SeasonPassTracker: React.FC = () => {
         .from('season_pass_baseline')
         .select('*');
       
-      const { data: orderData, error: orderError } = await supabase
-        .from('season_pass_orders')
-        .select('*')
-        .order('order_date', { ascending: false });
+      let allOrders: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: orderDataChunk, error: orderError } = await supabase
+          .from('season_pass_orders')
+          .select('*')
+          .order('order_date', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (orderError) throw orderError;
+
+        if (orderDataChunk && orderDataChunk.length > 0) {
+          allOrders = [...allOrders, ...orderDataChunk];
+          if (orderDataChunk.length < step) {
+            hasMore = false;
+          } else {
+            from += step;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
 
       if (baselineError) throw baselineError;
-      if (orderError) throw orderError;
 
       setBaselines(baselineData || []);
-      setOrders(orderData || []);
+      setOrders(allOrders);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {

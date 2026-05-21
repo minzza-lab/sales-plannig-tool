@@ -83,6 +83,64 @@ const PackageSalesDashboard: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsProcessing(true);
+      try {
+        let allData: any[] = [];
+        let from = 0;
+        const step = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data: dbData, error } = await supabase
+            .from('package_orders')
+            .select('*')
+            .order('order_date', { ascending: false })
+            .range(from, from + step - 1);
+
+          if (error) throw error;
+          
+          if (dbData && dbData.length > 0) {
+            allData = [...allData, ...dbData];
+            if (dbData.length < step) {
+              hasMore = false;
+            } else {
+              from += step;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        if (allData.length > 0) {
+          const parsedData: PackageOrder[] = allData.map(d => ({
+            orderId: d.order_id,
+            channel: d.channel || '',
+            packageType: d.package_type || '',
+            rawPackageName: d.raw_package_name || '',
+            normalizedPackageName: d.normalized_package_name || '',
+            reservationDate: d.reservation_date || '',
+            components: d.components || '',
+            memberType: d.member_type || '',
+            paymentMethod: d.payment_method || '',
+            orderAmount: Number(d.order_amount) || 0,
+            paymentAmount: Number(d.payment_amount) || 0,
+            status: d.status || '',
+            orderDate: d.order_date || ''
+          }));
+          const validOrders = parsedData.filter(d => d.status.includes('결제완료') || d.status.includes('예약완료'));
+          setData(validOrders);
+        }
+      } catch (err) {
+        console.error('Error fetching package data:', err);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
