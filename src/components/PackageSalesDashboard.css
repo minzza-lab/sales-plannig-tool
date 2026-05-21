@@ -388,3 +388,57 @@
     flex-direction: column;
   }
 }
+
+
+/* New Detail View Styles */
+.pkg-monthly-list-btn {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+  padding: 8px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pkg-monthly-list-btn:hover {
+  background: rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+}
+.pkg-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.pkg-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 24px;
+}
+.pkg-card h3 {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  margin: 0 0 12px 0;
+}
+.pkg-card-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+.pkg-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+.cal-cell:hover {
+  background: rgba(255,255,255,0.1);
+  transform: scale(1.02);
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+

@@ -2,8 +2,24 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft, List, Calendar as CalendarIcon } from 'lucide-react';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Bar, Cell } from 'recharts';
 import './PackageSalesDashboard.css';
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#f8fafc' }}>
+        <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>{payload[0].payload.name}</p>
+        <p style={{ margin: 0, color: '#93c5fd' }}>매출: {payload[0].value.toLocaleString()}원</p>
+        <p style={{ margin: '4px 0 0 0', color: '#6ee7b7' }}>건수: {payload[0].payload.count}건</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 interface PackageOrder {
   orderId: string;
@@ -42,6 +58,8 @@ const PackageSalesDashboard: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
   const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showMonthlyList, setShowMonthlyList] = useState(false);
 
   useEffect(() => {
     fetchFromSupabase();
@@ -311,7 +329,17 @@ const PackageSalesDashboard: React.FC = () => {
         const isSaturday = day.getDay() === 6;
 
         days.push(
-          <div className={`cal-cell ${!isSameMonth(day, monthStart) ? 'disabled' : ''}`} key={day.toString()}>
+          <div 
+            className={`cal-cell ${!isSameMonth(day, monthStart) ? 'disabled' : ''}`} 
+            key={day.toString()}
+            onClick={() => {
+              if (isSameMonth(day, monthStart) && (hasCurrentData || hasPrevData)) {
+                setSelectedDate(dateStr);
+                setShowMonthlyList(false);
+              }
+            }}
+            style={{ cursor: (isSameMonth(day, monthStart) && (hasCurrentData || hasPrevData)) ? 'pointer' : 'default' }}
+          >
             <div className="cal-cell-header">
               <span className={`cal-date ${isSunday ? 'red-day' : ''} ${isSaturday ? 'blue-day' : ''}`}>{format(day, "d")}</span>
             </div>
@@ -362,10 +390,22 @@ const PackageSalesDashboard: React.FC = () => {
 
     return (
       <div className="calendar-container animate-fade-in">
-        <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '16px', gap: '16px' }}>
+        <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '16px', gap: '16px', position: 'relative' }}>
           <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} style={{background:'transparent', border:'none', cursor:'pointer', color:'#f8fafc'}}><ChevronLeft size={32}/></button>
           <h2 style={{margin:0, fontSize:'1.8rem', color:'#f8fafc'}}>{format(currentMonth, 'yyyy년 MM월')}</h2>
           <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} style={{background:'transparent', border:'none', cursor:'pointer', color:'#f8fafc'}}><ChevronRight size={32}/></button>
+          
+          <button 
+            className="pkg-monthly-list-btn"
+            onClick={() => {
+              setShowMonthlyList(true);
+              setSelectedDate(null);
+            }}
+            style={{ position: 'absolute', right: 0 }}
+          >
+            <List size={18} style={{marginRight: '8px'}}/>
+            월별 전체 내역 관리
+          </button>
         </div>
         <div className="cal-grid">
           <div className="cal-days-header" style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', textAlign:'center', padding:'10px 0', fontWeight:700, color:'#94a3b8', background:'rgba(0,0,0,0.2)', borderRadius:'12px 12px 0 0' }}>
@@ -380,6 +420,171 @@ const PackageSalesDashboard: React.FC = () => {
   const uniquePackages = Array.from(new Set(data.map(d => d.normalizedPackageName))).sort();
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
+
+  const renderDetailView = () => {
+    if (!selectedDate) return null;
+    
+    // Filter data for the specific day
+    const dayData = data.filter(d => {
+      const targetD = d.reservationDate || d.orderDate.split(' ')[0];
+      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
+      let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
+      return cleanDate === selectedDate;
+    });
+
+    const dayRevenue = dayData.reduce((sum, d) => sum + d.paymentAmount, 0);
+    const dayOrders = dayData.length;
+
+    // Group by package
+    const packageSales = dayData.reduce((acc, d) => {
+      const key = d.normalizedPackageName;
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0 };
+      acc[key].count += 1;
+      acc[key].revenue += d.paymentAmount;
+      return acc;
+    }, {} as Record<string, {name: string, count: number, revenue: number}>);
+    const dayPackageChartData = Object.values(packageSales).sort((a, b) => b.revenue - a.revenue);
+
+    return (
+      <div className="pkg-detail-view animate-fade-in">
+        <div className="pkg-detail-header" style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
+          <button onClick={() => setSelectedDate(null)} className="pkg-back-btn" style={{ display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem', marginRight: '16px' }}>
+            <ArrowLeft size={20} style={{ marginRight: '8px' }}/> 돌아가기
+          </button>
+          <h2 style={{ margin: 0, color: '#f8fafc' }}>{selectedDate} 패키지 판매 상세 내역</h2>
+        </div>
+
+        <div className="pkg-summary-cards" style={{ marginBottom: '32px' }}>
+          <div className="pkg-card">
+            <h3>해당 일자 주문 건수</h3>
+            <div className="pkg-card-value">{dayOrders.toLocaleString()}건</div>
+          </div>
+          <div className="pkg-card">
+            <h3>해당 일자 결제 금액 (매출)</h3>
+            <div className="pkg-card-value text-primary">{dayRevenue.toLocaleString()}원</div>
+          </div>
+          <div className="pkg-card">
+            <h3>판매된 상품 종류</h3>
+            <div className="pkg-card-value">{dayPackageChartData.length}개</div>
+          </div>
+        </div>
+        
+        {dayPackageChartData.length > 0 && (
+          <div className="pkg-chart-panel" style={{ marginBottom: '32px' }}>
+            <h3>🏆 일일 상품별 매출 현황</h3>
+            <div className="chart-wrapper">
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={dayPackageChartData.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
+                  <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
+                  <YAxis type="category" dataKey="name" stroke="#94a3b8" width={140} tick={{fontSize: 12, fill: '#f8fafc'}} />
+                  <RechartsTooltip content={<CustomTooltip />} />
+                  <Bar dataKey="revenue" fill="#8b5cf6" name="매출" radius={[0, 6, 6, 0]}>
+                    {dayPackageChartData.slice(0, 10).map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>📋 일일 주문 목록</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+              <thead>
+                <tr style={{ background: 'rgba(0, 0, 0, 0.2)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px' }}>주문번호</th>
+                  <th style={{ padding: '12px 16px' }}>채널</th>
+                  <th style={{ padding: '12px 16px' }}>상품명</th>
+                  <th style={{ padding: '12px 16px' }}>예약일</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제금액</th>
+                  <th style={{ padding: '12px 16px' }}>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayData.map((order, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '0.9rem' }}>{order.orderId}</td>
+                    <td style={{ padding: '12px 16px' }}>{order.channel}</td>
+                    <td style={{ padding: '12px 16px', color: '#f8fafc' }}>{order.rawPackageName}</td>
+                    <td style={{ padding: '12px 16px' }}>{order.reservationDate}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold' }}>{order.paymentAmount.toLocaleString()}원</td>
+                    <td style={{ padding: '12px 16px' }}><span className="pkg-status-badge">{order.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMonthlyOrderList = () => {
+    const targetPrefix = format(currentMonth, 'yyyy-MM');
+    const monthData = filteredData.filter(d => {
+      const targetD = d.reservationDate || d.orderDate.split(' ')[0];
+      const rDate = targetD.replace(/\./g, '-').replace(/\//g, '-');
+      let cleanDate = rDate.length === 8 ? `${rDate.slice(0,4)}-${rDate.slice(4,6)}-${rDate.slice(6,8)}` : rDate;
+      return cleanDate.startsWith(targetPrefix);
+    });
+    
+    // sorting by orderDate descending
+    monthData.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+
+    return (
+      <div className="pkg-detail-view animate-fade-in">
+        <div className="pkg-detail-header" style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
+          <button onClick={() => setShowMonthlyList(false)} className="pkg-back-btn" style={{ display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem', marginRight: '16px' }}>
+            <CalendarIcon size={20} style={{ marginRight: '8px' }}/> 달력으로 돌아가기
+          </button>
+          <h2 style={{ margin: 0, color: '#f8fafc' }}>{format(currentMonth, 'yyyy년 MM월')} 월간 전체 주문내역</h2>
+        </div>
+
+        <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📋 전체 주문 목록 ({monthData.length.toLocaleString()}건)</span>
+          </h3>
+          <div style={{ overflowX: 'auto', maxHeight: '700px', overflowY: 'auto' }}>
+            <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr style={{ background: 'rgba(15, 23, 42, 0.95)', textAlign: 'left', backdropFilter: 'blur(8px)' }}>
+                  <th style={{ padding: '12px 16px' }}>주문일시</th>
+                  <th style={{ padding: '12px 16px' }}>주문번호</th>
+                  <th style={{ padding: '12px 16px' }}>채널</th>
+                  <th style={{ padding: '12px 16px' }}>상품명</th>
+                  <th style={{ padding: '12px 16px' }}>예약일</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제금액</th>
+                  <th style={{ padding: '12px 16px' }}>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthData.map((order, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#94a3b8' }}>{order.orderDate}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.9rem' }}>{order.orderId}</td>
+                    <td style={{ padding: '12px 16px' }}>{order.channel}</td>
+                    <td style={{ padding: '12px 16px', color: '#f8fafc' }}>{order.rawPackageName}</td>
+                    <td style={{ padding: '12px 16px' }}>{order.reservationDate}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold' }}>{order.paymentAmount.toLocaleString()}원</td>
+                    <td style={{ padding: '12px 16px' }}><span className="pkg-status-badge">{order.status}</span></td>
+                  </tr>
+                ))}
+                {monthData.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>해당 월에 주문 내역이 없습니다.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="pkg-dashboard-container animate-fade-in">
@@ -402,98 +607,106 @@ const PackageSalesDashboard: React.FC = () => {
 
       {data.length > 0 && (
         <div className="pkg-content">
-          <div className="pkg-filters">
-            <div className="filter-group">
-              <label>상품별 조회 (통합됨)</label>
-              <select value={selectedPackage} onChange={(e) => setSelectedPackage(e.target.value)}>
-                <option value="all">전체 상품</option>
-                {uniquePackages.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            <div className="filter-group">
-              <label>상품 구성별 조회</label>
-              <select value={selectedComponent} onChange={(e) => setSelectedComponent(e.target.value)}>
-                <option value="all">전체 구성</option>
-                {availableComponents.map(c => <option key={c} value={c}>{c} 포함 상품</option>)}
-              </select>
-            </div>
-          </div>
+          {selectedDate ? (
+            renderDetailView()
+          ) : showMonthlyList ? (
+            renderMonthlyOrderList()
+          ) : (
+            <>
+              <div className="pkg-filters">
+                <div className="filter-group">
+                  <label>상품별 조회 (통합됨)</label>
+                  <select value={selectedPackage} onChange={(e) => setSelectedPackage(e.target.value)}>
+                    <option value="all">전체 상품</option>
+                    {uniquePackages.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label>상품 구성별 조회</label>
+                  <select value={selectedComponent} onChange={(e) => setSelectedComponent(e.target.value)}>
+                    <option value="all">전체 구성</option>
+                    {availableComponents.map(c => <option key={c} value={c}>{c} 포함 상품</option>)}
+                  </select>
+                </div>
+              </div>
 
-          <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
-            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
-            <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
-              <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
-                <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
-                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#94a3b8' }}>매출액</span>
-                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevYearAmt)}</span>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#94a3b8' }}>주문건수</span>
-                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevYearPpl.toLocaleString()} 건</span>
-                  </div>
-                </div>
-              </div>
-              <div className="dash-column current" style={{ background:'rgba(16, 185, 129, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(16, 185, 129, 0.2)' }}>
-                <h4 style={{ color:'#10b981', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년')} 전체 누적 (올해)</h4>
-                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#6ee7b7' }}>매출액</span>
-                    <div style={{ textAlign:'right' }}>
-                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentYearAmt)}</span>
-                      {prevYearAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearAmt >= prevYearAmt ? '#34d399' : '#ef4444' }}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</span>}
+              <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
+                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
+                <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
+                  <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
+                    <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#94a3b8' }}>매출액</span>
+                        <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevYearAmt)}</span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#94a3b8' }}>주문건수</span>
+                        <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevYearPpl.toLocaleString()} 건</span>
+                      </div>
                     </div>
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#6ee7b7' }}>주문건수</span>
-                    <div style={{ textAlign:'right' }}>
-                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentYearPpl.toLocaleString()} 건</span>
-                      {prevYearPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearPpl >= prevYearPpl ? '#34d399' : '#ef4444' }}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</span>}
+                  <div className="dash-column current" style={{ background:'rgba(16, 185, 129, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(16, 185, 129, 0.2)' }}>
+                    <h4 style={{ color:'#10b981', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년')} 전체 누적 (올해)</h4>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#6ee7b7' }}>매출액</span>
+                        <div style={{ textAlign:'right' }}>
+                          <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentYearAmt)}</span>
+                          {prevYearAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearAmt >= prevYearAmt ? '#34d399' : '#ef4444' }}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</span>}
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(16, 185, 129, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#6ee7b7' }}>주문건수</span>
+                        <div style={{ textAlign:'right' }}>
+                          <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentYearPpl.toLocaleString()} 건</span>
+                          {prevYearPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentYearPpl >= prevYearPpl ? '#34d399' : '#ef4444' }}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</span>}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'MM')}월)</h3>
-            <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
-              <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
-                <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
-                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#94a3b8' }}>매출액</span>
-                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevAmt)}</span>
+                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'MM')}월)</h3>
+                <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
+                  <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
+                    <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#94a3b8' }}>매출액</span>
+                        <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{formatCurrency(prevAmt)}</span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#94a3b8' }}>주문건수</span>
+                        <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevPpl.toLocaleString()} 건</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#94a3b8' }}>주문건수</span>
-                    <span style={{ fontWeight:700, fontSize:'1.1rem' }}>{prevPpl.toLocaleString()} 건</span>
+                  <div className="dash-column current" style={{ background:'rgba(59, 130, 246, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <h4 style={{ color:'#3b82f6', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년 MM월')} (올해)</h4>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#93c5fd' }}>매출액</span>
+                        <div style={{ textAlign:'right' }}>
+                          <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentAmt)}</span>
+                          {prevAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentAmt >= prevAmt ? '#3b82f6' : '#ef4444' }}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</span>}
+                        </div>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
+                        <span style={{ color:'#93c5fd' }}>주문건수</span>
+                        <div style={{ textAlign:'right' }}>
+                          <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentPpl.toLocaleString()} 건</span>
+                          {prevPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentPpl >= prevPpl ? '#3b82f6' : '#ef4444' }}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</span>}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="dash-column current" style={{ background:'rgba(59, 130, 246, 0.05)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(59, 130, 246, 0.2)' }}>
-                <h4 style={{ color:'#3b82f6', marginBottom:'16px' }}>{format(currentMonth, 'yyyy년 MM월')} (올해)</h4>
-                <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#93c5fd' }}>매출액</span>
-                    <div style={{ textAlign:'right' }}>
-                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{formatCurrency(currentAmt)}</span>
-                      {prevAmt > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentAmt >= prevAmt ? '#3b82f6' : '#ef4444' }}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</span>}
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(59, 130, 246, 0.1)', padding:'12px 16px', borderRadius:'8px' }}>
-                    <span style={{ color:'#93c5fd' }}>주문건수</span>
-                    <div style={{ textAlign:'right' }}>
-                      <span style={{ fontWeight:800, fontSize:'1.2rem', color:'#fff' }}>{currentPpl.toLocaleString()} 건</span>
-                      {prevPpl > 0 && <span style={{ display:'block', fontSize:'0.85rem', color: currentPpl >= prevPpl ? '#3b82f6' : '#ef4444' }}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          {renderCalendar()}
+              {renderCalendar()}
+            </>
+          )}
         </div>
       )}
     </div>
