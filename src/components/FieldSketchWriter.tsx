@@ -215,7 +215,8 @@ const FieldSketchWriter: React.FC = () => {
 
       const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash-latest"];
       let success = false;
-
+      let lastErrorMessage = '';
+ 
       for (const modelName of modelsToTry) {
         try {
           const response = await fetch(
@@ -228,11 +229,15 @@ const FieldSketchWriter: React.FC = () => {
               }),
             }
           );
-
+ 
           const data = await response.json();
           if (response.ok) {
             let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            
+            if (!text) {
+              lastErrorMessage = `${modelName}: candidates가 비어있거나 응답 텍스트가 없습니다.`;
+              continue;
+            }
+             
             for (let i = 0; i < selectedFiles.length; i++) {
               const placeholder = `[IMG_DATA_${i}]`;
               if (text.includes(placeholder)) {
@@ -246,11 +251,16 @@ const FieldSketchWriter: React.FC = () => {
             setHtmlResult(text);
             success = true;
             break;
+          } else {
+            lastErrorMessage = `${modelName} 에러: ${data.error?.message || response.statusText} (${response.status})`;
           }
-        } catch (inner) { continue; }
+        } catch (inner: any) {
+          lastErrorMessage = `${modelName} 통신 오류: ${inner.message}`;
+          continue;
+        }
       }
 
-      if (!success) throw new Error('AI 모델 응답 실패');
+      if (!success) throw new Error(lastErrorMessage || 'AI 모델 응답 실패');
     } catch (err: any) {
       setError(`오류: ${err.message}`);
     } finally { setIsLoading(false); }
