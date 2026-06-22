@@ -1,20 +1,19 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import * as XLSX from 'xlsx';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, Label, LabelList
 } from 'recharts';
 import { 
-  UploadCloud, FileSpreadsheet, Activity, DollarSign, Users, AlertCircle, 
+  FileSpreadsheet, Activity, DollarSign, Users, 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft,
-  Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, Thermometer, Save
+  Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, Thermometer
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './WaterParkSales.css';
 
-type ReportType = 'CUSTOMER_TYPE' | 'HOURLY_SALES' | 'RATE_ZONE' | 'UNKNOWN';
+type ReportType = 'CUSTOMER_TYPE' | 'HOURLY_SALES' | 'RATE_ZONE' | 'REALTIME_SALES' | 'UNKNOWN';
 
 interface WeatherData {
   temp: number;
@@ -61,11 +60,9 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
 
 const WaterParkSales: React.FC = () => {
   const [reports, setReports] = useState<ParsedReport[]>([]);
-  const [stagedReports, setStagedReports] = useState<ParsedReport[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
+  const [summaryViewMode, setSummaryViewMode] = useState<'ADMISSION' | 'TOTAL'>('ADMISSION');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<ReportType | null>(null);
   const [weatherMap, setWeatherMap] = useState<Record<string, WeatherData>>({});
   const [detailSearchTerm, setDetailSearchTerm] = useState('');
@@ -186,166 +183,6 @@ const WaterParkSales: React.FC = () => {
     if (type === 'RATE_ZONE') return '요금대별 발권 현황';
     return '분석 보고서';
   };
-
-  const detectReportType = (json: any[][]): ReportType => {
-    if (!json || json.length === 0) return 'UNKNOWN';
-    const headerRow = json[0] || [];
-    if (headerRow.includes('고객유형(대)')) return 'CUSTOMER_TYPE';
-    if (headerRow.includes('영업장명')) return 'HOURLY_SALES';
-    if (headerRow.includes('영업일자') || headerRow.includes('상품명')) return 'RATE_ZONE';
-    return 'UNKNOWN';
-  };
-
-  const parseCustomerType = (json: any[][]): Partial<ParsedReport> => {
-    const validRows = json.slice(3).filter(row => row[3] && !row[1]?.includes('계') && !row[0]?.includes('계'));
-    const chartData = validRows.map(row => ({
-      name: String(row[3]).substring(0, 15) + (String(row[3]).length > 15 ? '...' : ''),
-      fullName: row[3], quantity: Number(row[4]) || 0, amount: Number(row[5]) || 0,
-    })).sort((a, b) => b.amount - a.amount).slice(0, 10);
-
-    return {
-      type: 'CUSTOMER_TYPE', title: getTitleByType('CUSTOMER_TYPE'),
-      summary: { totalAmount: validRows.reduce((sum, row) => sum + (Number(row[5]) || 0), 0), totalQty: validRows.reduce((sum, row) => sum + (Number(row[4]) || 0), 0), label: '총 매출(원)', qtyLabel: '총 발권수' },
-      chartData, tableData: validRows.map(row => ({ category: row[1], name: row[3], quantity: row[4], amount: row[5] }))
-    };
-  };
-
-  const parseHourlySales = (json: any[][]): Partial<ParsedReport> => {
-    let currentCategory = '';
-    const enrichedRows = json.slice(3).map(row => {
-      if (row[0]) currentCategory = row[0];
-      return {
-        category: currentCategory,
-        code: String(row[1] || ''),
-        name: String(row[2] || ''),
-        quantity: Number(row[3]) || 0,
-        amount: Number(row[4]) || 0
-      };
-    }).filter(r => r.name && !r.code.includes('합계') && !r.name.includes('합계'));
-
-    // 매표소(입장권) 매출은 다른 탭(요금대별)에서 보므로 상품매출에서는 제외
-    const validRows = enrichedRows.filter(r => r.category !== '매표소');
-
-    let totalAmount = 0, totalQty = 0;
-    const chartData = validRows.map(r => {
-      totalAmount += r.amount; totalQty += r.quantity;
-      return { name: r.name, amount: r.amount, quantity: r.quantity };
-    }).filter(d => d.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 8);
-
-    return {
-      type: 'HOURLY_SALES', title: getTitleByType('HOURLY_SALES'),
-      summary: { totalAmount, totalQty, label: '상품/식음 매출총액', qtyLabel: '총 판매수량' },
-      chartData, tableData: validRows
-    };
-  };
-
-  const parseRateZone = (json: any[][]): Partial<ParsedReport> => {
-    const validRows = json.slice(3).filter(row => row[1] && row[1] !== '일 계' && !row[0]?.includes('합 계'));
-    let totalAmount = 0, totalQty = 0; const uniqueMap = new Map();
-    validRows.forEach(row => {
-      const name = String(row[1]).split('-')[1] || row[1];
-      if (!uniqueMap.has(name)) {
-        const r = [...row].reverse();
-        uniqueMap.set(name, { originalRow: row, name, amount: Number(r[0]) || 0, quantity: Number(r[1]) || 0 });
-      }
-    });
-
-    const chartData = Array.from(uniqueMap.values()).map(item => {
-      totalAmount += item.amount; totalQty += item.quantity;
-      return { name: item.name, amount: item.amount, quantity: item.quantity };
-    }).filter(d => d.amount > 0);
-
-    return {
-      type: 'RATE_ZONE', title: getTitleByType('RATE_ZONE'),
-      summary: { totalAmount, totalQty, label: '총 결제금액', qtyLabel: '총 발권수' },
-      chartData, tableData: Array.from(uniqueMap.values()).map(item => ({ category: '입장권', name: item.originalRow[1], quantity: item.quantity, amount: item.amount }))
-    };
-  };
-
-  const processFile = (file: File) => {
-    if (!selectedDate) return;
-    const targetDateStr = format(selectedDate, 'yyyy-MM-dd');
-    const dayWeather = weatherMap[targetDateStr];
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
-      const type = detectReportType(json);
-      
-      let parsedInfo: Partial<ParsedReport> = { type: 'UNKNOWN' };
-      if (type === 'CUSTOMER_TYPE') parsedInfo = parseCustomerType(json);
-      else if (type === 'HOURLY_SALES') parsedInfo = parseHourlySales(json);
-      else if (type === 'RATE_ZONE') parsedInfo = parseRateZone(json);
-
-      if (type !== 'UNKNOWN') {
-        if (dayWeather && parsedInfo.summary) {
-          parsedInfo.summary.weather = dayWeather;
-        }
-
-        const newReport: ParsedReport = {
-          id: Math.random().toString(36).substring(7),
-          report_date: targetDateStr,
-          ...parsedInfo
-        } as ParsedReport;
-
-        // DB에 즉시 저장하지 않고 Staging Area(임시대기)에 올림
-        setStagedReports(prev => {
-          const filtered = prev.filter(r => r.type !== newReport.type);
-          return [...filtered, newReport];
-        });
-        setActiveTab(newReport.type);
-      } else {
-        alert(`지원하지 않는 엑셀 양식입니다: ${file.name}`);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleSave = async () => {
-    if (stagedReports.length === 0) return;
-    setIsSaving(true);
-    try {
-      const upsertData = stagedReports.map(r => ({
-        report_date: r.report_date,
-        report_type: r.type,
-        data: {
-          summary: r.summary,
-          chart_data: r.chartData,
-          table_data: r.tableData
-        }
-      }));
-      const { error } = await supabase.from('daily_reports').upsert(upsertData, { onConflict: 'report_date, report_type' });
-      if (error) throw error;
-
-      setReports(prev => {
-        let next = [...prev];
-        stagedReports.forEach(sr => {
-          next = next.filter(r => !(r.report_date === sr.report_date && r.type === sr.type));
-          next.push(sr);
-        });
-        return next;
-      });
-      setStagedReports([]);
-    } catch (err) {
-      console.log('Save error', err);
-      alert('저장 중 오류가 발생했습니다. DB 권한 설정을 확인하세요.');
-    }
-    setIsSaving(false);
-  };
-
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files) {
-      Array.from(e.dataTransfer.files).forEach(file => {
-        if (file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) processFile(file);
-      });
-    }
-  }, [selectedDate, weatherMap]);
-
   const formatCurrency = (val: number) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
 
   const getCumulativeStats = () => {
@@ -360,22 +197,51 @@ const WaterParkSales: React.FC = () => {
     const prevYearPrefix = format(subMonths(currentMonth, 12), 'yyyy');
     
     reports.forEach(r => {
-      if (r.type === 'CUSTOMER_TYPE') {
-        if (r.report_date.startsWith(targetPrefix)) {
-          currentAmt += r.summary.totalAmount;
-          currentPpl += r.summary.totalQty;
-        } else if (r.report_date.startsWith(prevPrefix)) {
-          prevAmt += r.summary.totalAmount;
-          prevPpl += r.summary.totalQty;
+      let amt = 0;
+      let ppl = 0;
+
+      if (summaryViewMode === 'ADMISSION') {
+        if (r.type === 'CUSTOMER_TYPE') {
+          amt = r.summary.totalAmount;
+          ppl = r.summary.totalQty;
+        } else if (r.type === 'REALTIME_SALES') {
+          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          amt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+        } else {
+          return;
         }
-        
-        if (r.report_date.startsWith(targetYearPrefix)) {
-          currentYearAmt += r.summary.totalAmount;
-          currentYearPpl += r.summary.totalQty;
-        } else if (r.report_date.startsWith(prevYearPrefix)) {
-          prevYearAmt += r.summary.totalAmount;
-          prevYearPpl += r.summary.totalQty;
+      } else {
+        // 전체 매출 기준 (TOTAL)
+        if (r.type === 'CUSTOMER_TYPE') {
+          amt = r.summary.totalAmount;
+          ppl = r.summary.totalQty;
+        } else if (r.type === 'HOURLY_SALES') {
+          amt = r.summary.totalAmount;
+          ppl = 0; // 상품 개수는 인원수 집계에서 배제
+        } else if (r.type === 'REALTIME_SALES') {
+          amt = r.summary.totalAmount;
+          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+        } else {
+          return;
         }
+      }
+
+      if (r.report_date.startsWith(targetPrefix)) {
+        currentAmt += amt;
+        currentPpl += ppl;
+      } else if (r.report_date.startsWith(prevPrefix)) {
+        prevAmt += amt;
+        prevPpl += ppl;
+      }
+      
+      if (r.report_date.startsWith(targetYearPrefix)) {
+        currentYearAmt += amt;
+        currentYearPpl += ppl;
+      } else if (r.report_date.startsWith(prevYearPrefix)) {
+        prevYearAmt += amt;
+        prevYearPpl += ppl;
       }
     });
     return { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl };
@@ -401,14 +267,43 @@ const WaterParkSales: React.FC = () => {
     const prevEndStr = format(subMonths(end, 12), 'yyyy-MM-dd');
 
     reports.forEach(r => {
-      if (r.type === 'CUSTOMER_TYPE') {
-        if (r.report_date >= startStr && r.report_date <= endStr) {
-          currentAmt += r.summary.totalAmount;
-          currentPpl += r.summary.totalQty;
-        } else if (r.report_date >= prevStartStr && r.report_date <= prevEndStr) {
-          prevAmt += r.summary.totalAmount;
-          prevPpl += r.summary.totalQty;
+      let amt = 0;
+      let ppl = 0;
+
+      if (summaryViewMode === 'ADMISSION') {
+        if (r.type === 'CUSTOMER_TYPE') {
+          amt = r.summary.totalAmount;
+          ppl = r.summary.totalQty;
+        } else if (r.type === 'REALTIME_SALES') {
+          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          amt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+        } else {
+          return;
         }
+      } else {
+        // 전체 매출 기준 (TOTAL)
+        if (r.type === 'CUSTOMER_TYPE') {
+          amt = r.summary.totalAmount;
+          ppl = r.summary.totalQty;
+        } else if (r.type === 'HOURLY_SALES') {
+          amt = r.summary.totalAmount;
+          ppl = 0;
+        } else if (r.type === 'REALTIME_SALES') {
+          amt = r.summary.totalAmount;
+          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+        } else {
+          return;
+        }
+      }
+
+      if (r.report_date >= startStr && r.report_date <= endStr) {
+        currentAmt += amt;
+        currentPpl += ppl;
+      } else if (r.report_date >= prevStartStr && r.report_date <= prevEndStr) {
+        prevAmt += amt;
+        prevPpl += ppl;
       }
     });
 
@@ -432,30 +327,96 @@ const WaterParkSales: React.FC = () => {
         const dayReports = reports.filter(r => r.report_date === dateStr);
         const admissionReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE');
         const productReport = dayReports.find(r => r.type === 'HOURLY_SALES');
+        const realtimeReport = dayReports.find(r => r.type === 'REALTIME_SALES');
         const wInfo = weatherMap[dateStr];
 
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
         const prevAdmissionReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE');
         const prevProductReport = prevDayReports.find(r => r.type === 'HOURLY_SALES');
+        const prevRealtimeReport = prevDayReports.find(r => r.type === 'REALTIME_SALES');
         const prevWInfo = weatherMap[prevYearStr];
 
         let currentDispAmt = 0;
         let prevDispAmt = 0;
-        
-        if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
-          currentDispAmt += admissionReport?.summary?.totalAmount || 0;
-          prevDispAmt += prevAdmissionReport?.summary?.totalAmount || 0;
-        }
-        if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
-          currentDispAmt += productReport?.summary?.totalAmount || 0;
-          prevDispAmt += prevProductReport?.summary?.totalAmount || 0;
+        let currentDispQty = 0;
+        let prevDispQty = 0;
+
+        // 당해 데이터 연산
+        if (realtimeReport) {
+          const ticketItems = realtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          const ticketQty = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+          const productAmt = realtimeReport.summary.totalAmount - ticketAmt;
+
+          if (calendarViewMode === 'ADMISSION') {
+            currentDispAmt = ticketAmt;
+            currentDispQty = ticketQty;
+          } else if (calendarViewMode === 'PRODUCT') {
+            currentDispAmt = productAmt;
+            currentDispQty = 0;
+          } else {
+            currentDispAmt = realtimeReport.summary.totalAmount;
+            currentDispQty = ticketQty;
+          }
+        } else {
+          if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
+            currentDispAmt += admissionReport?.summary?.totalAmount || 0;
+            currentDispQty += admissionReport?.summary?.totalQty || 0;
+          }
+          if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
+            currentDispAmt += productReport?.summary?.totalAmount || 0;
+          }
         }
 
-        const hasCurrentData = !!admissionReport || !!productReport;
-        const hasPrevData = !!prevAdmissionReport || !!prevProductReport;
+        // 전년 데이터 연산
+        if (prevRealtimeReport) {
+          const ticketItems = prevRealtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          const ticketQty = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+          const productAmt = prevRealtimeReport.summary.totalAmount - ticketAmt;
+
+          if (calendarViewMode === 'ADMISSION') {
+            prevDispAmt = ticketAmt;
+            prevDispQty = ticketQty;
+          } else if (calendarViewMode === 'PRODUCT') {
+            prevDispAmt = productAmt;
+            prevDispQty = 0;
+          } else {
+            prevDispAmt = prevRealtimeReport.summary.totalAmount;
+            prevDispQty = ticketQty;
+          }
+        } else {
+          if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
+            prevDispAmt += prevAdmissionReport?.summary?.totalAmount || 0;
+            prevDispQty += prevAdmissionReport?.summary?.totalQty || 0;
+          }
+          if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
+            prevDispAmt += prevProductReport?.summary?.totalAmount || 0;
+          }
+        }
+
+        const hasCurrentData = !!admissionReport || !!productReport || !!realtimeReport;
+        const hasPrevData = !!prevAdmissionReport || !!prevProductReport || !!prevRealtimeReport;
         
-        const tooltipContent = `[올해]\n입장: ${(admissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(productReport?.summary?.totalAmount || 0).toLocaleString()}원\n\n[작년]\n입장: ${(prevAdmissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(prevProductReport?.summary?.totalAmount || 0).toLocaleString()}원`;
+        let tooltipContent = '';
+        if (realtimeReport) {
+          const ticketItems = realtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          const productAmt = realtimeReport.summary.totalAmount - ticketAmt;
+          tooltipContent += `[올해]\n입장: ${ticketAmt.toLocaleString()}원\n상품: ${productAmt.toLocaleString()}원`;
+        } else {
+          tooltipContent += `[올해]\n입장: ${(admissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(productReport?.summary?.totalAmount || 0).toLocaleString()}원`;
+        }
+
+        if (prevRealtimeReport) {
+          const ticketItems = prevRealtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+          const productAmt = prevRealtimeReport.summary.totalAmount - ticketAmt;
+          tooltipContent += `\n\n[작년]\n입장: ${ticketAmt.toLocaleString()}원\n상품: ${productAmt.toLocaleString()}원`;
+        } else {
+          tooltipContent += `\n\n[작년]\n입장: ${(prevAdmissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(prevProductReport?.summary?.totalAmount || 0).toLocaleString()}원`;
+        }
 
         const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
         const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -536,7 +497,7 @@ const WaterParkSales: React.FC = () => {
                   <div className="cal-data-row current">
                     <span className="year-label">올해</span>
                     <span className="amt">{(currentDispAmt / 10000).toFixed(0)}만</span>
-                    <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${admissionReport?.summary?.totalQty || 0}명`}</span>
+                    <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${currentDispQty}명`}</span>
                   </div>
                 ) : (
                   <div className="cal-data-row current" style={{ opacity: 0.5 }}>
@@ -554,7 +515,7 @@ const WaterParkSales: React.FC = () => {
                       <div className="cal-data-row prev">
                         <span className="year-label">작년</span>
                         <span className="amt">{(prevDispAmt / 10000).toFixed(0)}만</span>
-                        <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${prevAdmissionReport?.summary?.totalQty || 0}명`}</span>
+                        <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${prevDispQty}명`}</span>
                       </div>
                       {hasCurrentData && (
                         <div className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`}>
@@ -582,23 +543,41 @@ const WaterParkSales: React.FC = () => {
     return (
       <div className="calendar-container animate-fade-in">
         <div className="cumulative-dashboard">
+          {/* 집계 기준 선택 토글 탭 */}
+          <div className="summary-view-toggle" style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '30px', width: 'fit-content' }}>
+            <button 
+              className={`tab-button ${summaryViewMode === 'ADMISSION' ? 'active' : ''}`} 
+              onClick={() => setSummaryViewMode('ADMISSION')} 
+              style={{ padding: '8px 20px', fontSize: '13px', borderRadius: '20px', transition: 'all 0.2s', border: 'none', cursor: 'pointer', background: summaryViewMode === 'ADMISSION' ? '#3b82f6' : 'transparent', color: 'white', fontWeight: 700 }}
+            >
+              🎟️ 입장권 기준 집계
+            </button>
+            <button 
+              className={`tab-button ${summaryViewMode === 'TOTAL' ? 'active' : ''}`} 
+              onClick={() => setSummaryViewMode('TOTAL')} 
+              style={{ padding: '8px 20px', fontSize: '13px', borderRadius: '20px', transition: 'all 0.2s', border: 'none', cursor: 'pointer', background: summaryViewMode === 'TOTAL' ? '#f59e0b' : 'transparent', color: 'white', fontWeight: 700 }}
+            >
+              💰 전체 매출(상품 포함) 집계
+            </button>
+          </div>
+
           {/* 연간 누적 */}
-          <h3>🏆 연간 전체 누적 실적 비교 (입장권 발권 기준, {format(currentMonth, 'yyyy')}년)</h3>
+          <h3>🏆 연간 전체 누적 실적 비교 ({summaryViewMode === 'ADMISSION' ? '입장권 발권 기준' : '전체 매출 기준'}, {format(currentMonth, 'yyyy')}년)</h3>
           <div className="dash-compare-container" style={{ marginBottom: '24px' }}>
             {/* 전년도 연간 */}
             <div className="dash-column prev">
               <h4>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
               <div className="cum-cards">
                 <div className="cum-card">
-                  <span className="cum-label">입장 발권 매출액</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <span className="cum-value">{formatCurrency(prevYearAmt)}</span>
                 </div>
                 <div className="cum-card">
-                  <span className="cum-label">총 입장 발권수</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <span className="cum-value">{prevYearPpl.toLocaleString()} 명</span>
                 </div>
                 <div className="cum-card">
-                  <span className="cum-label">발권 평균 객단가</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                   <span className="cum-value">{prevYearPpl > 0 ? formatCurrency(Math.round(prevYearAmt/prevYearPpl)) : '0원'}</span>
                 </div>
               </div>
@@ -609,43 +588,43 @@ const WaterParkSales: React.FC = () => {
               <h4>{format(currentMonth, 'yyyy년')} 전체 누적 (올해)</h4>
               <div className="cum-cards">
                 <div className="cum-card highlight">
-                  <span className="cum-label">입장 발권 매출액</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <div className="cum-val-row">
                     <span className="cum-value">{formatCurrency(currentYearAmt)}</span>
                     {prevYearAmt > 0 && <span className={`dash-badge ${currentYearAmt >= prevYearAmt ? 'up' : 'down'}`}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</span>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
-                  <span className="cum-label">총 입장 발권수</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <div className="cum-val-row">
                     <span className="cum-value">{currentYearPpl.toLocaleString()} 명</span>
                     {prevYearPpl > 0 && <span className={`dash-badge ${currentYearPpl >= prevYearPpl ? 'up' : 'down'}`}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</span>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
-                  <span className="cum-label">발권 평균 객단가</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                   <span className="cum-value">{currentYearPpl > 0 ? formatCurrency(Math.round(currentYearAmt/currentYearPpl)) : '0원'}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <h3>📊 월간 영업 누적 실적 비교 (입장권 발권 기준, {format(currentMonth, 'MM')}월)</h3>
+          <h3>📊 월간 영업 누적 실적 비교 ({summaryViewMode === 'ADMISSION' ? '입장권 발권 기준' : '전체 매출 기준'}, {format(currentMonth, 'MM')}월)</h3>
           <div className="dash-compare-container">
             {/* 전년 동월 */}
             <div className="dash-column prev">
               <h4>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
               <div className="cum-cards">
                 <div className="cum-card">
-                  <span className="cum-label">입장 발권 매출액</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <span className="cum-value">{formatCurrency(prevAmt)}</span>
                 </div>
                 <div className="cum-card">
-                  <span className="cum-label">총 입장 발권수</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <span className="cum-value">{prevPpl.toLocaleString()} 명</span>
                 </div>
                 <div className="cum-card">
-                  <span className="cum-label">발권 평균 객단가</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                   <span className="cum-value">{prevPpl > 0 ? formatCurrency(Math.round(prevAmt/prevPpl)) : '0원'}</span>
                 </div>
               </div>
@@ -656,21 +635,21 @@ const WaterParkSales: React.FC = () => {
               <h4>{format(currentMonth, 'yyyy년 MM월')} (올해)</h4>
               <div className="cum-cards">
                 <div className="cum-card highlight">
-                  <span className="cum-label">입장 발권 매출액</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <div className="cum-val-row">
                     <span className="cum-value">{formatCurrency(currentAmt)}</span>
                     {prevAmt > 0 && <span className={`dash-badge ${currentAmt >= prevAmt ? 'up' : 'down'}`}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</span>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
-                  <span className="cum-label">총 입장 발권수</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <div className="cum-val-row">
                     <span className="cum-value">{currentPpl.toLocaleString()} 명</span>
                     {prevPpl > 0 && <span className={`dash-badge ${currentPpl >= prevPpl ? 'up' : 'down'}`}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</span>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
-                  <span className="cum-label">발권 평균 객단가</span>
+                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                   <span className="cum-value">{currentPpl > 0 ? formatCurrency(Math.round(currentAmt/currentPpl)) : '0원'}</span>
                 </div>
               </div>
@@ -714,15 +693,15 @@ const WaterParkSales: React.FC = () => {
                   <h4>{stats.prevStartStr} ~ {stats.prevEndStr} (전년 동기간, {stats.diffDays}일간)</h4>
                   <div className="cum-cards">
                     <div className="cum-card">
-                      <span className="cum-label">입장 발권 매출액</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                       <span className="cum-value">{formatCurrency(stats.prevAmt)}</span>
                     </div>
                     <div className="cum-card">
-                      <span className="cum-label">총 입장 발권수</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                       <span className="cum-value">{stats.prevPpl.toLocaleString()} 명</span>
                     </div>
                     <div className="cum-card">
-                      <span className="cum-label">발권 평균 객단가</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                       <span className="cum-value">{stats.prevPpl > 0 ? formatCurrency(Math.round(stats.prevAmt/stats.prevPpl)) : '0원'}</span>
                     </div>
                   </div>
@@ -733,21 +712,21 @@ const WaterParkSales: React.FC = () => {
                   <h4>{customStartDate} ~ {customEndDate} (지정 기간, {stats.diffDays}일간)</h4>
                   <div className="cum-cards">
                     <div className="cum-card highlight">
-                      <span className="cum-label">입장 발권 매출액</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                       <div className="cum-val-row">
                         <span className="cum-value">{formatCurrency(stats.currentAmt)}</span>
                         {stats.prevAmt > 0 && <span className={`dash-badge ${stats.currentAmt >= stats.prevAmt ? 'up' : 'down'}`}>{stats.currentAmt >= stats.prevAmt ? '▲' : '▼'} {Math.abs((stats.currentAmt-stats.prevAmt)/stats.prevAmt*100).toFixed(1)}%</span>}
                       </div>
                     </div>
                     <div className="cum-card highlight">
-                      <span className="cum-label">총 입장 발권수</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                       <div className="cum-val-row">
                         <span className="cum-value">{stats.currentPpl.toLocaleString()} 명</span>
                         {stats.prevPpl > 0 && <span className={`dash-badge ${stats.currentPpl >= stats.prevPpl ? 'up' : 'down'}`}>{stats.currentPpl >= stats.prevPpl ? '▲' : '▼'} {Math.abs((stats.currentPpl-stats.prevPpl)/stats.prevPpl*100).toFixed(1)}%</span>}
                       </div>
                     </div>
                     <div className="cum-card highlight">
-                      <span className="cum-label">발권 평균 객단가</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
                       <span className="cum-value">{stats.currentPpl > 0 ? formatCurrency(Math.round(stats.currentAmt/stats.currentPpl)) : '0원'}</span>
                     </div>
                   </div>
@@ -784,8 +763,7 @@ const WaterParkSales: React.FC = () => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const dayReports = reports.filter(r => r.report_date === dateStr);
     
-    // 로컬 스테이징(임시저장) 데이터와 DB 데이터를 합침
-    const combinedReports = [...dayReports.filter(r => !stagedReports.find(sr => sr.type === r.type)), ...stagedReports];
+    const combinedReports = dayReports;
     const activeReport = combinedReports.find(r => r.type === activeTab) || combinedReports[0];
     const wInfo = weatherMap[dateStr];
     
@@ -798,7 +776,7 @@ const WaterParkSales: React.FC = () => {
     return (
       <div className="detail-container animate-fade-in">
         <div className="detail-header">
-          <button className="back-btn" onClick={() => { setSelectedDate(null); setStagedReports([]); }}><ArrowLeft /> 달력으로 돌아가기</button>
+          <button className="back-btn" onClick={() => { setSelectedDate(null); }}><ArrowLeft /> 달력으로 돌아가기</button>
           <h2>
             {format(selectedDate, 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })} 영업 보고서
             {isHoliday && <span className="detail-holiday">🎈 {holidayName}</span>}
@@ -824,67 +802,13 @@ const WaterParkSales: React.FC = () => {
           </div>
         </div>
 
-        {/* [수정사항 2] 업로드 된 데이터가 있으면 명시적으로 '저장' 버튼을 보여주어 직관성 강화 */}
-        {stagedReports.length > 0 && (
-          <div className="action-bar animate-fade-in">
-            <div className="action-info">
-              <AlertCircle size={20} color="#f59e0b" />
-              <span><strong>{stagedReports.length}개</strong>의 파일이 업로드 대기 중입니다. 반드시 저장 버튼을 눌러 확정해주세요.</span>
-            </div>
-            <button className="save-btn" onClick={handleSave} disabled={isSaving}>
-              <Save size={18} /> {isSaving ? 'DB 저장 중...' : '클라우드에 영구 저장하기'}
-            </button>
-          </div>
-        )}
-
         {combinedReports.length === 0 && (
-           <div className="empty-state">
-             <CalendarIcon size={48} className="empty-icon" />
-             <h3>등록된 데이터가 없습니다.</h3>
-             <p>해당 일자의 엑셀 로우데이터를 아래에 드래그하여 업로드해주세요.</p>
+           <div className="empty-state" style={{ padding: '64px 0', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', color: '#64748b', border: '1px dashed #cbd5e1' }}>
+             <CalendarIcon size={48} style={{ marginBottom: '16px', color: '#cbd5e1' }} />
+             <h3>등록된 영업 실적 데이터가 없습니다.</h3>
+             <p>해당 일자에 수집된 실시간 영업 실적이 아직 집계되지 않았습니다.</p>
            </div>
         )}
-
-        <div 
-          className={`upload-dropzone compact ${isDragging ? 'dragging' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-        >
-          <UploadCloud className="upload-icon" size={32} />
-          <div style={{ width: '100%', maxWidth: '600px', margin: '0 auto' }}>
-            <h4 style={{ marginBottom: '8px' }}>이곳에 엑셀 파일 끌어다 놓기</h4>
-            <p style={{ marginBottom: '20px' }}>고객유형별, 요금대별, 전체매출현황 (.xls)</p>
-            
-            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', textAlign: 'left', fontSize: '13px', color: '#475569', lineHeight: '1.6', border: '1px dashed #cbd5e1' }}>
-              <div style={{ fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>📌 ERP 로우데이터 엑셀 저장 후 업로드 해주세요 (매출관리 → 경영관리)</div>
-              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                <li>
-                  <span style={{ fontWeight: 600, color: '#3b82f6' }}>고객유형별 발권현황:</span><br/>
-                  5.통계자료 → 10.워터파크 → 2.고객유형별 발권현황
-                </li>
-                <li>
-                  <span style={{ fontWeight: 600, color: '#10b981' }}>전체 매출현황:</span><br/>
-                  5.통계자료 → 10.워터파크 → 5.분석자료 → 5-5. 월일별 매출현황 분석
-                </li>
-                <li>
-                  <span style={{ fontWeight: 600, color: '#8b5cf6' }}>요금대별 매출현황:</span><br/>
-                  5.통계자료 → 10.워터파크 → 1.실시간 매출현황<br/>
-                  <span style={{ fontSize: '12px', color: '#ef4444' }}>(*엑셀 저장 시 파일명 예시: 0505 요금대별매출현황)</span>
-                </li>
-              </ul>
-              <div style={{ background: 'rgba(59,130,246,0.1)', padding: '12px', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.2)', color: '#1e3a8a' }}>
-                <strong>👉 다운로드 및 저장 안내:</strong> 각 메뉴 진입 후 <strong>기준일자 설정 &gt; 상단 [엑셀저장(x)]</strong> 버튼을 클릭하여 다운로드하세요. 파일 3개를 이곳에 드래그하여 업로드한 뒤, 반드시 상단의 <strong>[클라우드에 영구 저장하기]</strong> 버튼을 눌러주세요!
-              </div>
-            </div>
-          </div>
-          <label className="upload-button outline">
-            파일 찾기
-            <input type="file" multiple accept=".xls,.xlsx" onChange={(e) => {
-              if (e.target.files) Array.from(e.target.files).forEach(processFile);
-            }} style={{ display: 'none' }} />
-          </label>
-        </div>
 
         {combinedReports.length > 0 && (
           <>
@@ -892,18 +816,47 @@ const WaterParkSales: React.FC = () => {
             {(() => {
               const ct = combinedReports.find(r => r.type === 'CUSTOMER_TYPE');
               const hs = combinedReports.find(r => r.type === 'HOURLY_SALES');
+              const rs = combinedReports.find(r => r.type === 'REALTIME_SALES');
+
               const pct = reports.find(r => r.report_date === prevYearStr && r.type === 'CUSTOMER_TYPE');
               const phs = reports.find(r => r.report_date === prevYearStr && r.type === 'HOURLY_SALES');
+              const prs = reports.find(r => r.report_date === prevYearStr && r.type === 'REALTIME_SALES');
 
-              const totalAdmissions = ct ? ct.summary.totalQty : 0;
-              const ticketRev = ct ? ct.summary.totalAmount : 0;
-              const fbRev = hs ? hs.summary.totalAmount : 0;
+              // 당해 매출 계산
+              let totalAdmissions = 0;
+              let ticketRev = 0;
+              let fbRev = 0;
+
+              if (rs) {
+                const ticketItems = rs.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+                ticketRev = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+                totalAdmissions = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+                fbRev = rs.summary.totalAmount - ticketRev;
+              } else {
+                totalAdmissions = ct ? ct.summary.totalQty : 0;
+                ticketRev = ct ? ct.summary.totalAmount : 0;
+                fbRev = hs ? hs.summary.totalAmount : 0;
+              }
+
               const totalRev = ticketRev + fbRev;
               const perCapita = totalAdmissions > 0 ? totalRev / totalAdmissions : 0;
 
-              const prevAdmissions = pct ? pct.summary.totalQty : 0;
-              const prevTicketRev = pct ? pct.summary.totalAmount : 0;
-              const prevFbRev = phs ? phs.summary.totalAmount : 0;
+              // 작년 매출 계산
+              let prevAdmissions = 0;
+              let prevTicketRev = 0;
+              let prevFbRev = 0;
+
+              if (prs) {
+                const prevTicketItems = prs.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+                prevTicketRev = prevTicketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+                prevAdmissions = prevTicketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+                prevFbRev = prs.summary.totalAmount - prevTicketRev;
+              } else {
+                prevAdmissions = pct ? pct.summary.totalQty : 0;
+                prevTicketRev = pct ? pct.summary.totalAmount : 0;
+                prevFbRev = phs ? phs.summary.totalAmount : 0;
+              }
+
               const prevTotalRev = prevTicketRev + prevFbRev;
               const prevPerCapita = prevAdmissions > 0 ? prevTotalRev / prevAdmissions : 0;
 
@@ -1011,10 +964,10 @@ const WaterParkSales: React.FC = () => {
               {combinedReports.map(report => (
                 <button 
                   key={report.id} 
-                  className={`tab-button ${activeReport?.id === report.id ? 'active' : ''} ${stagedReports.find(r => r.id === report.id) ? 'staged' : ''}`}
+                  className={`tab-button ${activeReport?.id === report.id ? 'active' : ''}`}
                   onClick={() => setActiveTab(report.type)}
                 >
-                  <FileSpreadsheet size={16} /> {report.title} {stagedReports.find(r => r.id === report.id) && <span className="new-badge">N</span>}
+                  <FileSpreadsheet size={16} /> {report.title}
                 </button>
               ))}
             </div>
