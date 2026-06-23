@@ -10,6 +10,9 @@ interface CopyOption {
 const ThumbnailGenerator: React.FC = () => {
   // Input & Generation States
   const [productName, setProductName] = useState('');
+  const [keyBenefits, setKeyBenefits] = useState('');
+  const [targetAudience, setTargetAudience] = useState('');
+  const [vibe, setVibe] = useState('시원하고 청량한');
   const [isGenerating, setIsGenerating] = useState(false);
   
   const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
@@ -112,10 +115,19 @@ const ThumbnailGenerator: React.FC = () => {
 
       const prompt = `
 당신은 웰리힐리파크 리조트의 전문 마케터이자 디자이너입니다.
-사용자가 다음 상품에 대한 썸네일(광고 이미지)을 만들려고 합니다: "${targetProduct}"
+사용자가 다음 기획의도로 상품 썸네일(광고 이미지)을 만들려고 합니다:
 
-이 썸네일을 위한 고품질 배경 이미지 프롬프트(반드시 영어로, Stable Diffusion 스타일)와, 시선을 사로잡는 마케팅 카피(메인 카피, 서브 카피) 3가지를 제안해주세요.
-배경 이미지 프롬프트는 텍스트를 넣을 수 있도록 'blank space, clean background, abstract or realistic blur' 같은 키워드를 포함하세요.
+1. 상품명/메인 키워드: "${targetProduct}"
+2. 상세 소구점/혜택: "${keyBenefits.trim() || '제한 없음'}"
+3. 타겟 고객층: "${targetAudience.trim() || '일반 대중'}"
+4. 디자인 분위기/톤앤매너: "${vibe}"
+
+이 정보를 바탕으로 다음 사항들을 제안해주세요:
+1. 썸네일에 어울리는 고품질 배경 이미지 프롬프트 (반드시 영어로, Stable Diffusion 스타일). 
+   * 기획의도의 '디자인 분위기/톤앤매너'와 '상품명/메인 키워드'를 조화롭게 시각화하는 배경이어야 합니다.
+   * 텍스트를 얹을 수 있도록 여백('blank space, clean background, abstract or realistic blur')이 충분한 상태를 묘사해야 합니다.
+2. 기획의도 및 소구점, 타겟층에 딱 맞춰 시선을 사로잡는 마케팅 카피 (메인 카피, 서브 카피) 3가지 제안.
+   * 메인 카피는 혜택이나 특성을 임팩트 있게 담아내야 하며, 서브 카피는 소구점과 핵심 혜택을 구체적으로 풀어내어 설명해야 합니다.
 
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 출력하지 마세요.
 {
@@ -285,17 +297,64 @@ const ThumbnailGenerator: React.FC = () => {
         <p>기획 의도만 적으면 배경을 그리고, 찰떡같은 카피와 로고/뱃지까지 입혀 고화질 다운로드해 드립니다.</p>
       </div>
 
-      {/* Input Section */}
-      <div className="thumb-input-section">
-        <input 
-          type="text" 
-          placeholder="예시: 여름시즌 워터파크 시크릿 특가 티켓 (또는 제작하려는 상품명)" 
-          value={productName}
-          onChange={(e) => setProductName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && generateThumbnail()}
-        />
-        <button onClick={generateThumbnail} disabled={isGenerating}>
-          {isGenerating ? '마법 부리는 중 (약 10초)... ✨' : '썸네일 뚝딱 만들기 🚀'}
+      {/* Planning Form Card */}
+      <div className="thumb-planning-card">
+        <div className="input-row">
+          <label>상품명 / 메인 키워드 <span style={{ color: 'var(--primary)' }}>*</span></label>
+          <input 
+            type="text" 
+            placeholder="예시: 여름시즌 워터파크 시크릿 특가 티켓" 
+            value={productName}
+            onChange={(e) => setProductName(e.target.value)}
+            className="edit-input"
+            style={{ margin: 0 }}
+          />
+        </div>
+
+        <div className="input-row">
+          <label>상세 소구점 / 핵심 혜택 (AI가 문구 기획 시 집중 반영됩니다)</label>
+          <input 
+            type="text" 
+            placeholder="예시: 최대 60% 파격 할인, 구명조끼 무료 대여, 선착순 100매 한정" 
+            value={keyBenefits}
+            onChange={(e) => setKeyBenefits(e.target.value)}
+            className="edit-input"
+            style={{ margin: 0 }}
+          />
+        </div>
+
+        <div className="planning-grid">
+          <div className="input-row">
+            <label>타겟 고객층</label>
+            <input 
+              type="text" 
+              placeholder="예시: 가족 단위 여행객, 커플, 여름방학 대학생" 
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              className="edit-input"
+              style={{ margin: 0 }}
+            />
+          </div>
+
+          <div className="input-row">
+            <label>디자인 분위기 / 톤앤매너</label>
+            <select 
+              value={vibe} 
+              onChange={(e) => setVibe(e.target.value)}
+              className="edit-input"
+              style={{ margin: 0 }}
+            >
+              <option value="시원하고 청량한">🌊 시원하고 청량한 (여름/워터풀)</option>
+              <option value="고급스럽고 감성적인">✨ 고급스럽고 감성적인 (명조체/힐링/야경)</option>
+              <option value="역동적이고 짜릿한">⚡ 역동적이고 짜릿한 (어트랙션/스키/눈)</option>
+              <option value="파격적이고 눈에 띄는">🔥 파격적이고 강조하는 (세일/마감/특가)</option>
+              <option value="따뜻하고 아늑한">🍂 따뜻하고 아늑한 (가족/온천/객실)</option>
+            </select>
+          </div>
+        </div>
+
+        <button className="generate-btn" onClick={generateThumbnail} disabled={isGenerating}>
+          {isGenerating ? '기획안 분석 및 디자인 그리는 중... ✨' : '썸네일 뚝딱 만들기 🚀'}
         </button>
       </div>
 

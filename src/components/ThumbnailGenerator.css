@@ -577,6 +577,52 @@
   color: #8b5cf6;
 }
 
+/* Planning Card Styles */
+.thumb-planning-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: 28px;
+  max-width: 800px;
+  margin: 0 auto 40px auto;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.planning-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.thumb-planning-card .generate-btn {
+  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  padding: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 6px rgba(236, 72, 153, 0.2);
+  margin-top: 8px;
+}
+
+.thumb-planning-card .generate-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px rgba(236, 72, 153, 0.3);
+}
+
+.thumb-planning-card .generate-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 /* Media Queries */
 @media (max-width: 1024px) {
   .thumb-editor-grid { grid-template-columns: 1fr; }
@@ -587,9 +633,8 @@
   .thumb-header h1 { font-size: 1.8rem; margin-bottom: 8px; }
   .thumb-header p { font-size: 1rem; }
   
-  .thumb-input-section { flex-direction: column; gap: 12px; margin-bottom: 24px; }
-  .thumb-input-section input { padding: 16px; }
-  .thumb-input-section button { padding: 16px; }
+  .thumb-planning-card { padding: 16px; gap: 12px; margin-bottom: 24px; }
+  .planning-grid { grid-template-columns: 1fr; gap: 12px; }
   
   .canvas-content { padding: 20px; }
   .canvas-content h2 { font-size: 24px; }
