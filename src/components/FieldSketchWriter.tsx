@@ -213,7 +213,7 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash-latest"];
+      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash"];
       let success = false;
       let lastErrorMessage = '';
  
