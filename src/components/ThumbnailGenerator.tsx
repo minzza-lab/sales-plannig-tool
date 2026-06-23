@@ -7,6 +7,24 @@ interface CopyOption {
   sub: string;
 }
 
+interface ExportSize {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  category: '상단' | '리스트' | '구매하기' | '기타';
+}
+
+const EXPORT_SIZES: ExportSize[] = [
+  { id: 'pc-header', name: 'PC 대표 이미지 (상단)', width: 1920, height: 800, category: '상단' },
+  { id: 'mo-header', name: 'MO 대표 이미지 (상단)', width: 720, height: 400, category: '상단' },
+  { id: 'pc-list', name: 'PC 리스트', width: 364, height: 300, category: '리스트' },
+  { id: 'mo-list', name: 'MO 리스트', width: 620, height: 400, category: '리스트' },
+  { id: 'purchase-list', name: 'PC/MO 구매 목록', width: 560, height: 200, category: '구매하기' },
+  { id: 'square-general', name: '일반 정사각형 (1:1)', width: 1080, height: 1080, category: '기타' },
+  { id: 'wide-general', name: '일반 와이드 (16:9)', width: 1920, height: 1080, category: '기타' }
+];
+
 const ThumbnailGenerator: React.FC = () => {
   // Input & Generation States
   const [productName, setProductName] = useState('');
@@ -16,11 +34,16 @@ const ThumbnailGenerator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   
   const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
+  const [bgImageUrlRight, setBgImageUrlRight] = useState<string | null>(null);
   const [copyOptions, setCopyOptions] = useState<CopyOption[]>([]);
   const [selectedCopyIndex, setSelectedCopyIndex] = useState<number>(0);
   
   // Customization States
   const [activeTab, setActiveTab] = useState<'copy' | 'bg' | 'text' | 'badge'>('copy');
+  
+  // Layout Mode: 'emotional' (sensibility single bg) vs 'package' (slanted title, split left/right bg)
+  const [layoutMode, setLayoutMode] = useState<'emotional' | 'package'>('emotional');
+  const [headerBarColor, setHeaderBarColor] = useState('#ff9f1c');
   
   // Text content & general styling
   const [mainText, setMainText] = useState('');
@@ -29,8 +52,8 @@ const ThumbnailGenerator: React.FC = () => {
   const [overlayOpacity, setOverlayOpacity] = useState(40);
   const [textPosition, setTextPosition] = useState<'center' | 'bottom' | 'top'>('center');
   
-  // Ratio
-  const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16'>('1:1');
+  // Selected Size from the list
+  const [selectedSizeId, setSelectedSizeId] = useState<string>('pc-header');
   
   // Advanced Typography
   const [mainFontFamily, setMainFontFamily] = useState('Black Han Sans');
@@ -50,11 +73,13 @@ const ThumbnailGenerator: React.FC = () => {
   const [tintOpacity, setTintOpacity] = useState(20);
   
   // Badge overlay states
-  const [selectedBadge, setSelectedBadge] = useState<string>('none'); // 'none', 'logo', 'special', 'best', 'limited', 'new', 'custom'
+  const [selectedBadge, setSelectedBadge] = useState<string>('none');
   const [badgePosition, setBadgePosition] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>('top-left');
   const [customBadgeText, setCustomBadgeText] = useState('');
 
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const activeSize = EXPORT_SIZES.find(s => s.id === selectedSizeId) || EXPORT_SIZES[0];
 
   // Helper: Hex color to RGBA
   const hexToRgba = (hex: string, alpha: number) => {
@@ -83,7 +108,6 @@ const ThumbnailGenerator: React.FC = () => {
       const tintVal = tintOpacity / 100;
       return {
         backgroundColor: hexToRgba(tintColor, tintVal),
-        // Add a layer of darkness too
         boxShadow: `inset 0 0 0 2000px rgba(0, 0, 0, ${opacityVal})`
       };
     }
@@ -113,6 +137,9 @@ const ThumbnailGenerator: React.FC = () => {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
+      // Modify prompt based on package mode or general mode
+      const isPkg = layoutMode === 'package';
+      
       const prompt = `
 당신은 웰리힐리파크 리조트의 전문 마케터이자 디자이너입니다.
 사용자가 다음 기획의도로 상품 썸네일(광고 이미지)을 만들려고 합니다:
@@ -121,17 +148,20 @@ const ThumbnailGenerator: React.FC = () => {
 2. 상세 소구점/혜택: "${keyBenefits.trim() || '제한 없음'}"
 3. 타겟 고객층: "${targetAudience.trim() || '일반 대중'}"
 4. 디자인 분위기/톤앤매너: "${vibe}"
+5. 이미지 분할 모드: ${isPkg ? '좌우 이미지 2분할 패키지 구성' : '단일 배경 구성'}
 
 이 정보를 바탕으로 다음 사항들을 제안해주세요:
 1. 썸네일에 어울리는 고품질 배경 이미지 프롬프트 (반드시 영어로, Stable Diffusion 스타일). 
-   * 기획의도의 '디자인 분위기/톤앤매너'와 '상품명/메인 키워드'를 조화롭게 시각화하는 배경이어야 합니다.
+   * 디자인 분위기/톤앤매너와 키워드를 시각적으로 아름답게 담아내야 합니다.
    * 텍스트를 얹을 수 있도록 여백('blank space, clean background, abstract or realistic blur')이 충분한 상태를 묘사해야 합니다.
+   * ${isPkg ? '중요: 좌우 2분할 구조이므로, 반드시 좌측에 들어갈 이미지 프롬프트("imagePrompt")와 우측에 들어갈 이미지 프롬프트("imagePromptRight")를 서로 다르게 분리해 주세요. (예: 좌측은 숙박/리조트 전경, 우측은 조식/수영장 등 패키지 요소를 표현)' : '단일 이미지 프롬프트만 생성하세요.'}
 2. 기획의도 및 소구점, 타겟층에 딱 맞춰 시선을 사로잡는 마케팅 카피 (메인 카피, 서브 카피) 3가지 제안.
    * 메인 카피는 혜택이나 특성을 임팩트 있게 담아내야 하며, 서브 카피는 소구점과 핵심 혜택을 구체적으로 풀어내어 설명해야 합니다.
 
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 출력하지 마세요.
 {
   "imagePrompt": "english prompt for background...",
+  ${isPkg ? '"imagePromptRight": "english prompt for right background...",' : ''}
   "copyOptions": [
     { "main": "끌리는 메인 카피 1", "sub": "설명하는 서브 카피 1" },
     { "main": "끌리는 메인 카피 2", "sub": "설명하는 서브 카피 2" },
@@ -153,16 +183,30 @@ const ThumbnailGenerator: React.FC = () => {
       setSubText(parsed.copyOptions[0].sub);
       setSelectedCopyIndex(0);
 
-      // Generate Image via Pollinations
-      const encodedPrompt = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+      // Generate Background Image(s)
+      const encodedPromptLeft = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
       const randomSeed = Math.floor(Math.random() * 100000);
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&seed=${randomSeed}`;
+      const leftUrl = `https://image.pollinations.ai/prompt/${encodedPromptLeft}?width=1080&height=1080&nologo=true&seed=${randomSeed}`;
 
-      const imgResponse = await fetch(imageUrl);
-      if (!imgResponse.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 눌러주세요.");
-      
-      const blob = await imgResponse.blob();
-      setBgImageUrl(URL.createObjectURL(blob));
+      if (isPkg) {
+        const encodedPromptRight = encodeURIComponent((parsed.imagePromptRight || parsed.imagePrompt) + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+        const rightUrl = `https://image.pollinations.ai/prompt/${encodedPromptRight}?width=1080&height=1080&nologo=true&seed=${randomSeed + 1}`;
+
+        // Fetch both in parallel
+        const [resLeft, resRight] = await Promise.all([fetch(leftUrl), fetch(rightUrl)]);
+        if (!resLeft.ok || !resRight.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 시도해 주세요.");
+
+        const [blobLeft, blobRight] = await Promise.all([resLeft.blob(), resRight.blob()]);
+        setBgImageUrl(URL.createObjectURL(blobLeft));
+        setBgImageUrlRight(URL.createObjectURL(blobRight));
+      } else {
+        const imgResponse = await fetch(leftUrl);
+        if (!imgResponse.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 눌러주세요.");
+        
+        const blob = await imgResponse.blob();
+        setBgImageUrl(URL.createObjectURL(blob));
+        setBgImageUrlRight(null);
+      }
 
       // Reset design options to defaults on fresh generation
       setBgBlur(0);
@@ -182,8 +226,8 @@ const ThumbnailGenerator: React.FC = () => {
     setSubText(copyOptions[index].sub);
   };
 
-  // Local Image Upload Handler
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image Upload Handlers
+  const handleImageUploadLeft = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
@@ -194,25 +238,51 @@ const ThumbnailGenerator: React.FC = () => {
       reader.onload = () => {
         if (reader.result) {
           setBgImageUrl(reader.result as string);
-          // Set copy options dummy to allow editing if empty
-          if (copyOptions.length === 0) {
-            const dummyCopy = { main: mainText || "메인 타이틀 입력", sub: subText || "서브 설명글 입력" };
-            setCopyOptions([dummyCopy]);
-            setMainText(dummyCopy.main);
-            setSubText(dummyCopy.sub);
-          }
+          initDummyCopy();
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleDownload = async () => {
+  const handleImageUploadRight = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드할 수 있습니다.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          setBgImageUrlRight(reader.result as string);
+          initDummyCopy();
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const initDummyCopy = () => {
+    if (copyOptions.length === 0) {
+      const dummyCopy = { main: mainText || "패키지 타이틀 입력", sub: subText || "서브 설명글 입력" };
+      setCopyOptions([dummyCopy]);
+      setMainText(dummyCopy.main);
+      setSubText(dummyCopy.sub);
+    }
+  };
+
+  // Custom size download logic using exact scale calculation
+  const handleDownload = async (targetWidth: number, targetHeight: number, labelName: string) => {
     if (!canvasRef.current) return;
     
     try {
+      const currentWidth = canvasRef.current.offsetWidth;
+      // Calculate scale to export at exactly targetWidth pixels
+      const scaleFactor = targetWidth / currentWidth;
+      
       const canvas = await html2canvas(canvasRef.current, {
-        scale: 2.5, // Ultra high resolution
+        scale: scaleFactor,
         useCORS: true,
         allowTaint: true,
       });
@@ -227,7 +297,7 @@ const ThumbnailGenerator: React.FC = () => {
         const url = URL.createObjectURL(blob);
         
         const link = document.createElement('a');
-        link.download = `WHP_썸네일_${safeName}_${new Date().getTime()}.png`;
+        link.download = `WHP_썸네일_${safeName}_${labelName.replace(/\s+/g, '_')}_${targetWidth}x${targetHeight}.png`;
         link.href = url;
         document.body.appendChild(link);
         link.click();
@@ -242,7 +312,7 @@ const ThumbnailGenerator: React.FC = () => {
     }
   };
 
-  // Render Badge component helper
+  // Render Badge overlay
   const renderBadge = () => {
     if (selectedBadge === 'none') return null;
 
@@ -303,7 +373,7 @@ const ThumbnailGenerator: React.FC = () => {
           <label>상품명 / 메인 키워드 <span style={{ color: 'var(--primary)' }}>*</span></label>
           <input 
             type="text" 
-            placeholder="예시: 여름시즌 워터파크 시크릿 특가 티켓" 
+            placeholder="예시: 모닝 PKG (또는 워터플래닛 하이시즌 PKG)" 
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
             className="edit-input"
@@ -315,7 +385,7 @@ const ThumbnailGenerator: React.FC = () => {
           <label>상세 소구점 / 핵심 혜택 (AI가 문구 기획 시 집중 반영됩니다)</label>
           <input 
             type="text" 
-            placeholder="예시: 최대 60% 파격 할인, 구명조끼 무료 대여, 선착순 100매 한정" 
+            placeholder="예시: 객실 1박 + 조식 뷔페 2인 + 웰컴 드링크" 
             value={keyBenefits}
             onChange={(e) => setKeyBenefits(e.target.value)}
             className="edit-input"
@@ -328,7 +398,7 @@ const ThumbnailGenerator: React.FC = () => {
             <label>타겟 고객층</label>
             <input 
               type="text" 
-              placeholder="예시: 가족 단위 여행객, 커플, 여름방학 대학생" 
+              placeholder="예시: 커플, 미식가, 연휴 호캉스족" 
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value)}
               className="edit-input"
@@ -348,8 +418,27 @@ const ThumbnailGenerator: React.FC = () => {
               <option value="고급스럽고 감성적인">✨ 고급스럽고 감성적인 (명조체/힐링/야경)</option>
               <option value="역동적이고 짜릿한">⚡ 역동적이고 짜릿한 (어트랙션/스키/눈)</option>
               <option value="파격적이고 눈에 띄는">🔥 파격적이고 강조하는 (세일/마감/특가)</option>
-              <option value="따뜻하고 아늑한">🍂 따뜻하고 아늑한 (가족/온천/객실)</option>
+              <option value="따뜻하고 아늑한">🍂 따뜻하고 아늑한 (가족/조식/객실)</option>
             </select>
+          </div>
+        </div>
+
+        {/* Layout Selector directly on the planning card */}
+        <div className="input-row">
+          <label>레이아웃 스타일 선택</label>
+          <div className="preset-buttons" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <button 
+              className={`preset-btn ${layoutMode === 'emotional' ? 'active' : ''}`}
+              onClick={() => setLayoutMode('emotional')}
+            >
+              📖 감성/일반형 (단일 배경 + 텍스트 자유 조절)
+            </button>
+            <button 
+              className={`preset-btn ${layoutMode === 'package' ? 'active' : ''}`}
+              onClick={() => setLayoutMode('package')}
+            >
+              🎁 패키지형 (좌우 사선 분할 배경 + 상단 타이틀 바)
+            </button>
           </div>
         </div>
 
@@ -358,13 +447,26 @@ const ThumbnailGenerator: React.FC = () => {
         </button>
       </div>
 
-      {/* Image Upload Option always accessible at the beginning */}
+      {/* Image Upload Option (Before first generate) */}
       {!bgImageUrl && (
         <div style={{ maxWidth: '800px', margin: '0 auto 40px auto' }}>
-          <div className="image-upload-area">
-            <p>📁 내 컴퓨터에서 직접 사진 올려서 편집하기 (드롭다운 또는 클릭)</p>
-            <input type="file" accept="image/*" onChange={handleImageUpload} />
-          </div>
+          {layoutMode === 'package' ? (
+            <div className="planning-grid">
+              <div className="image-upload-area">
+                <p>📁 [좌측] 내 컴퓨터 이미지 등록</p>
+                <input type="file" accept="image/*" onChange={handleImageUploadLeft} />
+              </div>
+              <div className="image-upload-area">
+                <p>📁 [우측] 내 컴퓨터 이미지 등록</p>
+                <input type="file" accept="image/*" onChange={handleImageUploadRight} />
+              </div>
+            </div>
+          ) : (
+            <div className="image-upload-area">
+              <p>📁 내 컴퓨터에서 직접 사진 올려서 편집하기 (드롭다운 또는 클릭)</p>
+              <input type="file" accept="image/*" onChange={handleImageUploadLeft} />
+            </div>
+          )}
         </div>
       )}
 
@@ -372,36 +474,97 @@ const ThumbnailGenerator: React.FC = () => {
         <div className="thumb-editor-grid">
           {/* Left: Preview Canvas */}
           <div className="thumb-preview-panel">
-            <div className={`canvas-wrapper ratio-${aspectRatio.replace(':', '-')}`}>
-              {/* Separate blurred background */}
-              <div 
-                className="canvas-bg"
-                style={{ 
-                  backgroundImage: `url(${bgImageUrl})`,
-                  filter: bgBlur > 0 ? `blur(${bgBlur}px)` : 'none',
-                  transform: bgBlur > 0 ? 'scale(1.06)' : 'none' // Prevent white blur boundaries
-                }}
-              />
+            <div 
+              className="canvas-wrapper"
+              style={{ aspectRatio: `${activeSize.width} / ${activeSize.height}` }}
+            >
+              {layoutMode === 'package' ? (
+                <>
+                  {/* Left BG Slanted */}
+                  <div 
+                    className="canvas-bg canvas-bg-left"
+                    style={{ 
+                      backgroundImage: `url(${bgImageUrl})`,
+                      filter: bgBlur > 0 ? `blur(${bgBlur}px)` : 'none',
+                      transform: bgBlur > 0 ? 'scale(1.06)' : 'none'
+                    }}
+                  />
+                  {/* Right BG */}
+                  <div 
+                    className="canvas-bg canvas-bg-right"
+                    style={{ 
+                      backgroundImage: `url(${bgImageUrlRight || bgImageUrl})`,
+                      filter: bgBlur > 0 ? `blur(${bgBlur}px)` : 'none',
+                      transform: bgBlur > 0 ? 'scale(1.06)' : 'none'
+                    }}
+                  />
+                  {/* Slanted Header Bar */}
+                  <div 
+                    className="canvas-header-bar"
+                    style={{ backgroundColor: headerBarColor }}
+                  >
+                    <h2 
+                      className={`${getFontClass(mainFontFamily)}`}
+                      style={{ 
+                        color: '#ffffff',
+                        fontSize: `${mainFontSize}px`,
+                        letterSpacing: `${mainLetterSpacing}px`,
+                        lineHeight: mainLineHeight,
+                        margin: 0,
+                        textShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                        whiteSpace: 'pre-wrap'
+                      }}
+                    >
+                      {mainText}
+                    </h2>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Emotional Mode: Single background */}
+                  <div 
+                    className="canvas-bg"
+                    style={{ 
+                      backgroundImage: `url(${bgImageUrl})`,
+                      filter: bgBlur > 0 ? `blur(${bgBlur}px)` : 'none',
+                      transform: bgBlur > 0 ? 'scale(1.06)' : 'none'
+                    }}
+                  />
+                  {/* Text Container aligned */}
+                  <div className={`canvas-content position-${textPosition}`}>
+                    <h2 
+                      className={`${getFontClass(mainFontFamily)} shadow-${shadowPreset}`}
+                      style={{ 
+                        color: textColor,
+                        fontSize: `${mainFontSize}px`,
+                        letterSpacing: `${mainLetterSpacing}px`,
+                        lineHeight: mainLineHeight,
+                        whiteSpace: 'pre-wrap'
+                      }}
+                    >
+                      {mainText}
+                    </h2>
+                  </div>
+                </>
+              )}
+              
               {/* Overlay type & opacity */}
               <div className="canvas-overlay" style={getOverlayStyle()} />
               
               {/* Badges overlay */}
               {renderBadge()}
 
-              {/* Text content positioned & styled */}
-              <div className={`canvas-content position-${textPosition}`}>
-                <h2 
-                  className={`${getFontClass(mainFontFamily)} shadow-${shadowPreset}`}
+              {/* SubText (Rendered at the bottom for package, or relative for emotional) */}
+              {subText && (
+                <div 
+                  className="canvas-content position-bottom" 
                   style={{ 
-                    color: textColor,
-                    fontSize: `${mainFontSize}px`,
-                    letterSpacing: `${mainLetterSpacing}px`,
-                    lineHeight: mainLineHeight
+                    zIndex: 5, 
+                    pointerEvents: 'none',
+                    textAlign: layoutMode === 'package' ? 'right' : 'center',
+                    padding: layoutMode === 'package' ? '0 32px 20px 32px' : '40px'
                   }}
                 >
-                  {mainText}
-                </h2>
-                {subText && (
                   <p 
                     className={`${getFontClass(subFontFamily)} shadow-${shadowPreset}`}
                     style={{ 
@@ -409,18 +572,37 @@ const ThumbnailGenerator: React.FC = () => {
                       fontSize: `${subFontSize}px`,
                       letterSpacing: `${subLetterSpacing}px`,
                       lineHeight: subLineHeight,
-                      marginTop: '12px'
+                      marginTop: '0px',
+                      whiteSpace: 'pre-wrap',
+                      display: 'inline-block',
+                      backgroundColor: layoutMode === 'package' ? 'rgba(15, 23, 42, 0.5)' : 'transparent',
+                      padding: layoutMode === 'package' ? '6px 12px' : '0',
+                      borderRadius: layoutMode === 'package' ? '6px' : '0',
+                      backdropFilter: layoutMode === 'package' ? 'blur(4px)' : 'none'
                     }}
                   >
                     {subText}
                   </p>
-                )}
+                </div>
+              )}
+            </div>
+
+            {/* Premium Download Size Buttons */}
+            <div className="download-buttons-section">
+              <span className="download-title">💾 다운로드 사이즈 선택</span>
+              <div className="download-grid">
+                {EXPORT_SIZES.map(sz => (
+                  <button 
+                    key={sz.id}
+                    className="download-size-btn"
+                    onClick={() => handleDownload(sz.width, sz.height, sz.name)}
+                  >
+                    <span>{sz.name}</span>
+                    <span className="btn-sub">{sz.width} x {sz.height} px ({sz.category})</span>
+                  </button>
+                ))}
               </div>
             </div>
-            
-            <button className="download-btn" onClick={handleDownload}>
-              💾 이 썸네일 다운로드 (초고화질 PNG)
-            </button>
           </div>
 
           {/* Right: Controls Tab Panel */}
@@ -483,23 +665,25 @@ const ThumbnailGenerator: React.FC = () => {
                   <div className="control-group">
                     <h3>✏️ 문구 직접 수정</h3>
                     <div className="input-row" style={{ marginBottom: '12px' }}>
-                      <label>메인 카피</label>
-                      <input 
-                        type="text" 
+                      <label>메인 카피 (엔터 입력 시 여러 줄로 나뉩니다)</label>
+                      <textarea 
                         value={mainText} 
                         onChange={(e) => setMainText(e.target.value)} 
                         className="edit-input"
                         placeholder="메인 타이틀 문구"
+                        rows={2}
+                        style={{ resize: 'vertical', fontFamily: 'inherit' }}
                       />
                     </div>
                     <div className="input-row">
                       <label>서브 카피</label>
-                      <input 
-                        type="text" 
+                      <textarea 
                         value={subText} 
                         onChange={(e) => setSubText(e.target.value)} 
                         className="edit-input"
                         placeholder="서브 본문 문구"
+                        rows={2}
+                        style={{ resize: 'vertical', fontFamily: 'inherit' }}
                       />
                     </div>
                   </div>
@@ -510,27 +694,66 @@ const ThumbnailGenerator: React.FC = () => {
               {activeTab === 'bg' && (
                 <>
                   <div className="control-group">
-                    <h3>📐 썸네일 비율 선택</h3>
-                    <div className="preset-buttons">
-                      {(['1:1', '16:9', '9:16'] as const).map(ratio => (
-                        <button
-                          key={ratio}
-                          className={`preset-btn ${aspectRatio === ratio ? 'active' : ''}`}
-                          onClick={() => setAspectRatio(ratio)}
-                        >
-                          {ratio === '1:1' ? '1:1 정사각형' : ratio === '16:9' ? '16:9 와이드' : '9:16 세로형'}
-                        </button>
-                      ))}
+                    <h3>📐 편집 중인 미리보기 규격</h3>
+                    <div className="preset-buttons" style={{ gridTemplateColumns: '1fr' }}>
+                      <select 
+                        value={selectedSizeId}
+                        onChange={(e) => setSelectedSizeId(e.target.value)}
+                        className="edit-input"
+                      >
+                        {EXPORT_SIZES.map(sz => (
+                          <option key={sz.id} value={sz.id}>
+                            [{sz.category}] {sz.name} ({sz.width}x{sz.height})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
                   <div className="control-group">
-                    <h3>📤 다른 배경 이미지 적용</h3>
-                    <div className="image-upload-area" style={{ padding: '16px' }}>
-                      <p>📁 내 사진으로 배경 교체하기</p>
-                      <input type="file" accept="image/*" onChange={handleImageUpload} />
-                    </div>
+                    <h3>📤 배경 사진 교체</h3>
+                    {layoutMode === 'package' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div className="image-upload-area" style={{ padding: '12px' }}>
+                          <p>📁 [좌측] 배경 교체</p>
+                          <input type="file" accept="image/*" onChange={handleImageUploadLeft} />
+                        </div>
+                        <div className="image-upload-area" style={{ padding: '12px' }}>
+                          <p>📁 [우측] 배경 교체</p>
+                          <input type="file" accept="image/*" onChange={handleImageUploadRight} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="image-upload-area" style={{ padding: '14px' }}>
+                        <p>📁 배경 사진 올리기</p>
+                        <input type="file" accept="image/*" onChange={handleImageUploadLeft} />
+                      </div>
+                    )}
                   </div>
+
+                  {layoutMode === 'package' && (
+                    <div className="control-group">
+                      <h3>🎨 상단 타이틀 바 색상</h3>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <input 
+                          type="color" 
+                          value={headerBarColor}
+                          onChange={(e) => setHeaderBarColor(e.target.value)}
+                          style={{ width: '48px', height: '48px', padding: '0', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
+                        />
+                        <div className="color-presets" style={{ flex: 1 }}>
+                          {['#ff9f1c', '#0066cc', '#10b981', '#ef4444', '#1e293b'].map(color => (
+                            <button 
+                              key={color} 
+                              className={`color-btn ${headerBarColor === color ? 'active' : ''}`}
+                              style={{ backgroundColor: color, width: '28px', height: '28px' }}
+                              onClick={() => setHeaderBarColor(color)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="control-group">
                     <h3>🎛️ 배경 필터 조절</h3>
@@ -663,7 +886,7 @@ const ThumbnailGenerator: React.FC = () => {
                       </div>
                       <input 
                         type="range" 
-                        min="20" max="80" 
+                        min="16" max="80" 
                         value={mainFontSize} 
                         onChange={(e) => setMainFontSize(Number(e.target.value))} 
                         className="slider"
@@ -770,20 +993,22 @@ const ThumbnailGenerator: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="control-group">
-                    <h3>📍 문구 세로 정렬 위치</h3>
-                    <div className="preset-buttons" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                      {(['top', 'center', 'bottom'] as const).map(pos => (
-                        <button
-                          key={pos}
-                          className={`preset-btn ${textPosition === pos ? 'active' : ''}`}
-                          onClick={() => setTextPosition(pos)}
-                        >
-                          {pos === 'top' ? '상단' : pos === 'center' ? '중앙' : '하단'}
-                        </button>
-                      ))}
+                  {layoutMode === 'emotional' && (
+                    <div className="control-group">
+                      <h3>📍 문구 세로 정렬 위치</h3>
+                      <div className="preset-buttons" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                        {(['top', 'center', 'bottom'] as const).map(pos => (
+                          <button
+                            key={pos}
+                            className={`preset-btn ${textPosition === pos ? 'active' : ''}`}
+                            onClick={() => setTextPosition(pos)}
+                          >
+                            {pos === 'top' ? '상단' : pos === 'center' ? '중앙' : '하단'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
 

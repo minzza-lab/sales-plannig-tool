@@ -30,52 +30,46 @@
   margin: 0;
 }
 
-/* Input Section */
-.thumb-input-section {
-  display: flex;
-  gap: 16px;
-  max-width: 800px;
-  margin: 0 auto 32px auto;
-}
-
-.thumb-input-section input {
-  flex: 1;
-  padding: 16px 24px;
-  font-size: 1.05rem;
+/* Planning Card Styles */
+.thumb-planning-card {
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  transition: all 0.2s;
+  border-radius: var(--border-radius-lg);
+  padding: 28px;
+  max-width: 800px;
+  margin: 0 auto 40px auto;
   box-shadow: var(--shadow-sm);
-  background-color: var(--bg-card);
-  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.thumb-input-section input:focus {
-  border-color: var(--primary);
-  outline: none;
-  box-shadow: 0 0 0 3px var(--primary-light);
+.planning-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.thumb-input-section button {
+.thumb-planning-card .generate-btn {
   background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
   color: white;
   border: none;
   border-radius: var(--border-radius-md);
-  padding: 0 32px;
+  padding: 14px;
   font-size: 1.05rem;
   font-weight: 800;
   cursor: pointer;
-  white-space: nowrap;
   transition: all 0.3s;
   box-shadow: 0 4px 6px rgba(236, 72, 153, 0.2);
+  margin-top: 8px;
 }
 
-.thumb-input-section button:hover:not(:disabled) {
+.thumb-planning-card .generate-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 12px rgba(236, 72, 153, 0.3);
 }
 
-.thumb-input-section button:disabled {
+.thumb-planning-card .generate-btn:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
   box-shadow: none;
@@ -106,21 +100,6 @@
   background-color: #0f172a;
 }
 
-/* Aspect Ratios */
-.canvas-wrapper.ratio-1-1 {
-  aspect-ratio: 1 / 1;
-}
-
-.canvas-wrapper.ratio-16-9 {
-  aspect-ratio: 16 / 9;
-}
-
-.canvas-wrapper.ratio-9-16 {
-  aspect-ratio: 9 / 16;
-  max-width: 450px;
-  margin: 0 auto;
-}
-
 /* Separate Background to support BLUR filter without blurring text */
 .canvas-bg {
   position: absolute;
@@ -131,11 +110,39 @@
   z-index: 1;
 }
 
+/* Split backgrounds for Package Mode */
+.canvas-bg-left {
+  clip-path: polygon(0 0, 72% 0, 62% 100%, 0 100%);
+  z-index: 2;
+  border-right: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.canvas-bg-right {
+  z-index: 1;
+}
+
 .canvas-overlay {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   transition: background 0.3s, background-color 0.3s;
+  pointer-events: none;
+}
+
+/* Package Mode Header Bar styling */
+.canvas-header-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 38%;
+  z-index: 4;
+  clip-path: polygon(0 0, 74% 0, 70% 100%, 0 100%);
+  display: flex;
+  align-items: center;
+  padding: 16px 32px;
+  transition: background-color 0.3s;
+  box-sizing: border-box;
 }
 
 /* Typography styles */
@@ -146,7 +153,7 @@
   padding: 40px;
   display: flex;
   flex-direction: column;
-  z-index: 3;
+  z-index: 5;
   pointer-events: none;
   transition: all 0.3s;
 }
@@ -196,7 +203,7 @@
 /* Badge Overlay Styles */
 .canvas-badge-container {
   position: absolute;
-  z-index: 4;
+  z-index: 6;
   pointer-events: none;
   margin: 24px;
 }
@@ -270,24 +277,53 @@
   font-family: 'Montserrat', sans-serif;
 }
 
-/* Download Button */
-.download-btn {
-  width: 100%;
-  padding: 18px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-  border: none;
-  border-radius: var(--border-radius-md);
-  font-size: 1.125rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
+/* Download Button List styling */
+.download-buttons-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.download-btn:hover {
+.download-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.download-size-btn {
+  padding: 14px 10px;
+  border: none;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-radius: var(--border-radius-md);
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.download-size-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 12px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 12px rgba(16, 185, 129, 0.25);
+}
+
+.download-size-btn .btn-sub {
+  font-size: 0.72rem;
+  font-weight: 400;
+  opacity: 0.85;
 }
 
 /* Controls Panel - Tabs Layout */
@@ -516,7 +552,7 @@
 .image-upload-area {
   border: 2px dashed var(--border-color);
   border-radius: var(--border-radius-md);
-  padding: 20px;
+  padding: 16px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
@@ -577,52 +613,6 @@
   color: #8b5cf6;
 }
 
-/* Planning Card Styles */
-.thumb-planning-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-lg);
-  padding: 28px;
-  max-width: 800px;
-  margin: 0 auto 40px auto;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.planning-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.thumb-planning-card .generate-btn {
-  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  border-radius: var(--border-radius-md);
-  padding: 14px;
-  font-size: 1.05rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 4px 6px rgba(236, 72, 153, 0.2);
-  margin-top: 8px;
-}
-
-.thumb-planning-card .generate-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 12px rgba(236, 72, 153, 0.3);
-}
-
-.thumb-planning-card .generate-btn:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
 /* Media Queries */
 @media (max-width: 1024px) {
   .thumb-editor-grid { grid-template-columns: 1fr; }
@@ -645,5 +635,5 @@
   .copy-texts strong { font-size: 0.95rem; }
   .copy-texts span { font-size: 0.8rem; }
   
-  .download-btn { padding: 16px; font-size: 1rem; }
+  .download-grid { grid-template-columns: 1fr; }
 }
