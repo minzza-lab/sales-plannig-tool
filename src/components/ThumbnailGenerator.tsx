@@ -35,7 +35,7 @@ const ThumbnailGenerator: React.FC = () => {
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const prompt = `
 당신은 웰리힐리파크 리조트의 전문 마케터이자 디자이너입니다.

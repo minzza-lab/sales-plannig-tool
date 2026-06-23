@@ -61,7 +61,7 @@ const PhotoShortsMaker: React.FC = () => {
       if (!geminiApiKey) throw new Error("Gemini API 키가 없습니다.");
 
       const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const base64Data = selectedImage.split(',')[1];
       const mimeType = selectedImage.split(';')[0].split(':')[1];

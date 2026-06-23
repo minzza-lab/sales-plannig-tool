@@ -377,7 +377,7 @@ const ProductProposals: React.FC = () => {
           
           const { GoogleGenerativeAI } = await import('@google/generative-ai');
           const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+          const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
           
           const prompt = "이 상품안(결재 문서)의 핵심 내용을 2~3줄 분량으로 요약해줘. 글머리 기호(1. 2.)를 사용해서 직관적이고 짧게 작성해.";
           
