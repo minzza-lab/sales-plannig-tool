@@ -63,7 +63,11 @@ const VOCAssistant: React.FC = () => {
         .eq('status', 'unanswered')
         .order('created_at', { ascending: false });
         
+      if (error) {
+        console.error('❌ 미답변 VOC 조회 실패:', error);
+      }
       if (data && !error) {
+        console.log('📦 미답변 VOC 데이터 수신 성공:', data);
         setUnansweredList(data);
       }
     };
@@ -77,7 +81,11 @@ const VOCAssistant: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(5); // 최근 5개만
         
+      if (error) {
+        console.error('❌ 답변완료 VOC 조회 실패:', error);
+      }
       if (data && !error) {
+        console.log('📦 답변완료 VOC 데이터 수신 성공:', data);
         setAnsweredList(data);
       }
     };
