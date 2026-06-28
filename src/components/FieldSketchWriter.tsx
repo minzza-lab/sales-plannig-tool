@@ -259,7 +259,7 @@ const FieldSketchWriter: React.FC = () => {
       `;
 
       const parts = [{ text: prompt }, ...imageParts];
-      let text = await callGeminiWithFallback(parts, ["gemini-3.5-flash", "gemini-2.5-flash"]);
+      let text = await callGeminiWithFallback(parts, ["gemini-2.5-flash", "gemini-2.5-pro"]);
 
       clearTimeout(stepTimer);
       setLoadingStep(4); // 4단계: HTML 조립 완료
