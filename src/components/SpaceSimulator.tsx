@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { callGemini } from '../utils/apiProxy';
+import { callGeminiWithFallback } from '../utils/apiProxy';
 import './SpaceSimulator.css';
 
 const SpaceSimulator: React.FC = () => {
@@ -62,9 +62,8 @@ const SpaceSimulator: React.FC = () => {
 예시: "A photorealistic wooden park bench, highly detailed, isolated on a pure solid white background"
 `;
 
-      const englishPrompt = (await callGemini(
-        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
-        'gemini-3.5-flash'
+      const englishPrompt = (await callGeminiWithFallback(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }]
       )).trim();
       console.log('생성된 스티커 영문 프롬프트:', englishPrompt);
 

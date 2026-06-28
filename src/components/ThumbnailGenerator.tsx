@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { callGemini } from '../utils/apiProxy';
+import { callGeminiWithFallback } from '../utils/apiProxy';
 import './ThumbnailGenerator.css';
 
 interface CopyOption {
@@ -164,7 +164,7 @@ const ThumbnailGenerator: React.FC = () => {
 }
       `;
 
-      const responseText = await callGemini([{ text: prompt }], 'gemini-3.5-flash');
+      const responseText = await callGeminiWithFallback([{ text: prompt }]);
       
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요.");

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { callGemini, synthesizeTTS } from '../utils/apiProxy';
+import { callGeminiWithFallback, synthesizeTTS } from '../utils/apiProxy';
 import './TTSGenerator.css';
 
 interface VoiceOption {
@@ -117,7 +117,7 @@ const TTSGenerator: React.FC = () => {
 4. 존댓말과 정중한 톤을 사용하되, 상황에 따라 이벤트는 발랄하게, 안내는 차분하게 작성하세요.
       `;
 
-      const response = await callGemini([{ text: prompt }], 'gemini-3.5-flash');
+      const response = await callGeminiWithFallback([{ text: prompt }]);
       
       setText(response.trim());
       setAudioUrl(null); // 대본이 바뀌면 기존 오디오 초기화

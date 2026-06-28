@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { callGemini } from '../utils/apiProxy';
+import { callGeminiWithFallback } from '../utils/apiProxy';
 import './VideoPromptGenerator.css';
 
 interface PromptResult {
@@ -73,9 +73,8 @@ const VideoPromptGenerator: React.FC = () => {
 }
 `;
 
-      const responseText = await callGemini(
-        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
-        'gemini-3.5-flash'
+      const responseText = await callGeminiWithFallback(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }]
       );
       
       let parsedData: PromptResult;

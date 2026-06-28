@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { callGemini, synthesizeTTS } from '../utils/apiProxy';
+import { callGeminiWithFallback, synthesizeTTS } from '../utils/apiProxy';
 import './PhotoShortsMaker.css';
 
 const PhotoShortsMaker: React.FC = () => {
@@ -74,9 +74,8 @@ const PhotoShortsMaker: React.FC = () => {
 }
 `;
 
-      const responseText = await callGemini(
-        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
-        'gemini-3.5-flash'
+      const responseText = await callGeminiWithFallback(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }]
       );
 
       let parsedData;
