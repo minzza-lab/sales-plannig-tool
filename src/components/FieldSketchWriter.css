@@ -305,3 +305,176 @@
   
   .info-box-sketch { padding: 20px; }
 }
+
+/* 🪄 실시간 진행 상태 오버레이 스타일 */
+.progress-overlay-sketch {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fadeInSketch 0.3s ease-out forwards;
+}
+
+.progress-card-sketch {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 24px;
+  padding: 40px 32px;
+  width: 480px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 
+              0 0 40px rgba(59, 130, 246, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 애니메이션 스피너 */
+.progress-glow-ring {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  margin: 0 auto 24px auto;
+  border: 3px solid rgba(59, 130, 246, 0.1);
+  border-top-color: #3b82f6;
+  border-right-color: #8b5cf6;
+  animation: spinGlow 1s linear infinite;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.progress-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+}
+
+.progress-subtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0 0 32px 0;
+}
+
+/* 타임라인 단계 목록 */
+.progress-steps-sketch {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+  max-width: 360px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.progress-steps-sketch::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 15px;
+  bottom: 15px;
+  width: 2px;
+  background: #e2e8f0;
+  z-index: 1;
+}
+
+.progress-step-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 2;
+  opacity: 0.45;
+  transform: translateX(-5px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-step-item.active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.progress-step-item.completed {
+  opacity: 0.85;
+  transform: translateX(0);
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: 2px solid #cbd5e1;
+  color: #64748b;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.active .step-circle {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+  animation: pulseStep 1.5s infinite;
+}
+
+.completed .step-circle {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  color: #22c55e;
+  box-shadow: none;
+}
+
+.step-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+  transition: color 0.3s ease;
+}
+
+.active .step-label {
+  color: #1e40af;
+  font-weight: 700;
+}
+
+.completed .step-label {
+  color: #1e293b;
+}
+
+/* 키프레임 애니메이션 */
+@keyframes fadeInSketch {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spinGlow {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulseStep {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); box-shadow: 0 0 14px rgba(59, 130, 246, 0.5); }
+  100% { transform: scale(1); }
+}
+
+.animate-scale-in {
+  animation: scaleInSketch 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes scaleInSketch {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+

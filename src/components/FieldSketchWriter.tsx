@@ -9,6 +9,7 @@ const FieldSketchWriter: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<{file: File, preview: string, base64: string}[]>([]);
   const [htmlResult, setHtmlResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingStep, setLoadingStep] = useState<number>(0);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [thumbnailTopText, setThumbnailTopText] = useState<string>('');
@@ -162,6 +163,7 @@ const FieldSketchWriter: React.FC = () => {
     }
 
     setIsLoading(true);
+    setLoadingStep(1); // 1단계: 로컬 이미지 압축 최적화 시작
     setError('');
 
     // AI 분석용 초경량 이미지 압축 헬퍼 함수
@@ -190,6 +192,8 @@ const FieldSketchWriter: React.FC = () => {
       });
     };
 
+    let stepTimer: any;
+
     try {
       const imageParts = await Promise.all(selectedFiles.map(async item => {
         const aiBase64 = await compressForAi(item.base64);
@@ -200,6 +204,13 @@ const FieldSketchWriter: React.FC = () => {
           }
         };
       }));
+
+      setLoadingStep(2); // 2단계: AI 이미지 패턴 해석 시작
+
+      // 3.5초 뒤 대본 작성 단계(3단계)로 자연스럽게 이동
+      stepTimer = setTimeout(() => {
+        setLoadingStep(3);
+      }, 3500);
       
       let toneInstruction = '';
       let personaInstruction = '';
@@ -241,6 +252,9 @@ const FieldSketchWriter: React.FC = () => {
       const parts = [{ text: prompt }, ...imageParts];
       let text = await callGeminiWithFallback(parts, ["gemini-3.5-flash", "gemini-2.5-flash"]);
 
+      clearTimeout(stepTimer);
+      setLoadingStep(4); // 4단계: HTML 조립 완료
+
       for (let i = 0; i < selectedFiles.length; i++) {
         const placeholder = `[IMG_DATA_${i}]`;
         if (text.includes(placeholder)) {
@@ -252,9 +266,16 @@ const FieldSketchWriter: React.FC = () => {
 
       text = text.replace(/```html|```/g, '').trim();
       setHtmlResult(text);
+      
+      // 완료 화면을 잠시 보여준 후 모달 닫기
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (err: any) {
+      clearTimeout(stepTimer);
       setError(`오류: ${err.message}`);
-    } finally { setIsLoading(false); }
+    } finally { 
+      setIsLoading(false); 
+      setLoadingStep(0);
+    }
   };
 
   return (
@@ -409,6 +430,36 @@ const FieldSketchWriter: React.FC = () => {
           ⚠️ <strong>최종 검수 필수:</strong> 생성된 멘트가 현장 상황과 일치하는지 반드시 확인 후 업로드해 주세요.
         </div>
       </div>
+
+      {/* 🪄 실시간 진행 상태 애니메이션 오버레이 */}
+      {isLoading && loadingStep > 0 && (
+        <div className="progress-overlay-sketch">
+          <div className="progress-card-sketch animate-scale-in">
+            <div className="progress-glow-ring"></div>
+            <h3 className="progress-title">🪄 AI 현장스케치 생성 중...</h3>
+            <p className="progress-subtitle">사진을 바탕으로 생동감 넘치는 글을 기획하고 있습니다.</p>
+            
+            <div className="progress-steps-sketch">
+              <div className={`progress-step-item ${loadingStep >= 1 ? 'active' : ''} ${loadingStep > 1 ? 'completed' : ''}`}>
+                <div className="step-circle">{loadingStep > 1 ? '✓' : '1'}</div>
+                <span className="step-label">이미지 분석용 최적화 (480px 경량화)</span>
+              </div>
+              <div className={`progress-step-item ${loadingStep >= 2 ? 'active' : ''} ${loadingStep > 2 ? 'completed' : ''}`}>
+                <div className="step-circle">{loadingStep > 2 ? '✓' : '2'}</div>
+                <span className="step-label">AI 이미지 패턴 및 분위기 해석</span>
+              </div>
+              <div className={`progress-step-item ${loadingStep >= 3 ? 'active' : ''} ${loadingStep > 3 ? 'completed' : ''}`}>
+                <div className="step-circle">{loadingStep > 3 ? '✓' : '3'}</div>
+                <span className="step-label">웰리힐리 리포터 스토리텔링 집필</span>
+              </div>
+              <div className={`progress-step-item ${loadingStep >= 4 ? 'active' : ''} ${loadingStep > 4 ? 'completed' : ''}`}>
+                <div className="step-circle">{loadingStep > 4 ? '✓' : '4'}</div>
+                <span className="step-label">HTML 웹 퍼블리싱 및 완성</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
