@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini, synthesizeTTS } from '../utils/apiProxy';
 import './PhotoShortsMaker.css';
 
 const PhotoShortsMaker: React.FC = () => {
@@ -58,12 +57,6 @@ const PhotoShortsMaker: React.FC = () => {
     setProgressText('AI가 대본 작성 및 스티커 기획 중...');
 
     try {
-      const geminiApiKey = apiKeyManager.getGeminiKey();
-      if (!geminiApiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
       const base64Data = selectedImage.split(',')[1];
       const mimeType = selectedImage.split(';')[0].split(':')[1];
 
@@ -81,12 +74,11 @@ const PhotoShortsMaker: React.FC = () => {
 }
 `;
 
-      const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: base64Data, mimeType: mimeType } }
-      ]);
+      const responseText = await callGemini(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
+        'gemini-3.5-flash'
+      );
 
-      const responseText = result.response.text();
       let parsedData;
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -101,23 +93,9 @@ const PhotoShortsMaker: React.FC = () => {
 
       setProgressText('AI 성우 더빙 생성 중...');
 
-      // 2. Generate Audio via Google TTS
-      const ttsApiKey = apiKeyManager.getTTSKey();
-      if (!ttsApiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const ttsResponse = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text: parsedData.script },
-          voice: { languageCode: 'ko-KR', name: 'ko-KR-Neural2-c' },
-          audioConfig: { audioEncoding: 'MP3', speakingRate: 1.1 }
-        })
-      });
-
-      if (!ttsResponse.ok) throw new Error('TTS 생성 실패');
-      const ttsData = await ttsResponse.json();
-      const audioContent = `data:audio/mp3;base64,${ttsData.audioContent}`;
+      // 2. Generate Audio via Google TTS (through proxy)
+      const audioBase64 = await synthesizeTTS(parsedData.script, 'ko-KR-Neural2-c', 1.1);
+      const audioContent = `data:audio/mp3;base64,${audioBase64}`;
       setAudioUrl(audioContent);
 
       setProgressText('AI 스티커 에셋 렌더링 중...');

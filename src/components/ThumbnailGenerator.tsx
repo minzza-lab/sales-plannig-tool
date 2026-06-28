@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini } from '../utils/apiProxy';
 import './ThumbnailGenerator.css';
 
 interface CopyOption {
@@ -131,13 +131,6 @@ const ThumbnailGenerator: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      const apiKey = apiKeyManager.getGeminiKey();
-      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
       // Modify prompt based on package mode or general mode
       const isPkg = layoutMode === 'package';
       
@@ -171,8 +164,7 @@ const ThumbnailGenerator: React.FC = () => {
 }
       `;
 
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
+      const responseText = await callGemini([{ text: prompt }], 'gemini-3.5-flash');
       
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("AI 응답 형식이 올바르지 않습니다. 다시 시도해주세요.");

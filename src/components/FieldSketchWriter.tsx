@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGeminiWithFallback } from '../utils/apiProxy';
 import './FieldSketchWriter.css';
 
 const FieldSketchWriter: React.FC = () => {
-  const apiKey = apiKeyManager.getGeminiKey();
   const [episodeNumber, setEpisodeNumber] = useState<string>('');
   const [tone, setTone] = useState<string>('reporter');
   const [contextDescription, setContextDescription] = useState<string>('');
@@ -157,10 +156,6 @@ const FieldSketchWriter: React.FC = () => {
   };
 
   const generateEmbeddedSketch = async () => {
-    if (!apiKey || apiKey === 'your_key_here') {
-      alert('.env 파일에 API 키를 먼저 설정해주세요.');
-      return;
-    }
     if (selectedFiles.length === 0) {
       alert('사진을 업로드해주세요.');
       return;
@@ -214,54 +209,20 @@ const FieldSketchWriter: React.FC = () => {
         오직 HTML 결과물만 출력하세요.
       `;
 
-      const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"];
-      let success = false;
-      let lastErrorMessage = '';
- 
-      for (const modelName of modelsToTry) {
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }, ...imageParts] }]
-              }),
-            }
-          );
- 
-          const data = await response.json();
-          if (response.ok) {
-            let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) {
-              lastErrorMessage = `${modelName}: candidates가 비어있거나 응답 텍스트가 없습니다.`;
-              continue;
-            }
-             
-            for (let i = 0; i < selectedFiles.length; i++) {
-              const placeholder = `[IMG_DATA_${i}]`;
-              if (text.includes(placeholder)) {
-                text = text.replaceAll(placeholder, selectedFiles[i].base64);
-              } else {
-                text += `\n<h3 style="text-align: center;"><img src="${selectedFiles[i].base64}" width="1080" /></h3>`;
-              }
-            }
+      const parts = [{ text: prompt }, ...imageParts];
+      let text = await callGeminiWithFallback(parts, ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"]);
 
-            text = text.replace(/```html|```/g, '').trim();
-            setHtmlResult(text);
-            success = true;
-            break;
-          } else {
-            lastErrorMessage = `${modelName} 에러: ${data.error?.message || response.statusText} (${response.status})`;
-          }
-        } catch (inner: any) {
-          lastErrorMessage = `${modelName} 통신 오류: ${inner.message}`;
-          continue;
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const placeholder = `[IMG_DATA_${i}]`;
+        if (text.includes(placeholder)) {
+          text = text.replaceAll(placeholder, selectedFiles[i].base64);
+        } else {
+          text += `\n<h3 style="text-align: center;"><img src="${selectedFiles[i].base64}" width="1080" /></h3>`;
         }
       }
 
-      if (!success) throw new Error(lastErrorMessage || 'AI 모델 응답 실패');
+      text = text.replace(/```html|```/g, '').trim();
+      setHtmlResult(text);
     } catch (err: any) {
       setError(`오류: ${err.message}`);
     } finally { setIsLoading(false); }

@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini } from '../utils/apiProxy';
 import './SpaceSimulator.css';
 
 const SpaceSimulator: React.FC = () => {
@@ -45,12 +44,6 @@ const SpaceSimulator: React.FC = () => {
     setProgressText('AI 에셋 분석 및 스티커 설계 중...');
 
     try {
-      const apiKey = apiKeyManager.getGeminiKey();
-      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
       const base64Data = selectedImage.split(',')[1];
       const mimeType = selectedImage.split(';')[0].split(':')[1];
 
@@ -69,17 +62,10 @@ const SpaceSimulator: React.FC = () => {
 예시: "A photorealistic wooden park bench, highly detailed, isolated on a pure solid white background"
 `;
 
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: mimeType
-          }
-        }
-      ]);
-
-      const englishPrompt = result.response.text().trim();
+      const englishPrompt = (await callGemini(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
+        'gemini-3.5-flash'
+      )).trim();
       console.log('생성된 스티커 영문 프롬프트:', englishPrompt);
 
       setProgressText('AI 스티커 에셋 렌더링 중...');

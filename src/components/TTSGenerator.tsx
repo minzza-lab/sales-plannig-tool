@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini, synthesizeTTS } from '../utils/apiProxy';
 import './TTSGenerator.css';
 
 interface VoiceOption {
@@ -73,29 +73,15 @@ const TTSGenerator: React.FC = () => {
     }
 
     try {
-      const apiKey = apiKeyManager.getTTSKey();
-      if (!apiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
+      const audioContent = await synthesizeTTS(
+        "안녕하세요, 웰리힐리파크에 오신 것을 환영합니다. Welcome to Welli Hilli Park.",
+        voiceId,
+        1.0,
+        0
+      );
 
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text: "안녕하세요, 웰리힐리파크에 오신 것을 환영합니다. Welcome to Welli Hilli Park." },
-          voice: { languageCode: voiceId.substring(0, 5), name: voiceId },
-          audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0 }
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        if (data.error && data.error.message.includes('API has not been used')) {
-           throw new Error("Google Cloud Console에서 'Cloud Text-to-Speech API'를 활성화해야 합니다.");
-        }
-        throw new Error(data.error?.message || "미리듣기 생성 실패");
-      }
-
-      if (data.audioContent) {
-        const audioBlob = base64ToBlob(data.audioContent, 'audio/mp3');
+      if (audioContent) {
+        const audioBlob = base64ToBlob(audioContent, 'audio/mp3');
         const url = URL.createObjectURL(audioBlob);
         
         setPreviewUrls(prev => ({ ...prev, [voiceId]: url }));
@@ -120,13 +106,6 @@ const TTSGenerator: React.FC = () => {
 
     setIsGeneratingScript(true);
     try {
-      const apiKey = apiKeyManager.getGeminiKey();
-      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
       const prompt = `
 당신은 '웰리힐리파크' 리조트(스키장, 워터파크, 콘도)의 전문 카피라이터이자 사내 방송 작가입니다.
 사용자가 다음 상황에 대한 음성 안내(또는 홍보 영상) 대본을 요청했습니다: "${situation}"
@@ -138,8 +117,7 @@ const TTSGenerator: React.FC = () => {
 4. 존댓말과 정중한 톤을 사용하되, 상황에 따라 이벤트는 발랄하게, 안내는 차분하게 작성하세요.
       `;
 
-      const result = await model.generateContent(prompt);
-      const response = result.response.text();
+      const response = await callGemini([{ text: prompt }], 'gemini-3.5-flash');
       
       setText(response.trim());
       setAudioUrl(null); // 대본이 바뀌면 기존 오디오 초기화
@@ -160,32 +138,11 @@ const TTSGenerator: React.FC = () => {
     setAudioUrl(null);
 
     try {
-      const apiKey = apiKeyManager.getTTSKey();
-      if (!apiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
+      const audioContent = await synthesizeTTS(text, selectedVoice, 1.0, 0);
 
-      // Google Cloud Text-to-Speech API Call
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text: text },
-          voice: { languageCode: selectedVoice.substring(0, 5), name: selectedVoice },
-          audioConfig: { audioEncoding: "MP3", speakingRate: 1.0, pitch: 0 }
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.error && data.error.message.includes('API has not been used')) {
-           throw new Error("Google Cloud Console에서 'Cloud Text-to-Speech API'를 먼저 활성화해야 합니다.");
-        }
-        throw new Error(data.error?.message || "음성 생성 실패");
-      }
-
-      if (data.audioContent) {
+      if (audioContent) {
         // Base64 to Blob URL
-        const audioBlob = base64ToBlob(data.audioContent, 'audio/mp3');
+        const audioBlob = base64ToBlob(audioContent, 'audio/mp3');
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
       }

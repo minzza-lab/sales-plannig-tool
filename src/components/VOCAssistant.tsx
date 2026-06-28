@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGeminiWithFallback } from '../utils/apiProxy';
 import './VOCAssistant.css';
 
 const VOCAssistant: React.FC = () => {
-  const apiKey = apiKeyManager.getGeminiKey();
   const [vocContent, setVocContent] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>('');
   const [tone, setTone] = useState<'polite' | 'empathetic' | 'concise'>('polite');
@@ -129,11 +128,6 @@ const VOCAssistant: React.FC = () => {
 
 
   const generateResponse = async () => {
-    if (!apiKey || apiKey === 'your_key_here') {
-      alert('환경 변수에 API 키를 설정해주세요.');
-      return;
-    }
-
     if (!vocContent.trim()) {
       alert('고객의 VOC 내용을 입력해주세요.');
       return;
@@ -175,39 +169,11 @@ const VOCAssistant: React.FC = () => {
     작성 시 주의사항: 팀원 공유 지식에 해당 문의와 관련된 정보가 있다면 반드시 그 해결책을 답변에 포함시키세요.`;
 
     try {
-      const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"];
-      let success = false;
-      let lastApiError = "";
-
-      for (const modelName of modelsToTry) {
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-              }),
-            }
-          );
-
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
-
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) {
-            setAiResponse(text.trim());
-            success = true;
-            break;
-          }
-        } catch (innerErr: any) {
-          lastApiError = innerErr.message;
-          continue;
-        }
-      }
-
-      if (!success) throw new Error(lastApiError || 'API 호출 실패');
+      const text = await callGeminiWithFallback(
+        [{ text: prompt }],
+        ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"]
+      );
+      setAiResponse(text.trim());
     } catch (err: any) {
       setError(`오류 발생: ${err.message}`);
     } finally {

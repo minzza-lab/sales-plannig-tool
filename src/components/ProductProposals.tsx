@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini } from '../utils/apiProxy';
 import './ProductProposals.css';
 
 interface ProductProposal {
@@ -370,29 +370,13 @@ const ProductProposals: React.FC = () => {
         try {
           const base64data = (reader.result as string).split(',')[1];
           
-          // 3. Call Gemini
-          const apiKey = apiKeyManager.getGeminiKey();
-          if (!apiKey) {
-             throw new Error("API Key가 설정되지 않았습니다. 사이드바 하단에서 API 키를 등록해 주세요.");
-          }
-          
-          const { GoogleGenerativeAI } = await import('@google/generative-ai');
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-          
+          // 3. Call Gemini via proxy
           const prompt = "이 상품안(결재 문서)의 핵심 내용을 2~3줄 분량으로 요약해줘. 글머리 기호(1. 2.)를 사용해서 직관적이고 짧게 작성해.";
           
-          const result = await model.generateContent([
-            prompt,
-            {
-              inlineData: {
-                data: base64data,
-                mimeType: 'application/pdf'
-              }
-            }
-          ]);
-          
-          const summaryText = result.response.text();
+          const summaryText = await callGemini(
+            [{ text: prompt }, { inlineData: { data: base64data, mimeType: 'application/pdf' } }],
+            'gemini-3.5-flash'
+          );
           
           // 4. Update DB
           const { error } = await supabase

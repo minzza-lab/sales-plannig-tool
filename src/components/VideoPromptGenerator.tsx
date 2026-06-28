@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { apiKeyManager } from '../utils/apiKeyManager';
+import { callGemini } from '../utils/apiProxy';
 import './VideoPromptGenerator.css';
 
 interface PromptResult {
@@ -48,12 +47,6 @@ const VideoPromptGenerator: React.FC = () => {
     setResult(null);
 
     try {
-      const apiKey = apiKeyManager.getGeminiKey();
-      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
-
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
       const base64Data = selectedImage.split(',')[1];
       const mimeType = selectedImage.split(';')[0].split(':')[1];
 
@@ -80,11 +73,10 @@ const VideoPromptGenerator: React.FC = () => {
 }
 `;
 
-      const aiResult = await model.generateContent([
-        prompt,
-        { inlineData: { data: base64Data, mimeType: mimeType } }
-      ]);
-      const responseText = aiResult.response.text();
+      const responseText = await callGemini(
+        [{ text: prompt }, { inlineData: { data: base64Data, mimeType: mimeType } }],
+        'gemini-3.5-flash'
+      );
       
       let parsedData: PromptResult;
       try {
