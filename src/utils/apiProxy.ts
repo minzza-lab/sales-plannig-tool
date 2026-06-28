@@ -37,9 +37,22 @@ export async function callGemini(
   model: string = 'gemini-2.0-flash',
   generationConfig?: Record<string, unknown>
 ): Promise<string> {
+  // SDK 스타일의 inlineData(camelCase)를 REST API용 inline_data(snake_case)로 자동 변환
+  const mappedParts = parts.map(part => {
+    if (part.inlineData) {
+      return {
+        inline_data: {
+          data: part.inlineData.data,
+          mime_type: part.inlineData.mimeType
+        }
+      };
+    }
+    return part;
+  });
+
   const body: GeminiRequest = {
     model,
-    contents: [{ parts }],
+    contents: [{ parts: mappedParts as GeminiPart[] }],
   };
   if (generationConfig) {
     body.generationConfig = generationConfig;

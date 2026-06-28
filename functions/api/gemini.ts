@@ -19,7 +19,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body = await context.request.json() as Record<string, unknown>;
-    const model = (body.model as string) || 'gemini-2.0-flash';
+    const model = (body.model as string) || 'gemini-3.5-flash';
     
     // model 필드는 Google API에 전달하지 않음
     const { model: _, ...requestBody } = body;
