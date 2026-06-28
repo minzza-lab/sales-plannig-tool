@@ -278,8 +278,21 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
       if (orderStatus.includes('취소') || orderStatus.includes('환불') || orderStatus.includes('cancel')) continue;
       if (cancelDate && String(cancelDate).trim() !== '') continue;
       
-      // 금액: 결제금액 > 주문금액 > 금액 순서로 시도
-      const price = Number(String(getVal(['결제금액']) || getVal(['주문금액']) || getVal(['금액', '매출', '단가', '결제액'])).replace(/[^0-9]/g, '')) || 0;
+      // 금액: 결제금액 컬럼이 우선이며, 해당 컬럼이 존재할 때 값이 비어있다면 0원으로 간주 (동반인 등)
+      const payAmtRaw = getVal(['결제금액']);
+      const orderAmtRaw = getVal(['주문금액']);
+      let priceRaw = '';
+      
+      const hasCol = (keywords) => keys.some(k => keywords.some(kw => k.includes(kw)));
+      if (hasCol(['결제금액'])) {
+        priceRaw = payAmtRaw;
+      } else if (hasCol(['주문금액'])) {
+        priceRaw = orderAmtRaw;
+      } else {
+        priceRaw = getVal(['금액', '매출', '단가', '결제액']);
+      }
+      
+      const price = Number(String(priceRaw).replace(/[^0-9]/g, '')) || 0;
       
       // 매출 0원(패밀리 동반인 등)인 데이터 수집 제외
       if (price <= 0) continue;
