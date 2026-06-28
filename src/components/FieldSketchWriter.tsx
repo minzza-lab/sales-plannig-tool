@@ -210,7 +210,7 @@ const FieldSketchWriter: React.FC = () => {
       `;
 
       const parts = [{ text: prompt }, ...imageParts];
-      let text = await callGeminiWithFallback(parts, ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"]);
+      let text = await callGeminiWithFallback(parts, ["gemini-3.5-flash", "gemini-2.5-flash"]);
 
       for (let i = 0; i < selectedFiles.length; i++) {
         const placeholder = `[IMG_DATA_${i}]`;

@@ -83,7 +83,7 @@ export async function callGemini(
  */
 export async function callGeminiWithFallback(
   parts: GeminiPart[],
-  models: string[] = ['gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  models: string[] = ['gemini-3.5-flash', 'gemini-2.5-flash'],
   generationConfig?: Record<string, unknown>
 ): Promise<string> {
   let lastError: Error | null = null;
