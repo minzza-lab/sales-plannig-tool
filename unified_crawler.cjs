@@ -140,6 +140,14 @@ async function scrapeVOC(page, stats) {
     
     for (const item of allLinks) {
       await page.goto(item.url, { waitUntil: 'networkidle2' });
+      
+      // Vue/Vuetify에 의해 상세 양식이 렌더링될 때까지 안전하게 대기
+      try {
+        await page.waitForSelector('span.tit', { timeout: 8000 });
+      } catch (e) {
+        console.log(chalk.red(`[VOC 경고] 상세 페이지 span.tit 요소 대기 타임아웃: ${item.url}`));
+      }
+      
       const vocData = await page.evaluate(() => {
         const getValByTit = (labelText) => {
           const spans = Array.from(document.querySelectorAll('span.tit'));
