@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './VideoPromptGenerator.css';
 
 interface PromptResult {
@@ -47,8 +48,8 @@ const VideoPromptGenerator: React.FC = () => {
     setResult(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API 키가 없습니다.");
+      const apiKey = apiKeyManager.getGeminiKey();
+      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });

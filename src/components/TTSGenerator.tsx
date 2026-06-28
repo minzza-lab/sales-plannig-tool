@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './TTSGenerator.css';
 
 interface VoiceOption {
@@ -72,8 +73,8 @@ const TTSGenerator: React.FC = () => {
     }
 
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
-      if (!apiKey) throw new Error("Google TTS API 키가 없습니다. (.env 파일 확인)");
+      const apiKey = apiKeyManager.getTTSKey();
+      if (!apiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {
         method: 'POST',
@@ -119,8 +120,8 @@ const TTSGenerator: React.FC = () => {
 
     setIsGeneratingScript(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API 키가 없습니다.");
+      const apiKey = apiKeyManager.getGeminiKey();
+      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -159,8 +160,8 @@ const TTSGenerator: React.FC = () => {
     setAudioUrl(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
-      if (!apiKey) throw new Error("Google TTS API 키가 없습니다.");
+      const apiKey = apiKeyManager.getTTSKey();
+      if (!apiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       // Google Cloud Text-to-Speech API Call
       const response = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`, {

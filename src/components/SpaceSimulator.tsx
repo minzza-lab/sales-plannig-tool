@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './SpaceSimulator.css';
 
 const SpaceSimulator: React.FC = () => {
@@ -44,8 +45,8 @@ const SpaceSimulator: React.FC = () => {
     setProgressText('AI 에셋 분석 및 스티커 설계 중...');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API 키가 없습니다.");
+      const apiKey = apiKeyManager.getGeminiKey();
+      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });

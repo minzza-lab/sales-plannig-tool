@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './ThumbnailGenerator.css';
 
 interface CopyOption {
@@ -130,8 +131,8 @@ const ThumbnailGenerator: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Gemini API 키가 없습니다.");
+      const apiKey = apiKeyManager.getGeminiKey();
+      if (!apiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './VOCAssistant.css';
 
 const VOCAssistant: React.FC = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const apiKey = apiKeyManager.getGeminiKey();
   const [vocContent, setVocContent] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>('');
   const [tone, setTone] = useState<'polite' | 'empathetic' | 'concise'>('polite');

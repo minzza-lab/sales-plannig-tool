@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './Approvals.css';
 
 interface Approval {
@@ -340,9 +341,9 @@ const Approvals: React.FC = () => {
           const base64data = (reader.result as string).split(',')[1];
           
           // 3. Call Gemini
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-          if (!apiKey || apiKey === 'your_key_here') {
-             throw new Error("환경 변수에 VITE_GEMINI_API_KEY가 설정되지 않았습니다.");
+          const apiKey = apiKeyManager.getGeminiKey();
+          if (!apiKey) {
+             throw new Error("API Key가 설정되지 않았습니다. 사이드바 하단에서 API 키를 등록해 주세요.");
           }
           
           const { GoogleGenerativeAI } = await import('@google/generative-ai');

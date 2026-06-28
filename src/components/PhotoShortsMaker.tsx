@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './PhotoShortsMaker.css';
 
 const PhotoShortsMaker: React.FC = () => {
@@ -57,8 +58,8 @@ const PhotoShortsMaker: React.FC = () => {
     setProgressText('AI가 대본 작성 및 스티커 기획 중...');
 
     try {
-      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!geminiApiKey) throw new Error("Gemini API 키가 없습니다.");
+      const geminiApiKey = apiKeyManager.getGeminiKey();
+      if (!geminiApiKey) throw new Error("Gemini API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const genAI = new GoogleGenerativeAI(geminiApiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
@@ -101,8 +102,8 @@ const PhotoShortsMaker: React.FC = () => {
       setProgressText('AI 성우 더빙 생성 중...');
 
       // 2. Generate Audio via Google TTS
-      const ttsApiKey = import.meta.env.VITE_GOOGLE_TTS_API_KEY;
-      if (!ttsApiKey) throw new Error("Google TTS API 키가 없습니다.");
+      const ttsApiKey = apiKeyManager.getTTSKey();
+      if (!ttsApiKey) throw new Error("Google TTS API 키가 설정되지 않았습니다. 사이드바 하단에서 등록해 주세요.");
 
       const ttsResponse = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsApiKey}`, {
         method: 'POST',

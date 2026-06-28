@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Sidebar from './Sidebar';
+import { ApiKeySettingsModal } from '../ApiKeySettingsModal';
 import './MainLayout.css';
 
 const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<{ name: string; dept: string } | null>(null);
 
   const fetchUserInfo = async () => {
@@ -32,7 +34,11 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className={`layout-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        onOpenApiModal={() => setIsApiModalOpen(true)}
+      />
       
       {isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>
@@ -62,6 +68,11 @@ const MainLayout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      <ApiKeySettingsModal 
+        isOpen={isApiModalOpen} 
+        onClose={() => setIsApiModalOpen(false)} 
+      />
     </div>
   );
 };

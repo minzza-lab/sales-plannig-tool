@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { apiKeyManager } from '../utils/apiKeyManager';
 import './FieldSketchWriter.css';
 
 const FieldSketchWriter: React.FC = () => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const apiKey = apiKeyManager.getGeminiKey();
   const [episodeNumber, setEpisodeNumber] = useState<string>('');
   const [tone, setTone] = useState<string>('reporter');
   const [contextDescription, setContextDescription] = useState<string>('');
