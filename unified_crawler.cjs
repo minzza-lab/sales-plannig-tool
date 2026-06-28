@@ -105,7 +105,7 @@ async function scrapeVOC(page, stats) {
     
     let allLinks = [];
     let currentPage = 1;
-    const maxPages = 3;
+    const maxPages = 1; // 최근 1페이지만 크롤링
 
     while (currentPage <= maxPages) {
       spinner.text = chalk.yellow(`VOC 목록 파싱 중... (페이지 ${currentPage}/${maxPages})`);
@@ -201,12 +201,12 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
     await page.goto('https://wadm.wellihillipark.com/order/season/list', { waitUntil: 'networkidle2' });
     await delay(4000);
     
-    const targetDateBtn = isManual ? '90일' : '일주일';
-    spinner.text = chalk.magenta(`기간 설정(${targetDateBtn}) 및 검색 중...`);
-    await page.evaluate((btnText) => {
+    // 90일 버튼 클릭 (파싱 시 2026-04-15 이전 데이터는 제외됨)
+    spinner.text = chalk.magenta('기간 설정(90일) 및 검색 중...');
+    await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button, div.v-btn, span'));
-      btns.filter(b => b.innerText && b.innerText.includes(btnText)).forEach(b => b.click());
-    }, targetDateBtn);
+      btns.filter(b => b.innerText && b.innerText.includes('90일')).forEach(b => b.click());
+    });
     await delay(1000);
     await page.evaluate(() => {
       const searchBtn = Array.from(document.querySelectorAll('button, div.v-btn, a')).find(b => b.innerText.includes('검색') && !b.innerText.includes('초기화'));
@@ -247,7 +247,11 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
       
       const orderDateStr = getVal(['접수일', '주문일', '거래일', '결제일시']) || new Date().toISOString();
       const productName = getVal(['상품명', '권종', '품목']) || '시즌권';
-      if (orderDateStr < '2026-04-14' || productName.includes('1차판매') || productName.includes('MTB')) continue;
+      const orderStatus = getVal(['결제여부', '상태', '진행상태']) || '완료';
+      
+      // 2026-04-15 이전 데이터, 1차판매, MTB, 취소된 주문 제외
+      if (orderDateStr < '2026-04-15' || productName.includes('1차판매') || productName.includes('MTB')) continue;
+      if (orderStatus.includes('취소') || orderStatus.includes('환불') || orderStatus.includes('cancel')) continue;
       
       const price = Number(String(getVal(['금액', '매출', '단가', '결제액'])).replace(/[^0-9]/g, '')) || 0;
       
