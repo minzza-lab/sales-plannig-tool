@@ -242,31 +242,49 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
     for (const row of data) {
       const keys = Object.keys(row);
       const getVal = (keywords) => { const key = keys.find(k => keywords.some(kw => k.includes(kw))); return key ? row[key] : ''; };
-      const orderIdRaw = getVal(['접수번호', '시즌권번호', '주문번호', '예약번호', '결제번호', 'ID']);
+      
+      // 접수번호를 고유 ID로 사용 (주문번호는 패밀리 주문 시 중복됨)
+      const orderIdRaw = getVal(['접수번호']) || getVal(['시즌권번호']) || getVal(['주문번호', '예약번호', '결제번호', 'ID']);
       if (!orderIdRaw) continue;
       
-      const orderDateStr = getVal(['접수일', '주문일', '거래일', '결제일시']) || new Date().toISOString();
+      const orderDateStr = getVal(['결제일시', '접수일', '주문일', '거래일']) || new Date().toISOString();
+      const paymentDateStr = getVal(['결제일시', '결제일', '승인일']) || orderDateStr;
       const productName = getVal(['상품명', '권종', '품목']) || '시즌권';
       const orderStatus = getVal(['결제여부', '상태', '진행상태']) || '완료';
+      const cancelDate = getVal(['취소일시']);
       
-      // 2026-04-15 이전 데이터, 1차판매, MTB, 취소된 주문 제외
-      if (orderDateStr < '2026-04-15' || productName.includes('1차판매') || productName.includes('MTB')) continue;
+      // 날짜 형식 변환 ("2026-04-15" -> "2026-04-15T00:00:00+09:00", 이미 타임스탬프면 그대로)
+      const toTimestamp = (d) => {
+        if (!d) return new Date().toISOString();
+        const s = String(d).trim();
+        if (s.includes('T')) return s;
+        // "2026-06-28 12:36:48.02" 형식도 허용
+        if (s.includes(' ') && s.includes(':')) return s;
+        return s + 'T00:00:00+09:00';
+      };
+      
+      // 2026-04-15 이전 데이터, 1차판매, MTB 제외
+      const dateForFilter = String(orderDateStr).substring(0, 10);
+      if (dateForFilter < '2026-04-15' || productName.includes('1차판매') || productName.includes('MTB')) continue;
+      // 취소/환불 제외 (결제여부 또는 취소일시로 판단)
       if (orderStatus.includes('취소') || orderStatus.includes('환불') || orderStatus.includes('cancel')) continue;
+      if (cancelDate && String(cancelDate).trim() !== '') continue;
       
-      const price = Number(String(getVal(['금액', '매출', '단가', '결제액'])).replace(/[^0-9]/g, '')) || 0;
+      // 금액: 결제금액 > 주문금액 > 금액 순서로 시도
+      const price = Number(String(getVal(['결제금액']) || getVal(['주문금액']) || getVal(['금액', '매출', '단가', '결제액'])).replace(/[^0-9]/g, '')) || 0;
       
       const { error } = await supabase.from('season_pass_orders').upsert({
         order_id: String(orderIdRaw).trim(),
-        order_date: orderDateStr,
-        payment_date: getVal(['결제일', '승인일']) || new Date().toISOString(),
+        order_date: toTimestamp(orderDateStr),
+        payment_date: toTimestamp(paymentDateStr),
         product_name: productName,
         recommender: getVal(['추천인', '채널']) || '',
-        member_type: getVal(['대/소구분', '대상', '대인', '소인', '구분']) || '',
+        member_type: getVal(['대/소구분']) || getVal(['대상', '대인', '소인', '구분']) || '',
         customer_name: getVal(['주문자명', '고객명', '이름', '성명']) || '',
         ssn: String(getVal(['주민번호', '생년월일'])),
         phone: String(getVal(['휴대번호', '전화번호', '연락처', '휴대폰'])),
         address: getVal(['주소', '거주지', '기본주소', '상세주소', '배송지']) || '',
-        status: getVal(['결제여부', '상태', '진행상태']) || '완료',
+        status: orderStatus || '완료',
         price: price
       }, { onConflict: 'order_id' });
 
