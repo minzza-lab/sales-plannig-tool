@@ -273,6 +273,9 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
       // 금액: 결제금액 > 주문금액 > 금액 순서로 시도
       const price = Number(String(getVal(['결제금액']) || getVal(['주문금액']) || getVal(['금액', '매출', '단가', '결제액'])).replace(/[^0-9]/g, '')) || 0;
       
+      // 매출 0원(패밀리 동반인 등)인 데이터 수집 제외
+      if (price <= 0) continue;
+      
       const { error } = await supabase.from('season_pass_orders').upsert({
         order_id: String(orderIdRaw).trim(),
         order_date: toTimestamp(orderDateStr),
