@@ -253,14 +253,22 @@ async function scrapeSeasonPass(page, downloadPath, stats, isManual) {
       const orderStatus = getVal(['결제여부', '상태', '진행상태']) || '완료';
       const cancelDate = getVal(['취소일시']);
       
-      // 날짜 형식 변환 ("2026-04-15" -> "2026-04-15T00:00:00+09:00", 이미 타임스탬프면 그대로)
+      // 날짜 형식 변환: 입력 형식에 관계없이 완벽한 ISO 8601 타임스탬프로 안전 변환
       const toTimestamp = (d) => {
         if (!d) return new Date().toISOString();
         const s = String(d).trim();
-        if (s.includes('T')) return s;
-        // "2026-06-28 12:36:48.02" 형식도 허용
-        if (s.includes(' ') && s.includes(':')) return s;
-        return s + 'T00:00:00+09:00';
+        // 날짜 파싱 안전화 (공백 혹은 대시 문자 처리)
+        let normalized = s;
+        if (!s.includes('T') && s.includes(' ')) {
+          normalized = s.replace(' ', 'T') + '+09:00'; // 한국 타임존 보정
+        }
+        try {
+          const dateObj = new Date(normalized);
+          if (!isNaN(dateObj.getTime())) {
+            return dateObj.toISOString();
+          }
+        } catch (e) {}
+        return new Date().toISOString();
       };
       
       // 2026-04-15 이전 데이터, 1차판매, MTB 제외

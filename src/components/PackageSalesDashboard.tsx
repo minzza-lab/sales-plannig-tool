@@ -61,21 +61,39 @@ const PackageSalesDashboard: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showMonthlyList, setShowMonthlyList] = useState(false);
 
-  useEffect(() => {
-    fetchFromSupabase();
-  }, []);
 
-  const fetchFromSupabase = async () => {
+
+  const fetchData = async () => {
     setIsProcessing(true);
     try {
-      const { data: dbData, error } = await supabase
-        .from('package_orders')
-        .select('*');
+      let allData: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: dbData, error } = await supabase
+          .from('package_orders')
+          .select('*')
+          .order('order_date', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (error) throw error;
         
-      if (error) throw error;
-      
-      if (dbData && dbData.length > 0) {
-        const formatted: PackageOrder[] = dbData.map(d => ({
+        if (dbData && dbData.length > 0) {
+          allData = [...allData, ...dbData];
+          if (dbData.length < step) {
+            hasMore = false;
+          } else {
+            from += step;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (allData.length > 0) {
+        const parsedData: PackageOrder[] = allData.map(d => ({
           orderId: d.order_id,
           channel: d.channel || '',
           packageType: d.package_type || '',
@@ -90,72 +108,17 @@ const PackageSalesDashboard: React.FC = () => {
           status: d.status || '',
           orderDate: d.order_date || ''
         }));
-        
-        const validOrders = formatted.filter(d => d.status.includes('결제완료') || d.status.includes('예약완료'));
+        const validOrders = parsedData.filter(d => d.status.includes('결제완료') || d.status.includes('예약완료'));
         setData(validOrders);
       }
-    } catch (e) {
-      console.error('Failed to fetch from Supabase', e);
+    } catch (err) {
+      console.error('Error fetching package data:', err);
     } finally {
       setIsProcessing(false);
     }
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsProcessing(true);
-      try {
-        let allData: any[] = [];
-        let from = 0;
-        const step = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data: dbData, error } = await supabase
-            .from('package_orders')
-            .select('*')
-            .order('order_date', { ascending: false })
-            .range(from, from + step - 1);
-
-          if (error) throw error;
-          
-          if (dbData && dbData.length > 0) {
-            allData = [...allData, ...dbData];
-            if (dbData.length < step) {
-              hasMore = false;
-            } else {
-              from += step;
-            }
-          } else {
-            hasMore = false;
-          }
-        }
-
-        if (allData.length > 0) {
-          const parsedData: PackageOrder[] = allData.map(d => ({
-            orderId: d.order_id,
-            channel: d.channel || '',
-            packageType: d.package_type || '',
-            rawPackageName: d.raw_package_name || '',
-            normalizedPackageName: d.normalized_package_name || '',
-            reservationDate: d.reservation_date || '',
-            components: d.components || '',
-            memberType: d.member_type || '',
-            paymentMethod: d.payment_method || '',
-            orderAmount: Number(d.order_amount) || 0,
-            paymentAmount: Number(d.payment_amount) || 0,
-            status: d.status || '',
-            orderDate: d.order_date || ''
-          }));
-          const validOrders = parsedData.filter(d => d.status.includes('결제완료') || d.status.includes('예약완료'));
-          setData(validOrders);
-        }
-      } catch (err) {
-        console.error('Error fetching package data:', err);
-      } finally {
-        setIsProcessing(false);
-      }
-    };
     fetchData();
   }, []);
 
@@ -593,7 +556,7 @@ const PackageSalesDashboard: React.FC = () => {
       </div>
 
       <div className="pkg-actions-bar">
-         <button onClick={fetchFromSupabase} className="pkg-refresh-btn" disabled={isProcessing}>
+         <button onClick={fetchData} className="pkg-refresh-btn" disabled={isProcessing}>
            {isProcessing ? '🔄 데이터 불러오는 중...' : '🔄 최신 DB 데이터 새로고침'}
          </button>
          <div style={{ marginLeft: 'auto' }}>
