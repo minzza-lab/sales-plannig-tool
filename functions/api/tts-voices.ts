@@ -4,7 +4,8 @@
  */
 
 interface Env {
-  TTS_API_KEY: string;
+  TTS_API_KEY?: string;
+  VITE_GOOGLE_TTS_API_KEY?: string;
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
@@ -15,7 +16,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   };
 
   try {
-    const apiKey = context.env.TTS_API_KEY;
+    const apiKey = context.env.TTS_API_KEY || context.env.VITE_GOOGLE_TTS_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'TTS API key not configured' }), {
         status: 500,

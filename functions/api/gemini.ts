@@ -7,7 +7,8 @@
  */
 
 interface Env {
-  GEMINI_API_KEY: string;
+  GEMINI_API_KEY?: string;
+  VITE_GEMINI_API_KEY?: string;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -24,7 +25,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // model 필드는 Google API에 전달하지 않음
     const { model: _, ...requestBody } = body;
     
-    const apiKey = context.env.GEMINI_API_KEY;
+    const apiKey = context.env.GEMINI_API_KEY || context.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'API key not configured' }), {
         status: 500,
