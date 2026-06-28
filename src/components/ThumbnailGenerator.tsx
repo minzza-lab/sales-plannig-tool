@@ -468,6 +468,7 @@ const ThumbnailGenerator: React.FC = () => {
           {/* Left: Preview Canvas */}
           <div className="thumb-preview-panel">
             <div 
+              ref={canvasRef}
               className="canvas-wrapper"
               style={{ aspectRatio: `${activeSize.width} / ${activeSize.height}` }}
             >
