@@ -214,25 +214,47 @@ const ThumbnailGenerator: React.FC = () => {
         if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
 
-      // Generate 3 Background Image Options
       const randomSeed = Math.floor(Math.random() * 100000);
       const encodedPromptLeft = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
       
       const fetchPromises: Promise<string>[] = [];
       const fetchPromisesRight: Promise<string>[] = [];
-      
-      // Request 3 options in parallel
+
+      // High-quality Unsplash resort fallback URLs for seamless offline experience
+      const fallbackLefts = [
+        'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=1080&q=80', // Luxury resort pool
+        'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1080&q=80', // Luxury hotel facade
+        'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1080&q=80'  // Resort pool sunset
+      ];
+
+      const fallbackRights = [
+        'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=1080&q=80', // Hotel room bed
+        'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1080&q=80', // Resort breakfast dining
+        'https://images.unsplash.com/photo-1482862549707-f63cb32c5fd9?auto=format&fit=crop&w=1080&q=80'  // Aqua park water slide
+      ];
+
+      // Request 3 options in parallel with individual try/catch & retry & fallback
       for (let i = 0; i < 3; i++) {
         const seedLeft = randomSeed + i * 10;
         const leftUrl = `https://image.pollinations.ai/prompt/${encodedPromptLeft}?width=1080&height=1080&nologo=true&seed=${seedLeft}`;
         
         fetchPromises.push(
           fetch(leftUrl)
-            .then(res => {
-              if (!res.ok) throw new Error(`AI배경 생성 실패 (옵션 ${i + 1})`);
+            .then(async res => {
+              if (!res.ok) {
+                // Retry once after 400ms delay
+                await new Promise(r => setTimeout(r, 400));
+                const retryRes = await fetch(leftUrl);
+                if (!retryRes.ok) throw new Error("Retry failed");
+                return retryRes.blob();
+              }
               return res.blob();
             })
             .then(blob => URL.createObjectURL(blob))
+            .catch(err => {
+              console.warn(`[Option ${i + 1} Left] AI 생성 실패, 프리미엄 백업 이미지 연동:`, err);
+              return fallbackLefts[i]; // Fallback to gorgeous unsplash image on error
+            })
         );
 
         if (isPkg) {
@@ -242,11 +264,21 @@ const ThumbnailGenerator: React.FC = () => {
           
           fetchPromisesRight.push(
             fetch(rightUrl)
-              .then(res => {
-                if (!res.ok) throw new Error(`AI배경 생성 실패 (옵션 ${i + 1} 우측)`);
+              .then(async res => {
+                if (!res.ok) {
+                  // Retry once after 400ms delay
+                  await new Promise(r => setTimeout(r, 400));
+                  const retryRes = await fetch(rightUrl);
+                  if (!retryRes.ok) throw new Error("Retry failed");
+                  return retryRes.blob();
+                }
                 return res.blob();
               })
               .then(blob => URL.createObjectURL(blob))
+              .catch(err => {
+                console.warn(`[Option ${i + 1} Right] AI 생성 실패, 프리미엄 백업 이미지 연동:`, err);
+                return fallbackRights[i]; // Fallback to gorgeous unsplash image on error
+              })
           );
         }
       }
