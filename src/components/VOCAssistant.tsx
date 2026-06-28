@@ -60,7 +60,7 @@ const VOCAssistant: React.FC = () => {
       const { data, error } = await supabase
         .from('voc_inquiries')
         .select('*')
-        .eq('status', '처리중')
+        .eq('status', 'unanswered')
         .order('created_at', { ascending: false });
         
       if (data && !error) {
@@ -73,7 +73,7 @@ const VOCAssistant: React.FC = () => {
       const { data, error } = await supabase
         .from('voc_inquiries')
         .select('*')
-        .eq('status', '답변완료')
+        .eq('status', 'answered')
         .order('created_at', { ascending: false })
         .limit(5); // 최근 5개만
         
