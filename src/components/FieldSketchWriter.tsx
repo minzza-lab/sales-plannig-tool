@@ -164,12 +164,41 @@ const FieldSketchWriter: React.FC = () => {
     setIsLoading(true);
     setError('');
 
+    // AI 분석용 초경량 이미지 압축 헬퍼 함수
+    const compressForAi = (base64Str: string): Promise<string> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const maxAiWidth = 480; // AI 인지용은 480px로도 충분히 고양이/사람/풍경 다 인식함
+          let width = img.width;
+          let height = img.height;
+          if (width > maxAiWidth) {
+            height = (maxAiWidth / width) * height;
+            width = maxAiWidth;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          ctx?.drawImage(img, 0, 0, width, height);
+          // 저용량 JPEG 인코딩
+          const result = canvas.toDataURL('image/jpeg', 0.65);
+          resolve(result.split(',')[1]);
+        };
+        img.onerror = () => resolve(base64Str.split(',')[1]);
+      });
+    };
+
     try {
-      const imageParts = selectedFiles.map(item => ({
-        inline_data: {
-          data: item.base64.split(',')[1],
-          mime_type: 'image/jpeg'
-        }
+      const imageParts = await Promise.all(selectedFiles.map(async item => {
+        const aiBase64 = await compressForAi(item.base64);
+        return {
+          inline_data: {
+            data: aiBase64,
+            mime_type: 'image/jpeg'
+          }
+        };
       }));
       
       let toneInstruction = '';
