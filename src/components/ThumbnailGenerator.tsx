@@ -78,6 +78,11 @@ const ThumbnailGenerator: React.FC = () => {
   const [badgePosition, setBadgePosition] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>('top-left');
   const [customBadgeText, setCustomBadgeText] = useState('');
 
+  // AI Generated Multiple Image Options States (3 recommendations)
+  const [bgImageOptions, setBgImageOptions] = useState<string[]>([]);
+  const [bgImageOptionsRight, setBgImageOptionsRight] = useState<string[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(-1);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const activeSize = EXPORT_SIZES.find(s => s.id === selectedSizeId) || EXPORT_SIZES[0];
@@ -176,28 +181,62 @@ const ThumbnailGenerator: React.FC = () => {
       setSubText(parsed.copyOptions[0].sub);
       setSelectedCopyIndex(0);
 
-      // Generate Background Image(s)
-      const encodedPromptLeft = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+      // Revoke old object URLs to prevent memory leaks
+      bgImageOptions.forEach(url => {
+        if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      });
+      bgImageOptionsRight.forEach(url => {
+        if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      });
+
+      // Generate 3 Background Image Options
       const randomSeed = Math.floor(Math.random() * 100000);
-      const leftUrl = `https://image.pollinations.ai/prompt/${encodedPromptLeft}?width=1080&height=1080&nologo=true&seed=${randomSeed}`;
-
-      if (isPkg) {
-        const encodedPromptRight = encodeURIComponent((parsed.imagePromptRight || parsed.imagePrompt) + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
-        const rightUrl = `https://image.pollinations.ai/prompt/${encodedPromptRight}?width=1080&height=1080&nologo=true&seed=${randomSeed + 1}`;
-
-        // Fetch both in parallel
-        const [resLeft, resRight] = await Promise.all([fetch(leftUrl), fetch(rightUrl)]);
-        if (!resLeft.ok || !resRight.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 시도해 주세요.");
-
-        const [blobLeft, blobRight] = await Promise.all([resLeft.blob(), resRight.blob()]);
-        setBgImageUrl(URL.createObjectURL(blobLeft));
-        setBgImageUrlRight(URL.createObjectURL(blobRight));
-      } else {
-        const imgResponse = await fetch(leftUrl);
-        if (!imgResponse.ok) throw new Error("이미지 생성 서버가 혼잡합니다. 다시 눌러주세요.");
+      const encodedPromptLeft = encodeURIComponent(parsed.imagePrompt + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+      
+      const fetchPromises: Promise<string>[] = [];
+      const fetchPromisesRight: Promise<string>[] = [];
+      
+      // Request 3 options in parallel
+      for (let i = 0; i < 3; i++) {
+        const seedLeft = randomSeed + i * 10;
+        const leftUrl = `https://image.pollinations.ai/prompt/${encodedPromptLeft}?width=1080&height=1080&nologo=true&seed=${seedLeft}`;
         
-        const blob = await imgResponse.blob();
-        setBgImageUrl(URL.createObjectURL(blob));
+        fetchPromises.push(
+          fetch(leftUrl)
+            .then(res => {
+              if (!res.ok) throw new Error(`AI배경 생성 실패 (옵션 ${i + 1})`);
+              return res.blob();
+            })
+            .then(blob => URL.createObjectURL(blob))
+        );
+
+        if (isPkg) {
+          const seedRight = randomSeed + i * 10 + 5;
+          const encodedPromptRight = encodeURIComponent((parsed.imagePromptRight || parsed.imagePrompt) + ", highly detailed, 4k, marketing photography, beautiful lighting, clean blank space, no text");
+          const rightUrl = `https://image.pollinations.ai/prompt/${encodedPromptRight}?width=1080&height=1080&nologo=true&seed=${seedRight}`;
+          
+          fetchPromisesRight.push(
+            fetch(rightUrl)
+              .then(res => {
+                if (!res.ok) throw new Error(`AI배경 생성 실패 (옵션 ${i + 1} 우측)`);
+                return res.blob();
+              })
+              .then(blob => URL.createObjectURL(blob))
+          );
+        }
+      }
+
+      const leftResults = await Promise.all(fetchPromises);
+      const rightResults = isPkg ? await Promise.all(fetchPromisesRight) : [];
+
+      setBgImageOptions(leftResults);
+      setBgImageOptionsRight(rightResults);
+      setSelectedImageIndex(0); // 첫번째 제안 기본 적용
+      
+      setBgImageUrl(leftResults[0]);
+      if (isPkg) {
+        setBgImageUrlRight(rightResults[0]);
+      } else {
         setBgImageUrlRight(null);
       }
 
@@ -231,6 +270,7 @@ const ThumbnailGenerator: React.FC = () => {
       reader.onload = () => {
         if (reader.result) {
           setBgImageUrl(reader.result as string);
+          setSelectedImageIndex(-1); // 수동 업로드 시 AI 이미지 선택 테두리 해제
           initDummyCopy();
         }
       };
@@ -249,6 +289,7 @@ const ThumbnailGenerator: React.FC = () => {
       reader.onload = () => {
         if (reader.result) {
           setBgImageUrlRight(reader.result as string);
+          setSelectedImageIndex(-1); // 수동 업로드 시 AI 이미지 선택 테두리 해제
           initDummyCopy();
         }
       };
@@ -269,18 +310,85 @@ const ThumbnailGenerator: React.FC = () => {
   const handleDownload = async (targetWidth: number, targetHeight: number, labelName: string) => {
     if (!canvasRef.current) return;
     
+    // Create custom overlay spinner since high-res rendering can take 1-2 seconds
+    const spinner = document.createElement('div');
+    spinner.style.position = 'fixed';
+    spinner.style.inset = '0';
+    spinner.style.backgroundColor = 'rgba(15, 23, 42, 0.7)';
+    spinner.style.backdropFilter = 'blur(4px)';
+    spinner.style.display = 'flex';
+    spinner.style.flexDirection = 'column';
+    spinner.style.justifyContent = 'center';
+    spinner.style.alignItems = 'center';
+    spinner.style.zIndex = '9999';
+    spinner.innerHTML = `
+      <div style="border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #ff9f1c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+      <p style="color: #ffffff; margin-top: 16px; font-family: sans-serif; font-size: 14px;">고해상도 이미지 (${targetWidth}x${targetHeight}) 렌더링 중...</p>
+      <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+    `;
+    document.body.appendChild(spinner);
+
     try {
-      const currentWidth = canvasRef.current.offsetWidth;
-      // Calculate scale to export at exactly targetWidth pixels
-      const scaleFactor = targetWidth / currentWidth;
+      // 1. Clone the preview container
+      const originNode = canvasRef.current;
+      const clonedNode = originNode.cloneNode(true) as HTMLDivElement;
       
-      const canvas = await html2canvas(canvasRef.current, {
-        scale: scaleFactor,
+      // 2. Setup invisible container for render off-screen
+      const renderContainer = document.createElement('div');
+      renderContainer.style.position = 'fixed';
+      renderContainer.style.left = '-99999px';
+      renderContainer.style.top = '-99999px';
+      renderContainer.style.width = `${targetWidth}px`;
+      renderContainer.style.height = `${targetHeight}px`;
+      
+      // Apply exact target styling to the cloned wrapper
+      clonedNode.style.width = '100%';
+      clonedNode.style.height = '100%';
+      clonedNode.style.aspectRatio = 'none'; // Remove aspectRatio constraint to force target boundaries
+      clonedNode.style.borderRadius = '0'; // Clean edges for production image
+      
+      // Calculate font scale based on ratio (design reference width is 800px)
+      const scaleMultiplier = targetWidth / 800;
+      
+      // Find typography items inside cloned node and adjust font sizes to scale nicely
+      const titleEl = clonedNode.querySelector('h2');
+      if (titleEl) {
+        titleEl.style.fontSize = `${mainFontSize * scaleMultiplier}px`;
+        titleEl.style.lineHeight = `${mainLineHeight}`;
+      }
+      
+      const subEl = clonedNode.querySelector('p');
+      if (subEl) {
+        subEl.style.fontSize = `${subFontSize * scaleMultiplier}px`;
+        subEl.style.lineHeight = `${subLineHeight}`;
+      }
+      
+      // Adjust Slanted Header Bar height if package mode
+      if (layoutMode === 'package') {
+        const headerBar = clonedNode.querySelector('.canvas-header-bar') as HTMLElement;
+        if (headerBar) {
+          headerBar.style.padding = `${16 * scaleMultiplier}px ${32 * scaleMultiplier}px`;
+        }
+      }
+
+      renderContainer.appendChild(clonedNode);
+      document.body.appendChild(renderContainer);
+      
+      // 3. Render exact pixels via html2canvas
+      const canvas = await html2canvas(clonedNode, {
+        width: targetWidth,
+        height: targetHeight,
+        scale: 1, // Draw 1:1 on the target sizing container
         useCORS: true,
         allowTaint: true,
+        backgroundColor: '#0f172a'
       });
       
       canvas.toBlob((blob) => {
+        // Clean up temporary DOM immediately
+        document.body.removeChild(renderContainer);
+        document.body.removeChild(spinner);
+
         if (!blob) {
           alert("이미지 저장에 실패했습니다.");
           return;
@@ -300,6 +408,11 @@ const ThumbnailGenerator: React.FC = () => {
       }, 'image/png');
       
     } catch (err) {
+      // Safe clean up in case of crash
+      if (document.body.contains(spinner)) document.body.removeChild(spinner);
+      const tempContainer = document.querySelector('[style*="left: -99999px"]');
+      if (tempContainer) document.body.removeChild(tempContainer);
+
       alert("다운로드 중 오류가 발생했습니다.");
       console.error(err);
     }
@@ -703,6 +816,65 @@ const ThumbnailGenerator: React.FC = () => {
                       </select>
                     </div>
                   </div>
+
+                  {bgImageOptions.length > 0 && (
+                    <div className="control-group">
+                      <h3>🖼️ AI 추천 배경 제안 ({bgImageOptions.length}개)</h3>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        기획 의도에 맞춰 생성된 이미지 조합입니다. 마음에 드는 테마를 선택하세요.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                        {bgImageOptions.map((opt, idx) => (
+                          <div 
+                            key={idx}
+                            style={{
+                              position: 'relative',
+                              aspectRatio: '1',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              border: selectedImageIndex === idx ? '3px solid #ff9f1c' : '2px solid rgba(255, 255, 255, 0.1)',
+                              transition: 'all 0.2s',
+                              transform: selectedImageIndex === idx ? 'scale(1.02)' : 'none',
+                              backgroundColor: '#1e293b'
+                            }}
+                            onClick={() => {
+                              setSelectedImageIndex(idx);
+                              setBgImageUrl(opt);
+                              if (layoutMode === 'package' && bgImageOptionsRight[idx]) {
+                                setBgImageUrlRight(bgImageOptionsRight[idx]);
+                              }
+                            }}
+                          >
+                            {layoutMode === 'package' && bgImageOptionsRight[idx] ? (
+                              // Split background preview
+                              <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                                <div style={{ flex: 1, backgroundImage: `url(${opt})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                                <div style={{ flex: 1, backgroundImage: `url(${bgImageOptionsRight[idx]})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                              </div>
+                            ) : (
+                              // Single background preview
+                              <div style={{ width: '100%', height: '100%', backgroundImage: `url(${opt})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                            )}
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '0',
+                              left: '0',
+                              width: '100%',
+                              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                              color: '#fff',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              padding: '2px 0',
+                              fontWeight: 'bold'
+                            }}>
+                              제안 {idx + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="control-group">
                     <h3>📤 배경 사진 교체</h3>
