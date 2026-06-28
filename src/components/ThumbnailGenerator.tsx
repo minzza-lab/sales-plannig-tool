@@ -86,6 +86,9 @@ const ThumbnailGenerator: React.FC = () => {
   // Uploaded image resolution tracking state
   const [uploadedImageRatio, setUploadedImageRatio] = useState<{ width: number; height: number } | null>(null);
 
+  // Generation loading progress step tracker (0: idle, 1: text/prompt, 2: image rendering, 3: assembling layout)
+  const [loadingStep, setLoadingStep] = useState<number>(0);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Compute all available sizes including dynamic uploaded ratio
@@ -153,6 +156,8 @@ const ThumbnailGenerator: React.FC = () => {
     const targetProduct = productName.trim() || "여름시즌 워터파크 시크릿 특가 티켓";
 
     setIsGenerating(true);
+    setLoadingStep(1); // 1단계: 기획 의도 분석 및 문구 도출 시작
+
     try {
       // Modify prompt based on package mode or general mode
       const isPkg = layoutMode === 'package';
@@ -198,6 +203,8 @@ const ThumbnailGenerator: React.FC = () => {
       setMainText(parsed.copyOptions[0].main);
       setSubText(parsed.copyOptions[0].sub);
       setSelectedCopyIndex(0);
+
+      setLoadingStep(2); // 2단계: AI 추천 배경 이미지 3쌍 병렬 생성 돌입
 
       // Revoke old object URLs to prevent memory leaks
       bgImageOptions.forEach(url => {
@@ -247,6 +254,9 @@ const ThumbnailGenerator: React.FC = () => {
       const leftResults = await Promise.all(fetchPromises);
       const rightResults = isPkg ? await Promise.all(fetchPromisesRight) : [];
 
+      setLoadingStep(3); // 3단계: 디자인 레이아웃 조립 및 원본 배율 자동 연동
+      await new Promise(r => setTimeout(r, 600)); // Visual feel delay
+
       setBgImageOptions(leftResults);
       setBgImageOptionsRight(rightResults);
       setSelectedImageIndex(0); // 첫번째 제안 기본 적용
@@ -267,6 +277,7 @@ const ThumbnailGenerator: React.FC = () => {
       console.error(error);
     } finally {
       setIsGenerating(false);
+      setLoadingStep(0); // 로딩 해제
     }
   };
 
@@ -498,6 +509,69 @@ const ThumbnailGenerator: React.FC = () => {
 
   return (
     <div className="thumb-container animate-fade-in">
+      {isGenerating && (
+        <div className="generation-overlay">
+          <div className="overlay-glass-card">
+            <div className="overlay-sparkles">✨</div>
+            <h2>AI 썸네일 자동 에셋 제작 중</h2>
+            <p className="overlay-subtitle">구글 제미나이와 이미지 생성기가 맞물려 리얼타임 디자인을 조립하고 있습니다.</p>
+            
+            <div className="progress-steps-list">
+              {/* 1단계 */}
+              <div className={`step-row ${loadingStep >= 1 ? 'active' : ''} ${loadingStep > 1 ? 'completed' : ''}`}>
+                <div className="step-icon-wrap">
+                  {loadingStep > 1 ? (
+                    <span className="step-check">✓</span>
+                  ) : loadingStep === 1 ? (
+                    <div className="step-loading-spinner"></div>
+                  ) : (
+                    <span className="step-pending">○</span>
+                  )}
+                </div>
+                <div className="step-text-wrap">
+                  <h4>1단계: 기획의도 및 소구점 정밀 분석</h4>
+                  <p>제미나이가 마케팅 타겟을 독해하여 3가지 카피와 배경 묘사 프롬프트를 기획합니다.</p>
+                </div>
+              </div>
+
+              {/* 2단계 */}
+              <div className={`step-row ${loadingStep >= 2 ? 'active' : ''} ${loadingStep > 2 ? 'completed' : ''}`}>
+                <div className="step-icon-wrap">
+                  {loadingStep > 2 ? (
+                    <span className="step-check">✓</span>
+                  ) : loadingStep === 2 ? (
+                    <div className="step-loading-spinner"></div>
+                  ) : (
+                    <span className="step-pending">○</span>
+                  )}
+                </div>
+                <div className="step-text-wrap">
+                  <h4>2단계: AI 추천 배경 3쌍 병렬 렌더링</h4>
+                  <p>Pollinations AI 엔진이 실시간으로 3가지 옵션의 이미지를 대조 생성합니다.</p>
+                </div>
+              </div>
+
+              {/* 3단계 */}
+              <div className={`step-row ${loadingStep >= 3 ? 'active' : ''} ${loadingStep > 3 ? 'completed' : ''}`}>
+                <div className="step-icon-wrap">
+                  {loadingStep > 3 ? (
+                    <span className="step-check">✓</span>
+                  ) : loadingStep === 3 ? (
+                    <div className="step-loading-spinner"></div>
+                  ) : (
+                    <span className="step-pending">○</span>
+                  )}
+                </div>
+                <div className="step-text-wrap">
+                  <h4>3단계: 최적 레이아웃 조립 및 원본비 매핑</h4>
+                  <p>타이틀바, 카피 배치, 뱃지 레이어를 완성하고 원본 해상도를 자동 연동합니다.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="thumb-header">
         <h1>🎨 프리미엄 상품 썸네일 제작기</h1>
         <p>기획 의도만 적으면 배경을 그리고, 찰떡같은 카피와 로고/뱃지까지 입혀 고화질 다운로드해 드립니다.</p>
