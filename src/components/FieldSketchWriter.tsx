@@ -166,12 +166,18 @@ const FieldSketchWriter: React.FC = () => {
     setLoadingStep(1); // 1단계: 로컬 이미지 압축 최적화 시작
     setError('');
 
-    // AI 분석용 초경량 이미지 압축 헬퍼 함수
+    // AI 분석용 초경량 이미지 압축 헬퍼 함수 (2초 타임아웃 방어 코드 추가)
     const compressForAi = (base64Str: string): Promise<string> => {
       return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          console.warn('⚠️ 이미지 압축 시간 초과 - 원본 데이터로 진행합니다.');
+          resolve(base64Str.split(',')[1] || '');
+        }, 2000);
+
         const img = new Image();
         img.src = base64Str;
         img.onload = () => {
+          clearTimeout(timeoutId);
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           const maxAiWidth = 480; // AI 인지용은 480px로도 충분히 고양이/사람/풍경 다 인식함
@@ -188,7 +194,10 @@ const FieldSketchWriter: React.FC = () => {
           const result = canvas.toDataURL('image/jpeg', 0.65);
           resolve(result.split(',')[1]);
         };
-        img.onerror = () => resolve(base64Str.split(',')[1]);
+        img.onerror = () => {
+          clearTimeout(timeoutId);
+          resolve(base64Str.split(',')[1] || '');
+        };
       });
     };
 
