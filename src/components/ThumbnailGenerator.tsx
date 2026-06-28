@@ -83,9 +83,27 @@ const ThumbnailGenerator: React.FC = () => {
   const [bgImageOptionsRight, setBgImageOptionsRight] = useState<string[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(-1);
 
+  // Uploaded image resolution tracking state
+  const [uploadedImageRatio, setUploadedImageRatio] = useState<{ width: number; height: number } | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const activeSize = EXPORT_SIZES.find(s => s.id === selectedSizeId) || EXPORT_SIZES[0];
+  // Compute all available sizes including dynamic uploaded ratio
+  const allSizes = [...EXPORT_SIZES];
+  if (uploadedImageRatio) {
+    // Check if it already exists, if not add it at the top
+    if (!allSizes.some(s => s.id === 'uploaded-ratio')) {
+      allSizes.unshift({
+        id: 'uploaded-ratio',
+        name: '📸 업로드 사진 원본 비율',
+        width: uploadedImageRatio.width,
+        height: uploadedImageRatio.height,
+        category: '기타'
+      });
+    }
+  }
+
+  const activeSize = allSizes.find(s => s.id === selectedSizeId) || allSizes[0];
 
   // Helper: Hex color to RGBA
   const hexToRgba = (hex: string, alpha: number) => {
@@ -269,6 +287,12 @@ const ThumbnailGenerator: React.FC = () => {
       const reader = new FileReader();
       reader.onload = () => {
         if (reader.result) {
+          const img = new Image();
+          img.src = reader.result as string;
+          img.onload = () => {
+            setUploadedImageRatio({ width: img.naturalWidth, height: img.naturalHeight });
+            setSelectedSizeId('uploaded-ratio'); // 업로드 시 즉시 원본 비율 프리셋 선택
+          };
           setBgImageUrl(reader.result as string);
           setSelectedImageIndex(-1); // 수동 업로드 시 AI 이미지 선택 테두리 해제
           initDummyCopy();
@@ -288,6 +312,12 @@ const ThumbnailGenerator: React.FC = () => {
       const reader = new FileReader();
       reader.onload = () => {
         if (reader.result) {
+          const img = new Image();
+          img.src = reader.result as string;
+          img.onload = () => {
+            setUploadedImageRatio({ width: img.naturalWidth, height: img.naturalHeight });
+            setSelectedSizeId('uploaded-ratio'); // 업로드 시 즉시 원본 비율 프리셋 선택
+          };
           setBgImageUrlRight(reader.result as string);
           setSelectedImageIndex(-1); // 수동 업로드 시 AI 이미지 선택 테두리 해제
           initDummyCopy();
@@ -698,7 +728,7 @@ const ThumbnailGenerator: React.FC = () => {
             <div className="download-buttons-section">
               <span className="download-title">💾 다운로드 사이즈 선택</span>
               <div className="download-grid">
-                {EXPORT_SIZES.map(sz => (
+                {allSizes.map(sz => (
                   <button 
                     key={sz.id}
                     className="download-size-btn"
@@ -808,7 +838,7 @@ const ThumbnailGenerator: React.FC = () => {
                         onChange={(e) => setSelectedSizeId(e.target.value)}
                         className="edit-input"
                       >
-                        {EXPORT_SIZES.map(sz => (
+                        {allSizes.map(sz => (
                           <option key={sz.id} value={sz.id}>
                             [{sz.category}] {sz.name} ({sz.width}x{sz.height})
                           </option>
@@ -841,6 +871,9 @@ const ThumbnailGenerator: React.FC = () => {
                             onClick={() => {
                               setSelectedImageIndex(idx);
                               setBgImageUrl(opt);
+                              // AI Generated image is natively 1080x1080 (1:1)
+                              setUploadedImageRatio({ width: 1080, height: 1080 });
+                              setSelectedSizeId('uploaded-ratio');
                               if (layoutMode === 'package' && bgImageOptionsRight[idx]) {
                                 setBgImageUrlRight(bgImageOptionsRight[idx]);
                               }
