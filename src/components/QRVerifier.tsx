@@ -703,9 +703,6 @@ export default function QRVerifier() {
                 <>
                   <div className="scanner-wrapper">
                     <div id="reader" style={{ width: '100%' }}></div>
-                    <div className="scanner-overlay">
-                      <div className="scan-box-guide"></div>
-                    </div>
                   </div>
                   
                   <div className="scan-controls" style={{ marginTop: '0.8rem' }}>
