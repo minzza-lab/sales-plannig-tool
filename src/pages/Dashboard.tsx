@@ -139,6 +139,14 @@ const Dashboard: React.FC = () => {
       icon: '📊',
       path: '/tools/barcode-generator',
       status: 'active'
+    },
+    {
+      id: 'qr-verifier',
+      title: 'QR 코드 검증기',
+      description: '카메라로 QR 코드를 스캔해 파싱한 앞 5글자를 데이터베이스와 매칭하여 검증합니다.',
+      icon: '📷',
+      path: '/tools/qr-verifier',
+      status: 'active'
     }
   ];
 
@@ -161,7 +169,7 @@ const Dashboard: React.FC = () => {
     {
       title: '🛠️ 유틸리티 모음',
       id: 'util',
-      tools: tools.filter(t => ['space-simulator', 'qr-generator', 'url-shortener', 'barcode-generator'].includes(t.id))
+      tools: tools.filter(t => ['space-simulator', 'qr-generator', 'qr-verifier', 'url-shortener', 'barcode-generator'].includes(t.id))
     }
   ];
 

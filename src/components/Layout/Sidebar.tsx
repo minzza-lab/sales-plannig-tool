@@ -164,6 +164,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                   </NavLink>
                 </li>
                 <li>
+                  <NavLink to="/tools/qr-verifier" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">📷</span> QR 코드 검증기
+                  </NavLink>
+                </li>
+                <li>
                   <NavLink to="/tools/url-shortener" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🔗</span> URL 단축기
                   </NavLink>

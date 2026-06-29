@@ -23,6 +23,7 @@ import VideoPromptGenerator from './components/VideoPromptGenerator'
 import RoomReservationAutomator from './components/RoomReservationAutomator'
 import ProductProposalGenerator from './components/ProductProposalGenerator'
 import PackageSalesDashboard from './components/PackageSalesDashboard'
+import QRVerifier from './components/QRVerifier'
 import './App.css'
 
 function App() {
@@ -78,6 +79,7 @@ function App() {
             <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
             <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
             <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
+            <Route path="tools/qr-verifier" element={<QRVerifier />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
