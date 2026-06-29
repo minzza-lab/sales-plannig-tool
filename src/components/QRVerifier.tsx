@@ -12,7 +12,11 @@ import {
   Info, 
   RefreshCw,
   Search,
-  Plus
+  Plus,
+  Volume2,
+  Clock,
+  Download,
+  Play
 } from 'lucide-react';
 import './QRVerifier.css';
 
@@ -34,6 +38,14 @@ interface GroupedQRMapping {
   ticket_type: string;
   descriptions: string[];
   discount_infos: string[]; // 식음 전용 요금 할인 데이터 모음
+}
+
+interface HistoryItem {
+  scannedText: string;
+  prefix: string;
+  uniqueValue: string;
+  timestamp: string;
+  items: QRMapping[];
 }
 
 export default function QRVerifier() {
@@ -72,8 +84,26 @@ export default function QRVerifier() {
   const [manualTicketType, setManualTicketType] = useState('일반');
   const [manualDiscount, setManualDiscount] = useState(''); // 수동 할인 정보
   
+  // Premium Features States
+  const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
+  const [autoResume, setAutoResume] = useState(true);
+  const [countdown, setCountdown] = useState(5);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCodeInstanceRef = useRef<Html5Qrcode | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('qr_verifier_history');
+    if (saved) {
+      try {
+        setHistoryList(JSON.parse(saved));
+      } catch (e) {
+        console.error('기록 파싱 에러:', e);
+      }
+    }
+  }, []);
 
   // Fetch mappings on load & when tab switches to data
   useEffect(() => {
@@ -86,6 +116,7 @@ export default function QRVerifier() {
   useEffect(() => {
     return () => {
       stopScanner();
+      clearCountdown();
     };
   }, []);
 
@@ -98,9 +129,57 @@ export default function QRVerifier() {
     }
   }, [isScanning, activeTab]);
 
+  // Auto-resume Timer Effect
+  useEffect(() => {
+    clearCountdown();
+    
+    if (scanResult && scanResult.success && autoResume) {
+      setCountdown(5); // 5초 카운트다운 시작
+      timerRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearCountdown();
+            closeResultAndResume();
+            return 5;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => clearCountdown();
+  }, [scanResult, autoResume]);
+
+  const clearCountdown = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  // Beep Audio Feedback Helper
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime); // 1.2KHz 선명한 신호음
+      gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime); // 부드러운 음량
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.08); // 80ms 재생
+    } catch (e) {
+      console.warn('AudioContext 재생 오류:', e);
+    }
+  };
+
   const startScanner = async () => {
     try {
-      // Ensure any existing scanner is stopped
       if (qrCodeInstanceRef.current) {
         await stopScanner();
       }
@@ -111,12 +190,12 @@ export default function QRVerifier() {
       await html5QrCode.start(
         { facingMode: 'environment' },
         {
-          fps: 15, // 프레임 레이트를 15 FPS로 상향하여 모바일 기기에서의 스캔 감도 극대화
+          fps: 15, // 프레임 레이트 상향
           qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.75; // QR 인식 상자 영역 비율을 75%로 확장
+            const size = Math.min(width, height) * 0.75; // 상자 비율 확장
             return { width: size, height: size };
           },
-          aspectRatio: 1.0 // 1:1 카메라 스캔 비율 고정으로 화면 뒤틀림 방지
+          aspectRatio: 1.0 // 1:1 카메라 고정
         },
         (decodedText) => {
           handleScanSuccess(decodedText);
@@ -145,16 +224,17 @@ export default function QRVerifier() {
   };
 
   const handleScanSuccess = async (decodedText: string) => {
-    // 모바일 기기 스캔 성공 시 햅틱 피드백(진동 80ms) 제공
+    // 햅틱 진동 피드백
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(80);
     }
+    
+    // 선명한 비프 사운드 재생
+    playBeep();
 
-    // 1. Stop scanner immediately to prevent duplicate scans
     setIsScanning(false);
     await stopScanner();
 
-    // 2. Parse prefix (first 5 characters) and convert to lowercase for matching
     const trimmedText = decodedText.trim();
     const prefix = trimmedText.substring(0, 5).toLowerCase();
 
@@ -170,7 +250,6 @@ export default function QRVerifier() {
 
     try {
       setIsLoading(true);
-      // 3. Query Supabase using lowercase prefix (multiple records can match)
       const { data, error } = await supabase
         .from('qr_mapping_data')
         .select('*')
@@ -179,13 +258,35 @@ export default function QRVerifier() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setScanResult({
+        const matchTitle = data[0].unique_value;
+        const newResult = {
           success: true,
           scannedText: trimmedText,
           prefix: data[0].prefix,
-          uniqueValue: data[0].unique_value,
-          items: data // 매칭된 모든 1:N 레코드 저장
+          uniqueValue: matchTitle,
+          items: data
+        };
+
+        setScanResult(newResult);
+
+        // 히스토리 목록 추가
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const historyItem: HistoryItem = {
+          scannedText: trimmedText,
+          prefix: data[0].prefix,
+          uniqueValue: matchTitle,
+          timestamp,
+          items: data
+        };
+
+        setHistoryList(prev => {
+          // 중복 스캔 시 기존 항목 제거 후 맨 위 배치
+          const filtered = prev.filter(h => h.prefix !== data[0].prefix);
+          const updated = [historyItem, ...filtered].slice(0, 10); // 최대 10건 보관
+          localStorage.setItem('qr_verifier_history', JSON.stringify(updated));
+          return updated;
         });
+
       } else {
         setScanResult({
           success: false,
@@ -204,20 +305,39 @@ export default function QRVerifier() {
       });
     } finally {
       setIsLoading(false);
-      setManualSearchText(''); // 검색창 초기화
+      setManualSearchText('');
     }
   };
 
   const closeResultAndResume = () => {
+    clearCountdown();
     setScanResult(null);
     setIsScanning(true);
+  };
+
+  // History action helpers
+  const handleOpenHistoryItem = (item: HistoryItem) => {
+    clearCountdown();
+    setScanResult({
+      success: true,
+      scannedText: item.scannedText,
+      prefix: item.prefix,
+      uniqueValue: item.uniqueValue,
+      items: item.items
+    });
+  };
+
+  const handleClearHistory = () => {
+    if (window.confirm('최근 스캔 기록을 모두 지우시겠습니까?')) {
+      setHistoryList([]);
+      localStorage.removeItem('qr_verifier_history');
+    }
   };
 
   // Data Actions
   const fetchMappings = async () => {
     try {
       setIsLoading(true);
-      // count: 'exact' 및 range(0, 99999)로 조회수 한도 대폭 증가 (10만건)
       const { data, error, count } = await supabase
         .from('qr_mapping_data')
         .select('*', { count: 'exact' })
@@ -251,11 +371,9 @@ export default function QRVerifier() {
         let totalRowsAnalyzed = 0;
         const sheetSummaries: string[] = [];
 
-        // 파일 내에 존재하는 실제 시트 이름 목록
         const fileSheetNames = wb.SheetNames;
 
         targetSheets.forEach(targetName => {
-          // 시트명에 타겟 키워드('식음', '발권', 'RC', '워터')가 포함되는지 검사 (예: '1.식음' -> '식음' 매칭 가능)
           const matchedRealSheetName = fileSheetNames.find(name => {
             const cleanName = name.replace(/\s+/g, '').toLowerCase();
             const cleanTarget = targetName.toLowerCase();
@@ -275,22 +393,20 @@ export default function QRVerifier() {
             return;
           }
 
-          // D열 (Index 3), E열 (Index 4), J열 (Index 9)에서 직접 추출 (헤더 스캔으로 인한 오인식 방지)
           let sheetRowCount = 0;
           for (let i = 1; i < rawRows.length; i++) {
             const row = rawRows[i];
-            if (!row || row.length <= 3) continue; // D열(Index 3) 데이터가 존재해야 함
+            if (!row || row.length <= 3) continue;
 
-            const dVal = String(row[3] || '').trim(); // D열: 상품명 (앞 5글자 파싱 대상)
-            const eVal = row[4] !== undefined && row[4] !== null ? String(row[4]).trim() : '공통'; // E열: 업장코드
-            const jVal = row[9] !== undefined && row[9] !== null ? String(row[9]).trim() : '일반'; // J열: 권종구분
+            const dVal = String(row[3] || '').trim();
+            const eVal = row[4] !== undefined && row[4] !== null ? String(row[4]).trim() : '공통';
+            const jVal = row[9] !== undefined && row[9] !== null ? String(row[9]).trim() : '일반';
             
-            // K열 (Index 10) 요금 할인 정보 - 오직 '식음' 시트일 때만 파싱하여 수집
             const discountVal = targetName === '식음' && row[10] !== undefined && row[10] !== null 
               ? String(row[10]).trim() 
               : null;
 
-            if (dVal.length < 5) continue; // 접두어를 딸 수 없는 짧은 텍스트 패스
+            if (dVal.length < 5) continue;
 
             const rawPrefix = dVal.substring(0, 5);
             const cleanPrefix = rawPrefix.toLowerCase();
@@ -299,7 +415,7 @@ export default function QRVerifier() {
               prefix: cleanPrefix,
               unique_value: dVal,
               description: eVal,
-              category: targetName, // 시트명 (대분류)
+              category: targetName,
               ticket_type: jVal,
               discount_info: discountVal
             });
@@ -315,11 +431,9 @@ export default function QRVerifier() {
           return;
         }
 
-        // prefix + description + category + ticket_type 복합 기준으로 중복 제거
         const uniqueMap = new Map<string, QRMapping>();
         parsedData.forEach(item => {
           const key = `${item.prefix}:::${item.description || ''}:::${item.category || ''}:::${item.ticket_type || ''}`;
-          // 동일한 복합 키인 경우 요금할인이 있는 데이터를 유지하거나 업데이트
           const existing = uniqueMap.get(key);
           if (!existing || (!existing.discount_info && item.discount_info)) {
             uniqueMap.set(key, item);
@@ -346,10 +460,40 @@ export default function QRVerifier() {
     reader.readAsBinaryString(file);
   };
 
+  // Export Mappings List to Excel (.xlsx)
+  const handleExportToExcel = () => {
+    if (mappingData.length === 0) {
+      alert('내보낼 데이터가 없습니다.');
+      return;
+    }
+    
+    try {
+      // 내보내기용 데이터를 깔끔하게 배열 형태로 생성
+      const exportRows = filteredData.map(item => ({
+        '대분류 (시트)': item.category,
+        '접두어 (5글자)': item.prefix.toUpperCase(),
+        '매칭 상품명 (D열)': item.unique_value,
+        '권종 구분 (J열)': item.ticket_type,
+        '대체 사용 가능 업장 (E열)': item.descriptions.join(', '),
+        '요금 할인 (식음 K열)': item.discount_infos.join(', ') || '-'
+      }));
+      
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '대체업장 매핑목록');
+      
+      // 파일 크기 최적화 및 다운로드 트리거
+      XLSX.writeFile(workbook, `대체업장_매핑목록_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (e) {
+      console.error('엑셀 추출 에러:', e);
+      alert('엑셀 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const cleanPrefix = manualPrefix.trim().substring(0, 5).toLowerCase(); // 소문자로 변환하여 저장
+    const cleanPrefix = manualPrefix.trim().substring(0, 5).toLowerCase();
     const cleanValue = manualValue.trim();
     const cleanDesc = manualDesc.trim();
 
@@ -374,13 +518,12 @@ export default function QRVerifier() {
           category: manualCategory || '공통',
           ticket_type: manualTicketType || '일반',
           discount_info: manualCategory === '식음' && manualDiscount.trim() ? manualDiscount.trim() : null
-        }, { onConflict: 'prefix,description,category,ticket_type' }); // 복합 제약조건 타겟
+        }, { onConflict: 'prefix,description,category,ticket_type' });
 
       if (error) throw error;
 
       alert(`접두어 [${cleanPrefix.toUpperCase()}] 데이터가 성공적으로 등록/수정되었습니다.`);
       
-      // Reset inputs
       setManualPrefix('');
       setManualValue('');
       setManualDesc('');
@@ -407,7 +550,7 @@ export default function QRVerifier() {
       const { error } = await supabase
         .from('qr_mapping_data')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        .neq('id', '00000000-0000-0000-0000-000000000000');
 
       if (error) throw error;
       alert('모든 데이터가 정상적으로 삭제되었습니다.');
@@ -454,15 +597,12 @@ export default function QRVerifier() {
     return Array.from(map.values());
   };
 
-  // unique 한 권종구분 목록 동적 추출 (셀렉트 박스용)
   const uniqueTicketTypes = Array.from(
     new Set(mappingData.map(item => item.ticket_type).filter(Boolean))
   ) as string[];
 
-  // 1. prefix 기준으로 그룹화 수행
   const groupedData = groupDataByPrefix(mappingData);
 
-  // 2. 그룹화된 데이터를 필터 및 검색어로 필터링
   const filteredData = groupedData.filter(item => {
     const matchesSearch = 
       item.prefix.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -491,7 +631,7 @@ export default function QRVerifier() {
           }}
         >
           <QrCode size={18} />
-          QR 코드 실시간 검증
+          실시간 대체업장 조회
         </button>
         <button 
           className={`qr-tab-btn ${activeTab === 'data' ? 'active' : ''}`}
@@ -502,39 +642,39 @@ export default function QRVerifier() {
           }}
         >
           <Database size={18} />
-          데이터 관리 및 업로드
+          매핑 데이터 관리
         </button>
       </div>
 
       {/* TAB 1: SCANNER */}
       {activeTab === 'scan' && (
         <div className="scanner-section" style={{ width: '100%' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1.2rem' }}>
             
-            {/* Left/Top: Camera Scanner Container */}
+            {/* Camera Scanner Container */}
             <div style={{ width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', fontWeight: 600, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h3 style={{ fontSize: '1.15rem', marginBottom: '0.8rem', fontWeight: 600, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 📷 카메라 실시간 스캔
               </h3>
               
               {!isScanning ? (
                 <div className="text-center" style={{ 
-                  padding: '2.5rem 0', 
+                  padding: '2rem 0', 
                   width: '100%', 
                   background: 'rgba(255, 255, 255, 0.02)', 
                   border: '1px solid rgba(255, 255, 255, 0.05)',
                   borderRadius: '20px'
                 }}>
-                  <QrCode size={48} style={{ color: '#3b82f6', marginBottom: '1.2rem', opacity: 0.8 }} />
-                  <div style={{ marginBottom: '1.2rem', color: '#9ca3af', fontSize: '0.9rem' }}>
-                    카메라를 켜서 QR 코드를 스캔하세요.
+                  <QrCode size={44} style={{ color: '#3b82f6', marginBottom: '1rem', opacity: 0.8 }} />
+                  <div style={{ marginBottom: '1rem', color: '#9ca3af', fontSize: '0.85rem' }}>
+                    카메라를 활성화하여 QR 코드를 가져오세요.
                   </div>
                   <button 
                     className="scan-btn scan-btn-primary"
                     onClick={() => setIsScanning(true)}
-                    style={{ margin: '0 auto' }}
+                    style={{ margin: '0 auto', padding: '0.7rem 1.3rem', fontSize: '0.9rem' }}
                   >
-                    카메라 스캔 켜기
+                    카메라 스캔 시작
                   </button>
                 </div>
               ) : (
@@ -546,12 +686,13 @@ export default function QRVerifier() {
                     </div>
                   </div>
                   
-                  <div className="scan-controls" style={{ marginTop: '1rem' }}>
+                  <div className="scan-controls" style={{ marginTop: '0.8rem' }}>
                     <button 
                       className="scan-btn scan-btn-secondary"
                       onClick={() => setIsScanning(false)}
+                      style={{ padding: '0.6rem 1.2rem', fontSize: '0.85rem' }}
                     >
-                      카메라 끄기
+                      카메라 정지
                     </button>
                   </div>
                 </>
@@ -566,32 +707,32 @@ export default function QRVerifier() {
               width: '100%', 
               maxWidth: '480px',
               color: '#4b5563', 
-              fontSize: '0.9rem',
+              fontSize: '0.85rem',
               fontWeight: 600,
-              margin: '0.5rem 0'
+              margin: '0.2rem 0'
             }}>
               <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.08)' }}></div>
               <span style={{ padding: '0 1rem' }}>또는</span>
               <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.08)' }}></div>
             </div>
 
-            {/* Right/Bottom: Manual Code Input Lookup */}
+            {/* Manual Code Input Lookup */}
             <div style={{ 
               width: '100%', 
               maxWidth: '480px', 
               background: 'rgba(255, 255, 255, 0.02)', 
               border: '1px solid rgba(255, 255, 255, 0.05)',
               borderRadius: '20px',
-              padding: '1.5rem',
+              padding: '1.2rem',
               textAlign: 'center'
             }}>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                 ✍️ 코드 직접 입력 조회
               </h3>
-              <p style={{ color: '#9ca3af', fontSize: '0.85rem', marginBottom: '1.2rem' }}>
-                카메라가 없거나 인식이 안 되는 경우, 텍스트를 입력하여 조회합니다. (앞 5자리 파싱 대조)
+              <p style={{ color: '#9ca3af', fontSize: '0.8rem', marginBottom: '1rem' }}>
+                앞 5자리 이상 상품코드를 입력하여 바로 조회합니다.
               </p>
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <input 
                   type="text"
                   placeholder="조회할 코드 입력 (예: 9460B...)"
@@ -604,13 +745,13 @@ export default function QRVerifier() {
                   }}
                   style={{
                     flex: 1,
-                    padding: '0.7rem 1rem',
-                    borderRadius: '10px',
+                    padding: '0.6rem 0.8rem',
+                    borderRadius: '8px',
                     border: '1px solid rgba(255, 255, 255, 0.2)',
                     background: '#ffffff',
                     color: '#000000',
                     outline: 'none',
-                    fontSize: '0.95rem'
+                    fontSize: '0.9rem'
                   }}
                 />
                 <button 
@@ -619,21 +760,78 @@ export default function QRVerifier() {
                     handleScanSuccess(manualSearchText);
                   }}
                   style={{
-                    padding: '0 1.2rem',
+                    padding: '0 1rem',
                     background: '#10b981',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    fontSize: '0.9rem',
+                    fontSize: '0.85rem',
                     transition: 'background 0.2s'
                   }}
                 >
-                  조회하기
+                  조회
                 </button>
               </div>
             </div>
+
+            {/* Premium Feature: Recent History List */}
+            {historyList.length > 0 && (
+              <div style={{ 
+                width: '100%', 
+                maxWidth: '480px', 
+                background: 'rgba(255, 255, 255, 0.01)', 
+                border: '1px solid rgba(255, 255, 255, 0.04)',
+                borderRadius: '16px',
+                padding: '1rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Clock size={14} /> 최근 조회 기록 ({historyList.length}건)
+                  </span>
+                  <button 
+                    onClick={handleClearHistory} 
+                    style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    기록 전체삭제
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '180px', overflowY: 'auto' }}>
+                  {historyList.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => handleOpenHistoryItem(item)}
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.03)', 
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        borderRadius: '8px',
+                        padding: '0.5rem 0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '0.82rem',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', textAlign: 'left', flex: 1, marginRight: '0.5rem' }}>
+                        <span style={{ fontWeight: 700, color: '#60a5fa' }}>{item.prefix.toUpperCase()}</span>
+                        <span style={{ color: '#9ca3af', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '280px' }}>
+                          {item.uniqueValue}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>{item.timestamp}</span>
+                        <Play size={10} style={{ color: '#10b981' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
           </div>
 
@@ -645,7 +843,7 @@ export default function QRVerifier() {
                   {scanResult.success ? <CheckCircle2 size={36} /> : <XCircle size={36} />}
                 </div>
 
-                <h3>{scanResult.success ? '검증 완료' : '검증 실패'}</h3>
+                <h3>{scanResult.success ? '조회 완료' : '조회 실패'}</h3>
 
                 <div className="result-detail-box">
                   <div className="result-row">
@@ -713,6 +911,29 @@ export default function QRVerifier() {
                       {scanResult.message}
                     </div>
                   )}
+                </div>
+
+                {/* Auto-resume details UI */}
+                {scanResult.success && autoResume && (
+                  <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                    <Volume2 size={12} style={{ color: '#10b981' }} />
+                    <span><b>{countdown}</b>초 후 카메라 스캔이 자동으로 재개됩니다.</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: '#9ca3af', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={autoResume} 
+                      onChange={(e) => {
+                        setAutoResume(e.target.checked);
+                        if (!e.target.checked) clearCountdown();
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    자동 스캔 재개 활성화
+                  </label>
                 </div>
 
                 <button className="result-close-btn" onClick={closeResultAndResume}>
@@ -854,7 +1075,7 @@ export default function QRVerifier() {
                   </div>
                 </div>
 
-                 <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
                   <div style={{ flex: 1.2 }}>
                     <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.2rem' }}>업장 코드</label>
                     <input 
@@ -942,24 +1163,34 @@ export default function QRVerifier() {
 
           {/* Controls and Counters */}
           <div className="data-stats-row">
-            <div className="data-count">
-              등록된 원시 데이터: <span>{totalCount}</span> 건 | 접두어 압축 목록: <span>{groupedData.length}</span> 건
+            <div className="data-count" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>등록: <b>{totalCount}</b> 건</span> | <span>압축: <b>{groupedData.length}</b> 건</span>
             </div>
             
-            <div style={{ display: 'flex', gap: '0.8rem' }}>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
               <button 
                 className="qr-tab-btn" 
                 onClick={fetchMappings} 
-                style={{ padding: '0.5rem 1rem', margin: 0 }}
+                style={{ padding: '0.45rem 0.8rem', margin: 0, fontSize: '0.85rem' }}
                 disabled={isLoading}
               >
-                <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                 새로고침
+              </button>
+
+              <button 
+                className="qr-tab-btn" 
+                onClick={handleExportToExcel} 
+                style={{ padding: '0.45rem 0.8rem', margin: 0, fontSize: '0.85rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981' }}
+                disabled={isLoading}
+              >
+                <Download size={14} />
+                엑셀 내보내기
               </button>
               
               {mappingData.length > 0 && (
-                <button className="clear-btn" onClick={handleClearAll} disabled={isLoading}>
-                  <Trash2 size={16} />
+                <button className="clear-btn" onClick={handleClearAll} style={{ padding: '0.45rem 0.8rem', fontSize: '0.85rem' }} disabled={isLoading}>
+                  <Trash2 size={14} />
                   전체 삭제
                 </button>
               )}
