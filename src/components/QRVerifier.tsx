@@ -89,6 +89,14 @@ export default function QRVerifier() {
   const [autoResume, setAutoResume] = useState(true);
   const [countdown, setCountdown] = useState(5);
   
+  // Accordion active state for results popup
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    '식음': true,
+    '발권': true,
+    'RC': true,
+    '워터': true
+  });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const qrCodeInstanceRef = useRef<Html5Qrcode | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -267,6 +275,14 @@ export default function QRVerifier() {
           items: data
         };
 
+        // 아코디언 상태 리셋 (새 조회 시 전부 펼쳐진 상태로 시작)
+        setExpandedCategories({
+          '식음': true,
+          '발권': true,
+          'RC': true,
+          '워터': true
+        });
+
         setScanResult(newResult);
 
         // 히스토리 목록 추가
@@ -318,6 +334,12 @@ export default function QRVerifier() {
   // History action helpers
   const handleOpenHistoryItem = (item: HistoryItem) => {
     clearCountdown();
+    setExpandedCategories({
+      '식음': true,
+      '발권': true,
+      'RC': true,
+      '워터': true
+    });
     setScanResult({
       success: true,
       scannedText: item.scannedText,
@@ -872,91 +894,115 @@ export default function QRVerifier() {
                         <div style={{ 
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '0.6rem',
-                          maxHeight: '260px', 
+                          gap: '0.8rem',
+                          maxHeight: '280px', 
                           overflowY: 'auto',
                           paddingRight: '0.2rem',
                           WebkitOverflowScrolling: 'touch'
                         }}>
-                          {scanResult.items?.map((item, idx) => {
-                            // 대분류별 테마 색상 설정
-                            let catColor = '#60a5fa'; // Blue (기본)
-                            let catBg = 'rgba(96, 165, 250, 0.1)';
-                            if (item.category === '식음') {
-                              catColor = '#f59e0b'; // Orange
-                              catBg = 'rgba(245, 158, 11, 0.1)';
-                            } else if (item.category === '발권') {
-                              catColor = '#10b981'; // Green
-                              catBg = 'rgba(16, 185, 129, 0.1)';
-                            } else if (item.category === 'RC') {
-                              catColor = '#a855f7'; // Purple
-                              catBg = 'rgba(168, 85, 247, 0.1)';
-                            } else if (item.category === '워터') {
-                              catColor = '#06b6d4'; // Cyan
-                              catBg = 'rgba(6, 182, 212, 0.1)';
+                          {['식음', '발권', 'RC', '워터'].map(catName => {
+                            const catItems = scanResult.items?.filter(item => item.category === catName) || [];
+                            if (catItems.length === 0) return null; // 데이터가 존재하지 않는 카테고리는 노출 안함
+
+                            const isExpanded = expandedCategories[catName] !== false;
+
+                            // 카테고리별 아코디언 색상 테마 설정
+                            let catColor = '#60a5fa';
+                            let catBg = 'rgba(96, 165, 250, 0.15)';
+                            let borderCol = 'rgba(96, 165, 250, 0.3)';
+                            if (catName === '식음') {
+                              catColor = '#f59e0b';
+                              catBg = 'rgba(245, 158, 11, 0.15)';
+                              borderCol = 'rgba(245, 158, 11, 0.3)';
+                            } else if (catName === '발권') {
+                              catColor = '#10b981';
+                              catBg = 'rgba(16, 185, 129, 0.15)';
+                              borderCol = 'rgba(16, 185, 129, 0.3)';
+                            } else if (catName === 'RC') {
+                              catColor = '#a855f7';
+                              catBg = 'rgba(168, 85, 247, 0.15)';
+                              borderCol = 'rgba(168, 85, 247, 0.3)';
+                            } else if (catName === '워터') {
+                              catColor = '#06b6d4';
+                              catBg = 'rgba(6, 182, 212, 0.15)';
+                              borderCol = 'rgba(6, 182, 212, 0.3)';
                             }
 
                             return (
-                              <div 
-                                key={idx} 
-                                style={{ 
-                                  background: 'rgba(255, 255, 255, 0.03)', 
-                                  border: '1px solid rgba(255, 255, 255, 0.06)',
-                                  borderRadius: '12px',
-                                  padding: '0.75rem 0.9rem',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '0.4rem'
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  {/* 대분류 배지 태그 */}
-                                  <span style={{ 
-                                    color: catColor, 
-                                    background: catBg, 
-                                    padding: '0.25rem 0.5rem', 
-                                    borderRadius: '6px', 
-                                    fontSize: '0.75rem',
-                                    fontWeight: 700
-                                  }}>
-                                    {item.category || '공통'}
-                                  </span>
-                                  
-                                  {/* 권종 구분 */}
-                                  <span style={{ 
-                                    color: '#10b981', 
-                                    fontSize: '0.8rem',
-                                    fontWeight: 700
-                                  }}>
-                                    🎫 {item.ticket_type || '일반'}
-                                  </span>
-                                </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '0.1rem' }}>
-                                  {/* 업장 코드 */}
-                                  <span style={{ 
-                                    color: '#f3f4f6', 
-                                    fontSize: '0.95rem', 
+                              <div key={catName} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                {/* 아코디언 헤더 버튼 */}
+                                <button
+                                  onClick={() => setExpandedCategories(prev => ({
+                                    ...prev,
+                                    [catName]: !isExpanded
+                                  }))}
+                                  style={{
+                                    width: '100%',
+                                    background: catBg,
+                                    border: `1px solid ${borderCol}`,
+                                    borderRadius: '10px',
+                                    padding: '0.6rem 0.8rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    cursor: 'pointer',
+                                    color: catColor,
                                     fontWeight: 700,
-                                    wordBreak: 'break-all'
-                                  }}>
-                                    🏢 {item.description || '-'}
+                                    fontSize: '0.85rem',
+                                    outline: 'none',
+                                    transition: 'background 0.2s'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <span>{catName === '식음' ? '🍳' : catName === '발권' ? '🎟️' : catName === 'RC' ? '🎮' : '🌊'}</span>
+                                    <span>{catName}</span>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>({catItems.length}건)</span>
+                                  </div>
+                                  <span style={{ fontSize: '0.75rem', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                                    ▼
                                   </span>
-                                  
-                                  {/* 요금 할인 정보 (식음 전용 K열이 존재하는 경우만 배지 노출) */}
-                                  {item.discount_info && (
-                                    <span style={{ 
-                                      color: '#ec4899', 
-                                      fontSize: '0.82rem',
-                                      fontWeight: 700,
-                                      background: 'rgba(236, 72, 153, 0.1)',
-                                      padding: '0.15rem 0.4rem',
-                                      borderRadius: '6px'
-                                    }}>
-                                      🎁 {item.discount_info}
-                                    </span>
-                                  )}
-                                </div>
+                                </button>
+
+                                {/* 아코디언 바디 (해당 카테고리 카드 목록) */}
+                                {isExpanded && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingLeft: '0.2rem', marginTop: '0.2rem' }}>
+                                    {catItems.map((item, idx) => (
+                                      <div 
+                                        key={idx} 
+                                        style={{ 
+                                          background: 'rgba(255, 255, 255, 0.02)', 
+                                          border: '1px solid rgba(255, 255, 255, 0.05)',
+                                          borderRadius: '10px',
+                                          padding: '0.65rem 0.8rem',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '0.3rem'
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ color: '#10b981', fontSize: '0.78rem', fontWeight: 700 }}>
+                                            🎫 {item.ticket_type || '일반'}
+                                          </span>
+                                          {item.discount_info && (
+                                            <span style={{ 
+                                              color: '#ec4899', 
+                                              fontSize: '0.78rem',
+                                              fontWeight: 700,
+                                              background: 'rgba(236, 72, 153, 0.1)',
+                                              padding: '0.15rem 0.35rem',
+                                              borderRadius: '4px'
+                                            }}>
+                                              🎁 {item.discount_info}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div style={{ textAlign: 'left', color: '#f3f4f6', fontSize: '0.9rem', fontWeight: 700 }}>
+                                          🏢 {item.description || '-'}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
