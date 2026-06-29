@@ -142,8 +142,8 @@ const Dashboard: React.FC = () => {
     },
     {
       id: 'qr-verifier',
-      title: 'QR 코드 검증기',
-      description: '카메라로 QR 코드를 스캔해 파싱한 앞 5글자를 데이터베이스와 매칭하여 검증합니다.',
+      title: '대체업장 조회 도구',
+      description: '카메라로 QR 코드를 스캔하거나 코드를 직접 입력해 매칭되는 대체 사용 가능 업장과 혜택을 조회합니다.',
       icon: '📷',
       path: '/tools/qr-verifier',
       status: 'active'

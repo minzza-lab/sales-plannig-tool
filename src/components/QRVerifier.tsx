@@ -478,8 +478,8 @@ export default function QRVerifier() {
   return (
     <div className="qr-verifier-container">
       <div className="qr-verifier-header">
-        <h2>QR Verification Tool</h2>
-        <p>카메라로 QR 코드를 스캔하고 5글자 접두어를 파싱하여 사전에 등록된 고유값을 실시간 조회합니다.</p>
+        <h2>대체업장 조회 도구</h2>
+        <p>카메라로 QR 코드를 스캔하거나 코드를 직접 입력해 매칭되는 대체 사용 가능 업장과 혜택을 조회합니다.</p>
       </div>
 
       <div className="qr-tabs">
