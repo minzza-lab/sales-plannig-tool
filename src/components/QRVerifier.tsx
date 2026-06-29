@@ -865,43 +865,101 @@ export default function QRVerifier() {
                       </div>
                       
                       <div className="result-row" style={{ display: 'block', textAlign: 'left' }}>
-                        <span className="result-label" style={{ display: 'block', marginBottom: '0.5rem', color: '#9ca3af', fontWeight: 600, fontSize: '0.9rem' }}>
-                          📍 상세 사용처 및 권종구분 ({scanResult.items?.length || 0}건)
+                        <span className="result-label" style={{ display: 'block', marginBottom: '0.6rem', color: '#9ca3af', fontWeight: 600, fontSize: '0.88rem' }}>
+                          📍 사용 가능 업장 및 권종 ({scanResult.items?.length || 0}건)
                         </span>
                         
                         <div style={{ 
-                          maxHeight: '200px', 
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.6rem',
+                          maxHeight: '260px', 
                           overflowY: 'auto',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '10px',
-                          background: 'rgba(0, 0, 0, 0.25)'
+                          paddingRight: '0.2rem',
+                          WebkitOverflowScrolling: 'touch'
                         }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                            <thead>
-                              <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                                <th style={{ padding: '0.5rem 0.7rem', color: '#f59e0b', fontWeight: 600 }}>대분류</th>
-                                <th style={{ padding: '0.5rem 0.7rem', color: '#60a5fa', fontWeight: 600 }}>업장 코드 (E열)</th>
-                                <th style={{ padding: '0.5rem 0.7rem', color: '#10b981', fontWeight: 600 }}>권종 구분 (J열)</th>
-                                {scanResult.items?.some(item => item.discount_info) && (
-                                  <th style={{ padding: '0.5rem 0.7rem', color: '#ec4899', fontWeight: 600 }}>요금 할인 (식음 K열)</th>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {scanResult.items?.map((item, idx) => (
-                                <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)' }}>
-                                  <td style={{ padding: '0.5rem 0.7rem', color: '#f3f4f6' }}>{item.category}</td>
-                                  <td style={{ padding: '0.5rem 0.7rem', color: '#9ca3af' }}>{item.description || '-'}</td>
-                                  <td style={{ padding: '0.5rem 0.7rem', color: '#10b981', fontWeight: 600 }}>{item.ticket_type}</td>
-                                  {scanResult.items?.some(i => i.discount_info) && (
-                                    <td style={{ padding: '0.5rem 0.7rem', color: '#ec4899', fontWeight: 600 }}>
-                                      {item.category === '식음' ? (item.discount_info || '-') : '-'}
-                                    </td>
+                          {scanResult.items?.map((item, idx) => {
+                            // 대분류별 테마 색상 설정
+                            let catColor = '#60a5fa'; // Blue (기본)
+                            let catBg = 'rgba(96, 165, 250, 0.1)';
+                            if (item.category === '식음') {
+                              catColor = '#f59e0b'; // Orange
+                              catBg = 'rgba(245, 158, 11, 0.1)';
+                            } else if (item.category === '발권') {
+                              catColor = '#10b981'; // Green
+                              catBg = 'rgba(16, 185, 129, 0.1)';
+                            } else if (item.category === 'RC') {
+                              catColor = '#a855f7'; // Purple
+                              catBg = 'rgba(168, 85, 247, 0.1)';
+                            } else if (item.category === '워터') {
+                              catColor = '#06b6d4'; // Cyan
+                              catBg = 'rgba(6, 182, 212, 0.1)';
+                            }
+
+                            return (
+                              <div 
+                                key={idx} 
+                                style={{ 
+                                  background: 'rgba(255, 255, 255, 0.03)', 
+                                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                                  borderRadius: '12px',
+                                  padding: '0.75rem 0.9rem',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.4rem'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  {/* 대분류 배지 태그 */}
+                                  <span style={{ 
+                                    color: catColor, 
+                                    background: catBg, 
+                                    padding: '0.25rem 0.5rem', 
+                                    borderRadius: '6px', 
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700
+                                  }}>
+                                    {item.category || '공통'}
+                                  </span>
+                                  
+                                  {/* 권종 구분 */}
+                                  <span style={{ 
+                                    color: '#10b981', 
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700
+                                  }}>
+                                    🎫 {item.ticket_type || '일반'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '0.1rem' }}>
+                                  {/* 업장 코드 */}
+                                  <span style={{ 
+                                    color: '#f3f4f6', 
+                                    fontSize: '0.95rem', 
+                                    fontWeight: 700,
+                                    wordBreak: 'break-all'
+                                  }}>
+                                    🏢 {item.description || '-'}
+                                  </span>
+                                  
+                                  {/* 요금 할인 정보 (식음 전용 K열이 존재하는 경우만 배지 노출) */}
+                                  {item.discount_info && (
+                                    <span style={{ 
+                                      color: '#ec4899', 
+                                      fontSize: '0.82rem',
+                                      fontWeight: 700,
+                                      background: 'rgba(236, 72, 153, 0.1)',
+                                      padding: '0.15rem 0.4rem',
+                                      borderRadius: '6px'
+                                    }}>
+                                      🎁 {item.discount_info}
+                                    </span>
                                   )}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </>
