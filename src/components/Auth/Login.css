@@ -1,5 +1,5 @@
 .login-wrapper {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -18,29 +18,71 @@
 }
 
 @media (max-width: 480px) {
+  .login-wrapper {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 18px;
+    background: #f8fafc;
+  }
+
   .login-card {
-    padding: 30px 20px;
-    border-radius: 16px;
+    max-width: none;
+    min-height: calc(100dvh - 32px);
+    padding: 28px 20px 22px;
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   }
   
   .login-header {
-    margin-bottom: 25px;
+    margin-bottom: 24px;
   }
   
   .logo-icon {
-    font-size: 2.5rem;
+    font-size: 2.25rem;
+    margin-bottom: 10px;
   }
   
   .login-header h1 {
-    font-size: 1.5rem;
+    font-size: 1.45rem;
+    line-height: 1.25;
+    letter-spacing: 0;
+  }
+
+  .login-header p {
+    font-size: 0.88rem;
+    line-height: 1.45;
   }
   
   .login-form input {
-    padding: 12px;
+    min-height: 46px;
+    padding: 12px 14px;
+    font-size: 16px;
   }
   
   .login-submit-btn {
-    padding: 14px;
+    min-height: 48px;
+    padding: 13px 14px;
+  }
+
+  .login-mode-toggle {
+    line-height: 1.5;
+  }
+
+  .toggle-link-btn {
+    margin-left: 6px;
+  }
+
+  .login-divider {
+    margin: 20px 0;
+  }
+
+  .kakao-login-btn {
+    min-height: 48px;
+  }
+
+  .login-footer {
+    margin-top: 24px;
+    padding-top: 20px;
   }
 }
 

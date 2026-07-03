@@ -101,7 +101,9 @@ const VOCAssistant: React.FC = () => {
       if (data && !error) {
         try {
           setSyncStatus(JSON.parse(data.content));
-        } catch(e) {}
+        } catch {
+          console.warn('마지막 VOC 동기화 정보를 해석하지 못했습니다.');
+        }
       }
     };
     
@@ -182,8 +184,9 @@ const VOCAssistant: React.FC = () => {
         ["gemini-2.5-flash", "gemini-2.5-pro"]
       );
       setAiResponse(text.trim());
-    } catch (err: any) {
-      setError(`오류 발생: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '알 수 없는 오류';
+      setError(`오류 발생: ${message}`);
     } finally {
       setIsLoading(false);
     }

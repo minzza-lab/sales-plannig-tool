@@ -81,13 +81,14 @@ const VideoPromptGenerator: React.FC = () => {
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         parsedData = JSON.parse(jsonMatch ? jsonMatch[0] : responseText);
-      } catch (e) {
+      } catch {
         throw new Error("AI가 올바른 JSON 형식을 반환하지 않았습니다.");
       }
 
       setResult(parsedData);
-    } catch (error: any) {
-      alert('프롬프트 생성 중 오류가 발생했습니다: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류';
+      alert('프롬프트 생성 중 오류가 발생했습니다: ' + message);
     } finally {
       setIsGenerating(false);
     }

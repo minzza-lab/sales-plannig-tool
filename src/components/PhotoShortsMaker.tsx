@@ -82,7 +82,7 @@ const PhotoShortsMaker: React.FC = () => {
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         parsedData = JSON.parse(jsonMatch ? jsonMatch[0] : responseText);
-      } catch (e) {
+      } catch {
         throw new Error("AI가 올바른 JSON 형식을 반환하지 않았습니다.");
       }
 
@@ -114,8 +114,9 @@ const PhotoShortsMaker: React.FC = () => {
       };
       img.src = stickerImgUrl;
 
-    } catch (error: any) {
-      alert('생성 중 오류가 발생했습니다: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류';
+      alert('생성 중 오류가 발생했습니다: ' + message);
       setIsGenerating(false);
     }
   };
@@ -179,7 +180,7 @@ const PhotoShortsMaker: React.FC = () => {
     audioRef.current.play();
 
     // Animation Loop
-    let startTime = Date.now();
+    const startTime = Date.now();
     const duration = audioRef.current.duration * 1000; // in ms
 
     const animate = () => {

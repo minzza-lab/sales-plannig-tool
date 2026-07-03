@@ -1,30 +1,37 @@
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import MainLayout from './components/Layout/MainLayout'
-import Dashboard from './pages/Dashboard'
-import QRCodeGenerator from './components/QRCodeGenerator'
-import URLShortener from './components/URLShortener'
-import BarcodeGenerator from './components/BarcodeGenerator'
-import VOCAssistant from './components/VOCAssistant'
-import FieldSketchWriter from './components/FieldSketchWriter'
-import ManualTips from './components/ManualTips'
-import AutomationRequest from './components/AutomationRequest'
-import WaterParkSales from './components/WaterParkSales'
-import Login from './components/Auth/Login'
-import Approvals from './components/Approvals'
-import ProductProposals from './components/ProductProposals'
-import TTSGenerator from './components/TTSGenerator'
-import ThumbnailGenerator from './components/ThumbnailGenerator'
-import SeasonPassTracker from './components/SeasonPassTracker'
-import SpaceSimulator from './components/SpaceSimulator'
-import PhotoShortsMaker from './components/PhotoShortsMaker'
-import VideoPromptGenerator from './components/VideoPromptGenerator'
-import RoomReservationAutomator from './components/RoomReservationAutomator'
-import ProductProposalGenerator from './components/ProductProposalGenerator'
-import PackageSalesDashboard from './components/PackageSalesDashboard'
-import QRVerifier from './components/QRVerifier'
 import './App.css'
+
+const MainLayout = lazy(() => import('./components/Layout/MainLayout'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const QRCodeGenerator = lazy(() => import('./components/QRCodeGenerator'))
+const URLShortener = lazy(() => import('./components/URLShortener'))
+const BarcodeGenerator = lazy(() => import('./components/BarcodeGenerator'))
+const VOCAssistant = lazy(() => import('./components/VOCAssistant'))
+const FieldSketchWriter = lazy(() => import('./components/FieldSketchWriter'))
+const ManualTips = lazy(() => import('./components/ManualTips'))
+const AutomationRequest = lazy(() => import('./components/AutomationRequest'))
+const WaterParkSales = lazy(() => import('./components/WaterParkSales'))
+const Login = lazy(() => import('./components/Auth/Login'))
+const Approvals = lazy(() => import('./components/Approvals'))
+const ProductProposals = lazy(() => import('./components/ProductProposals'))
+const TTSGenerator = lazy(() => import('./components/TTSGenerator'))
+const ThumbnailGenerator = lazy(() => import('./components/ThumbnailGenerator'))
+const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
+const SpaceSimulator = lazy(() => import('./components/SpaceSimulator'))
+const PhotoShortsMaker = lazy(() => import('./components/PhotoShortsMaker'))
+const VideoPromptGenerator = lazy(() => import('./components/VideoPromptGenerator'))
+const RoomReservationAutomator = lazy(() => import('./components/RoomReservationAutomator'))
+const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
+const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
+const QRVerifier = lazy(() => import('./components/QRVerifier'))
+
+const AppLoader = () => (
+  <div className="app-loader" role="status" aria-live="polite">
+    불러오는 중...
+  </div>
+)
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -46,44 +53,46 @@ function App() {
   }, []);
 
   if (isLoading) {
-    return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>;
+    return <AppLoader />;
   }
 
   return (
     <BrowserRouter>
-      <Routes>
-        {!session ? (
-          <>
-            <Route path="/login" element={<Login onLoginSuccess={() => {}} />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </>
-        ) : (
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
-            <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
-            <Route path="tools/url-shortener" element={<URLShortener />} />
-            <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />
-            <Route path="tools/voc-assistant" element={<VOCAssistant />} />
-            <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
-            <Route path="tools/knowledge-base" element={<ManualTips />} />
-            <Route path="tools/automation-request" element={<AutomationRequest />} />
-            <Route path="tools/approvals" element={<Approvals />} />
-            <Route path="tools/product-proposals" element={<ProductProposals />} />
-            <Route path="tools/tts-generator" element={<TTSGenerator />} />
-            <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
-            <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
-            <Route path="tools/space-simulator" element={<SpaceSimulator />} />
-            <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
-            <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
-            <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
-            <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
-            <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
-            <Route path="tools/qr-verifier" element={<QRVerifier />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        )}
-      </Routes>
+      <Suspense fallback={<AppLoader />}>
+        <Routes>
+          {!session ? (
+            <>
+              <Route path="/login" element={<Login onLoginSuccess={() => {}} />} />
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </>
+          ) : (
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
+              <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
+              <Route path="tools/url-shortener" element={<URLShortener />} />
+              <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />
+              <Route path="tools/voc-assistant" element={<VOCAssistant />} />
+              <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
+              <Route path="tools/knowledge-base" element={<ManualTips />} />
+              <Route path="tools/automation-request" element={<AutomationRequest />} />
+              <Route path="tools/approvals" element={<Approvals />} />
+              <Route path="tools/product-proposals" element={<ProductProposals />} />
+              <Route path="tools/tts-generator" element={<TTSGenerator />} />
+              <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
+              <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
+              <Route path="tools/space-simulator" element={<SpaceSimulator />} />
+              <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
+              <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
+              <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
+              <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
+              <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
+              <Route path="tools/qr-verifier" element={<QRVerifier />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          )}
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

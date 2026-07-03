@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Download, TrendingUp, Users, CreditCard } from 'lucide-react';
-import * as ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList,
   PieChart, Pie, Cell
@@ -252,6 +250,10 @@ const SeasonPassTracker: React.FC = () => {
 
   const downloadExcel = async () => {
     try {
+      const [ExcelJS, { saveAs }] = await Promise.all([
+        import('exceljs'),
+        import('file-saver')
+      ]);
       const response = await fetch('/template.xlsx');
       const arrayBuffer = await response.arrayBuffer();
       
@@ -269,7 +271,7 @@ const SeasonPassTracker: React.FC = () => {
         if (sheet.id === ws.id) wsIndex = idx;
       });
       
-      let prevWs = wsIndex > 0 ? workbook.worksheets[wsIndex - 1] : null;
+      const prevWs = wsIndex > 0 ? workbook.worksheets[wsIndex - 1] : null;
 
       const now = new Date();
       const currentYear = now.getFullYear();

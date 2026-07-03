@@ -32,6 +32,21 @@
   width: 100%;
 }
 
+html {
+  width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+.app-loader {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -39,7 +54,11 @@
 }
 
 body {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-main);

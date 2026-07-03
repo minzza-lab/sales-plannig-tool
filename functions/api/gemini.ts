@@ -23,7 +23,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const model = (body.model as string) || 'gemini-3.5-flash';
     
     // model 필드는 Google API에 전달하지 않음
-    const { model: _, ...requestBody } = body;
+    const requestBody = { ...body };
+    delete requestBody.model;
     
     const apiKey = context.env.GEMINI_API_KEY || context.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {

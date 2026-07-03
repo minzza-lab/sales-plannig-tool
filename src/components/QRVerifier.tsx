@@ -208,7 +208,7 @@ export default function QRVerifier() {
         (decodedText) => {
           handleScanSuccess(decodedText);
         },
-        (_errorMessage) => {
+        () => {
           // Silent failure
         }
       );
@@ -390,7 +390,6 @@ export default function QRVerifier() {
         
         const targetSheets = ['식음', '발권', 'RC', '워터'];
         const parsedData: QRMapping[] = [];
-        let totalRowsAnalyzed = 0;
         const sheetSummaries: string[] = [];
 
         const fileSheetNames = wb.SheetNames;
@@ -444,7 +443,6 @@ export default function QRVerifier() {
             sheetRowCount++;
           }
 
-          totalRowsAnalyzed += sheetRowCount;
           sheetSummaries.push(`${targetName}: ${sheetRowCount}건 수집`);
         });
 
