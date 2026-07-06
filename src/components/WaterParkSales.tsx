@@ -60,7 +60,10 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
 
 const WaterParkSales: React.FC = () => {
   const [reports, setReports] = useState<ParsedReport[]>([]);
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const [summaryViewMode, setSummaryViewMode] = useState<'ADMISSION' | 'TOTAL'>('ADMISSION');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<ReportType | null>(null);
@@ -105,7 +108,11 @@ const WaterParkSales: React.FC = () => {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const { data, error } = await supabase.from('daily_reports').select('*');
+        const { data, error } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .order('report_date', { ascending: true })
+          .order('report_type', { ascending: true });
         if (error) throw error;
         if (data) {
           const overrides: Record<string, number> = {};

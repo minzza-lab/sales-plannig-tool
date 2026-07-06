@@ -1,0 +1,17 @@
+{
+  "name": "welli-waterpark-sales-crawler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows always-on crawler for WelliHilli waterpark sales data.",
+  "main": "waterpark-auto-crawler.cjs",
+  "scripts": {
+    "start": "node waterpark-auto-crawler.cjs watch --days 10 --interval 15",
+    "once": "node waterpark-auto-crawler.cjs once --days 10",
+    "backfill": "node waterpark-auto-crawler.cjs backfill --from 2025-01-01",
+    "status": "node waterpark-auto-crawler.cjs status"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "dotenv": "^17.4.2"
+  }
+}
