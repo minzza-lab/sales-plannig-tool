@@ -1,0 +1,20 @@
+{
+  "name": "welli-unified-crawler-windows",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows always-on crawler for WelliHilli VOC, season pass, package, and waterpark sales data.",
+  "main": "welli-unified-crawler.cjs",
+  "scripts": {
+    "start": "node welli-unified-crawler.cjs watch --days 10 --interval 15",
+    "once": "node welli-unified-crawler.cjs once --days 10",
+    "manual": "node welli-unified-crawler.cjs manual --days 10",
+    "backfill": "node welli-unified-crawler.cjs backfill --from 2025-01-01",
+    "status": "node welli-unified-crawler.cjs status"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "dotenv": "^17.4.2",
+    "puppeteer": "^24.42.0",
+    "xlsx": "^0.18.5"
+  }
+}

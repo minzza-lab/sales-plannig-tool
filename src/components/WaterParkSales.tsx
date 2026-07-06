@@ -58,6 +58,86 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
   '2026-10-03': '개천절', '2026-10-05': '대체공휴일(개천절)', '2026-10-09': '한글날', '2026-12-25': '크리스마스'
 };
 
+interface AutoFitTextProps extends React.HTMLAttributes<HTMLElement> {
+  min?: number;
+  max?: number;
+  as?: 'span' | 'div';
+  children: React.ReactNode;
+}
+
+const AutoFitText: React.FC<AutoFitTextProps> = ({
+  min = 10,
+  max = 24,
+  as = 'span',
+  className = '',
+  children,
+  ...props
+}) => {
+  const wrapRef = React.useRef<HTMLElement>(null);
+  const textRef = React.useRef<HTMLSpanElement>(null);
+  const [fontSize, setFontSize] = React.useState(max);
+
+  const fitText = React.useCallback(() => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+    if (!wrap || !text) return;
+
+    const availableWidth = wrap.clientWidth;
+    if (availableWidth <= 0) return;
+
+    let low = min;
+    let high = max;
+    let best = min;
+
+    for (let i = 0; i < 10; i += 1) {
+      const mid = (low + high) / 2;
+      text.style.fontSize = `${mid}px`;
+
+      if (text.scrollWidth <= availableWidth + 0.5) {
+        best = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    setFontSize(Math.floor(best * 10) / 10);
+  }, [max, min]);
+
+  React.useLayoutEffect(() => {
+    fitText();
+  }, [children, fitText]);
+
+  React.useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(fitText);
+    });
+    observer.observe(wrap);
+
+    document.fonts?.ready.then(fitText).catch(() => {});
+
+    return () => observer.disconnect();
+  }, [fitText]);
+
+  const Component = as;
+
+  return (
+    <Component
+      ref={wrapRef as React.Ref<any>}
+      className={`auto-fit-text ${className}`.trim()}
+      title={typeof children === 'string' || typeof children === 'number' ? String(children) : props.title}
+      {...props}
+    >
+      <span ref={textRef} className="auto-fit-text__inner" style={{ fontSize }}>
+        {children}
+      </span>
+    </Component>
+  );
+};
+
 const WaterParkSales: React.FC = () => {
   const [reports, setReports] = useState<ParsedReport[]>([]);
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -503,14 +583,14 @@ const WaterParkSales: React.FC = () => {
                 {hasCurrentData ? (
                   <div className="cal-data-row current">
                     <span className="year-label">올해</span>
-                    <span className="amt">{(currentDispAmt / 10000).toFixed(0)}만</span>
-                    <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${currentDispQty}명`}</span>
+                    <AutoFitText className="amt" min={9} max={13}>{(currentDispAmt / 10000).toFixed(0)}만</AutoFitText>
+                    <AutoFitText className="qty" min={8} max={11}>{calendarViewMode === 'PRODUCT' ? '-' : `${currentDispQty}명`}</AutoFitText>
                   </div>
                 ) : (
                   <div className="cal-data-row current" style={{ opacity: 0.5 }}>
                     <span className="year-label">올해</span>
-                    <span className="amt">-</span>
-                    <span className="qty">-</span>
+                    <AutoFitText className="amt" min={9} max={13}>-</AutoFitText>
+                    <AutoFitText className="qty" min={8} max={11}>-</AutoFitText>
                   </div>
                 )}
                 
@@ -521,13 +601,13 @@ const WaterParkSales: React.FC = () => {
                     <>
                       <div className="cal-data-row prev">
                         <span className="year-label">작년</span>
-                        <span className="amt">{(prevDispAmt / 10000).toFixed(0)}만</span>
-                        <span className="qty">{calendarViewMode === 'PRODUCT' ? '-' : `${prevDispQty}명`}</span>
+                        <AutoFitText className="amt" min={9} max={13}>{(prevDispAmt / 10000).toFixed(0)}만</AutoFitText>
+                        <AutoFitText className="qty" min={8} max={11}>{calendarViewMode === 'PRODUCT' ? '-' : `${prevDispQty}명`}</AutoFitText>
                       </div>
                       {hasCurrentData && (
-                        <div className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`}>
+                        <AutoFitText as="div" className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`} min={9} max={11}>
                           {growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(pct))}%
-                        </div>
+                        </AutoFitText>
                       )}
                     </>
                   )
@@ -577,15 +657,15 @@ const WaterParkSales: React.FC = () => {
               <div className="cum-cards">
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <span className="cum-value">{formatCurrency(prevYearAmt)}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(prevYearAmt)}</AutoFitText>
                 </div>
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <span className="cum-value">{prevYearPpl.toLocaleString()} 명</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{prevYearPpl.toLocaleString()} 명</AutoFitText>
                 </div>
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <span className="cum-value">{prevYearPpl > 0 ? formatCurrency(Math.round(prevYearAmt/prevYearPpl)) : '0원'}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{prevYearPpl > 0 ? formatCurrency(Math.round(prevYearAmt/prevYearPpl)) : '0원'}</AutoFitText>
                 </div>
               </div>
             </div>
@@ -597,20 +677,20 @@ const WaterParkSales: React.FC = () => {
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <div className="cum-val-row">
-                    <span className="cum-value">{formatCurrency(currentYearAmt)}</span>
-                    {prevYearAmt > 0 && <span className={`dash-badge ${currentYearAmt >= prevYearAmt ? 'up' : 'down'}`}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</span>}
+                    <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(currentYearAmt)}</AutoFitText>
+                    {prevYearAmt > 0 && <AutoFitText className={`dash-badge ${currentYearAmt >= prevYearAmt ? 'up' : 'down'}`} min={9} max={12}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</AutoFitText>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <div className="cum-val-row">
-                    <span className="cum-value">{currentYearPpl.toLocaleString()} 명</span>
-                    {prevYearPpl > 0 && <span className={`dash-badge ${currentYearPpl >= prevYearPpl ? 'up' : 'down'}`}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</span>}
+                    <AutoFitText className="cum-value" min={13} max={24}>{currentYearPpl.toLocaleString()} 명</AutoFitText>
+                    {prevYearPpl > 0 && <AutoFitText className={`dash-badge ${currentYearPpl >= prevYearPpl ? 'up' : 'down'}`} min={9} max={12}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</AutoFitText>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <span className="cum-value">{currentYearPpl > 0 ? formatCurrency(Math.round(currentYearAmt/currentYearPpl)) : '0원'}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{currentYearPpl > 0 ? formatCurrency(Math.round(currentYearAmt/currentYearPpl)) : '0원'}</AutoFitText>
                 </div>
               </div>
             </div>
@@ -624,15 +704,15 @@ const WaterParkSales: React.FC = () => {
               <div className="cum-cards">
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <span className="cum-value">{formatCurrency(prevAmt)}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(prevAmt)}</AutoFitText>
                 </div>
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <span className="cum-value">{prevPpl.toLocaleString()} 명</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{prevPpl.toLocaleString()} 명</AutoFitText>
                 </div>
                 <div className="cum-card">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <span className="cum-value">{prevPpl > 0 ? formatCurrency(Math.round(prevAmt/prevPpl)) : '0원'}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{prevPpl > 0 ? formatCurrency(Math.round(prevAmt/prevPpl)) : '0원'}</AutoFitText>
                 </div>
               </div>
             </div>
@@ -644,20 +724,20 @@ const WaterParkSales: React.FC = () => {
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                   <div className="cum-val-row">
-                    <span className="cum-value">{formatCurrency(currentAmt)}</span>
-                    {prevAmt > 0 && <span className={`dash-badge ${currentAmt >= prevAmt ? 'up' : 'down'}`}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</span>}
+                    <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(currentAmt)}</AutoFitText>
+                    {prevAmt > 0 && <AutoFitText className={`dash-badge ${currentAmt >= prevAmt ? 'up' : 'down'}`} min={9} max={12}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</AutoFitText>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                   <div className="cum-val-row">
-                    <span className="cum-value">{currentPpl.toLocaleString()} 명</span>
-                    {prevPpl > 0 && <span className={`dash-badge ${currentPpl >= prevPpl ? 'up' : 'down'}`}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</span>}
+                    <AutoFitText className="cum-value" min={13} max={24}>{currentPpl.toLocaleString()} 명</AutoFitText>
+                    {prevPpl > 0 && <AutoFitText className={`dash-badge ${currentPpl >= prevPpl ? 'up' : 'down'}`} min={9} max={12}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</AutoFitText>}
                   </div>
                 </div>
                 <div className="cum-card highlight">
                   <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <span className="cum-value">{currentPpl > 0 ? formatCurrency(Math.round(currentAmt/currentPpl)) : '0원'}</span>
+                  <AutoFitText className="cum-value" min={13} max={24}>{currentPpl > 0 ? formatCurrency(Math.round(currentAmt/currentPpl)) : '0원'}</AutoFitText>
                 </div>
               </div>
             </div>
@@ -701,15 +781,15 @@ const WaterParkSales: React.FC = () => {
                   <div className="cum-cards">
                     <div className="cum-card">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                      <span className="cum-value">{formatCurrency(stats.prevAmt)}</span>
+                      <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(stats.prevAmt)}</AutoFitText>
                     </div>
                     <div className="cum-card">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                      <span className="cum-value">{stats.prevPpl.toLocaleString()} 명</span>
+                      <AutoFitText className="cum-value" min={13} max={24}>{stats.prevPpl.toLocaleString()} 명</AutoFitText>
                     </div>
                     <div className="cum-card">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                      <span className="cum-value">{stats.prevPpl > 0 ? formatCurrency(Math.round(stats.prevAmt/stats.prevPpl)) : '0원'}</span>
+                      <AutoFitText className="cum-value" min={13} max={24}>{stats.prevPpl > 0 ? formatCurrency(Math.round(stats.prevAmt/stats.prevPpl)) : '0원'}</AutoFitText>
                     </div>
                   </div>
                 </div>
@@ -721,20 +801,20 @@ const WaterParkSales: React.FC = () => {
                     <div className="cum-card highlight">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
                       <div className="cum-val-row">
-                        <span className="cum-value">{formatCurrency(stats.currentAmt)}</span>
-                        {stats.prevAmt > 0 && <span className={`dash-badge ${stats.currentAmt >= stats.prevAmt ? 'up' : 'down'}`}>{stats.currentAmt >= stats.prevAmt ? '▲' : '▼'} {Math.abs((stats.currentAmt-stats.prevAmt)/stats.prevAmt*100).toFixed(1)}%</span>}
+                        <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(stats.currentAmt)}</AutoFitText>
+                        {stats.prevAmt > 0 && <AutoFitText className={`dash-badge ${stats.currentAmt >= stats.prevAmt ? 'up' : 'down'}`} min={9} max={12}>{stats.currentAmt >= stats.prevAmt ? '▲' : '▼'} {Math.abs((stats.currentAmt-stats.prevAmt)/stats.prevAmt*100).toFixed(1)}%</AutoFitText>}
                       </div>
                     </div>
                     <div className="cum-card highlight">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
                       <div className="cum-val-row">
-                        <span className="cum-value">{stats.currentPpl.toLocaleString()} 명</span>
-                        {stats.prevPpl > 0 && <span className={`dash-badge ${stats.currentPpl >= stats.prevPpl ? 'up' : 'down'}`}>{stats.currentPpl >= stats.prevPpl ? '▲' : '▼'} {Math.abs((stats.currentPpl-stats.prevPpl)/stats.prevPpl*100).toFixed(1)}%</span>}
+                        <AutoFitText className="cum-value" min={13} max={24}>{stats.currentPpl.toLocaleString()} 명</AutoFitText>
+                        {stats.prevPpl > 0 && <AutoFitText className={`dash-badge ${stats.currentPpl >= stats.prevPpl ? 'up' : 'down'}`} min={9} max={12}>{stats.currentPpl >= stats.prevPpl ? '▲' : '▼'} {Math.abs((stats.currentPpl-stats.prevPpl)/stats.prevPpl*100).toFixed(1)}%</AutoFitText>}
                       </div>
                     </div>
                     <div className="cum-card highlight">
                       <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                      <span className="cum-value">{stats.currentPpl > 0 ? formatCurrency(Math.round(stats.currentAmt/stats.currentPpl)) : '0원'}</span>
+                      <AutoFitText className="cum-value" min={13} max={24}>{stats.currentPpl > 0 ? formatCurrency(Math.round(stats.currentAmt/stats.currentPpl)) : '0원'}</AutoFitText>
                     </div>
                   </div>
                 </div>
@@ -1114,11 +1194,11 @@ const WaterParkSales: React.FC = () => {
                       <div className="cum-cards">
                         <div className="cum-card">
                           <span className="cum-label">{activeReport.summary.label}</span>
-                          <span className="cum-value">{formatCurrency(prevYearReport.summary.totalAmount)}</span>
+                          <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(prevYearReport.summary.totalAmount)}</AutoFitText>
                         </div>
                         <div className="cum-card">
                           <span className="cum-label">{activeReport.summary.qtyLabel}</span>
-                          <span className="cum-value">{prevYearReport.summary.totalQty.toLocaleString()} 건</span>
+                          <AutoFitText className="cum-value" min={13} max={24}>{prevYearReport.summary.totalQty.toLocaleString()} 건</AutoFitText>
                         </div>
                       </div>
                     </div>
@@ -1133,15 +1213,15 @@ const WaterParkSales: React.FC = () => {
                         <div className="cum-card highlight">
                           <span className="cum-label">{activeReport.summary.label}</span>
                           <div className="cum-val-row">
-                            <span className="cum-value">{formatCurrency(activeReport.summary.totalAmount)}</span>
-                            <span className={`dash-badge ${growthAmt >= 0 ? 'up' : 'down'}`}>{growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(growthAmtPct))}%</span>
+                            <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(activeReport.summary.totalAmount)}</AutoFitText>
+                            <AutoFitText className={`dash-badge ${growthAmt >= 0 ? 'up' : 'down'}`} min={9} max={12}>{growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(growthAmtPct))}%</AutoFitText>
                           </div>
                         </div>
                         <div className="cum-card highlight">
                           <span className="cum-label">{activeReport.summary.qtyLabel}</span>
                           <div className="cum-val-row">
-                            <span className="cum-value">{activeReport.summary.totalQty.toLocaleString()} 건</span>
-                            <span className={`dash-badge ${growthQty >= 0 ? 'up' : 'down'}`}>{growthQty >= 0 ? '▲' : '▼'} {Math.abs(Number(growthQtyPct))}%</span>
+                            <AutoFitText className="cum-value" min={13} max={24}>{activeReport.summary.totalQty.toLocaleString()} 건</AutoFitText>
+                            <AutoFitText className={`dash-badge ${growthQty >= 0 ? 'up' : 'down'}`} min={9} max={12}>{growthQty >= 0 ? '▲' : '▼'} {Math.abs(Number(growthQtyPct))}%</AutoFitText>
                           </div>
                         </div>
                       </div>

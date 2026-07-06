@@ -15,8 +15,30 @@
   font-size: 26px; 
   font-weight: 800; 
   margin-bottom: 8px; 
-  letter-spacing: -0.5px; 
+  letter-spacing: 0; 
   color: var(--text-primary);
+}
+
+.auto-fit-text {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.auto-fit-text__inner {
+  display: inline-block;
+  max-width: none;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  line-height: inherit;
+  white-space: nowrap;
+  font-variant-numeric: inherit;
 }
 
 .sales-header p { 
@@ -114,6 +136,13 @@
   border-radius: 999px;
   font-weight: 800;
   white-space: nowrap;
+  width: min(78px, 28vw);
+  min-width: 54px;
+  text-align: center;
+}
+
+.dash-badge.auto-fit-text {
+  flex: 0 0 auto;
 }
 .dash-badge.up { background: #fee2e2; color: #dc2626; }
 .dash-badge.down { background: #dbeafe; color: #2563eb; }
@@ -155,8 +184,7 @@
   letter-spacing: 0;
   line-height: 1.2;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   font-variant-numeric: tabular-nums;
   min-width: 0;
 }
@@ -230,10 +258,14 @@
 .cal-data-row.prev { color: var(--text-secondary); font-weight: 600; display: none; }
 .year-label { font-size: 10px; background: #f1f5f9; padding: 2px 4px; border-radius: 4px; color: var(--text-secondary); white-space: nowrap; }
 .cal-data-row.current .year-label { background: #dbeafe; color: #1e40af; }
-.cal-data-row .amt { text-align: right; margin-right: 0; font-size: 13px; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.cal-data-row .amt { text-align: right; margin-right: 0; font-size: 13px; color: #111827; white-space: nowrap; overflow: visible; font-variant-numeric: tabular-nums; }
 .cal-data-row .qty { opacity: 0.8; font-size: 11px; min-width: 34px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .cal-yoy-bar { margin-top: 2px; padding: 4px 6px; text-align: center; font-size: 11px; font-weight: 800; border-radius: 999px; align-self: flex-end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cal-yoy-bar.auto-fit-text {
+  width: fit-content;
+  max-width: 100%;
+}
 .cal-yoy-bar.up { background: #fef2f2; color: #ef4444; }
 .cal-yoy-bar.down { background: #eff6ff; color: var(--primary); }
 .cal-yoy-bar.empty { display: none; }
