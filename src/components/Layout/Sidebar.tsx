@@ -43,6 +43,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
               <span className="icon">🏠</span> 대시보드
             </NavLink>
           </li>
+          <li className="ai-studio-entry">
+            <NavLink to="/ai-studio/characters" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">✦</span>
+              <span><strong>AI VIDEO STUDIO</strong><small>Character Library</small></span>
+            </NavLink>
+          </li>
           <li className="menu-highlight">
             <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">⚡</span> 자동화 요청 게시판
