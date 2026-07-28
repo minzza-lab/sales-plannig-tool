@@ -1,0 +1,15 @@
+.crawler-sync { display: flex; min-width: 260px; flex-direction: column; align-items: stretch; gap: 7px; }
+.crawler-sync > button { display: flex; height: 42px; align-items: center; justify-content: center; gap: 8px; padding: 0 15px; border: 0; border-radius: 10px; background: #2563eb; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 7px 18px rgba(37,99,235,.2); }
+.crawler-sync > button:disabled { background: #697386; cursor: wait; }
+.crawler-sync-status { padding: 9px 11px; border: 1px solid #e1e5eb; border-radius: 9px; background: #fff; }
+.crawler-sync-status > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #667085; font-size: 9px; }
+.crawler-sync-status span { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.crawler-sync-status strong { color: #2563eb; font-size: 10px; }
+.crawler-sync-track { height: 5px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: #e9edf3; }
+.crawler-sync-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#2563eb,#60a5fa); transition: width .5s ease; }
+.crawler-sync.completed .crawler-sync-track i { background: #10b981; }
+.crawler-sync.completed .crawler-sync-status strong { color: #059669; }
+.crawler-sync.failed .crawler-sync-track i { background: #ef4444; }
+.crawler-sync-error { color: #c24141; font-size: 9px; }
+.crawler-spin { animation: crawler-spin .8s linear infinite; }
+@keyframes crawler-spin { to { transform: rotate(360deg); } }

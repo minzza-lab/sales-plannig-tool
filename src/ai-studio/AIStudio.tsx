@@ -1,17 +1,14 @@
 import { useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
-  Boxes,
   Check,
   ChevronRight,
   CircleUserRound,
   Grid2X2,
-  LayoutDashboard,
+  ImagePlus,
   List,
-  Menu,
   Search,
-  Settings,
   SlidersHorizontal,
   Sparkles,
   Users,
@@ -19,18 +16,11 @@ import {
 } from 'lucide-react'
 import { useCharacters } from './modules/character/hooks/useCharacters'
 import type { Character, CharacterGender, CharacterStatus, CharacterUpdate } from './modules/character/types/character'
+import { callGeminiWithFallback } from '../utils/apiProxy'
 import VideoProductionPlanner from './modules/project/VideoProductionPlanner'
 import './ai-studio.css'
 
 type ViewMode = 'grid' | 'list'
-type NavSection = 'dashboard' | 'characters' | 'project' | 'settings'
-
-const navItems: Array<{ id: NavSection; label: string; icon: typeof LayoutDashboard }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'characters', label: 'Character Library', icon: Users },
-  { id: 'project', label: 'Production Planner', icon: Boxes },
-  { id: 'settings', label: 'Settings', icon: Settings },
-]
 
 const editableFields: Array<{ key: keyof Character; label: string; wide?: boolean }> = [
   { key: 'name', label: 'Name' },
@@ -52,6 +42,42 @@ const editableFields: Array<{ key: keyof Character; label: string; wide?: boolea
   { key: 'expression', label: 'Expression' },
   { key: 'promptSeed', label: 'Prompt Seed', wide: true },
 ]
+
+const newCharacterDefaults: CharacterUpdate = {
+  name: '',
+  gender: 'Female',
+  age: 25,
+  nationality: 'Korean',
+  height: 165,
+  body: 'Slim balanced',
+  face: 'Soft oval',
+  hair: 'Natural dark hair',
+  eyes: 'Deep brown, clear',
+  eyebrows: 'Natural straight',
+  nose: 'Natural refined',
+  mouth: 'Natural balanced',
+  skin: 'Natural warm ivory',
+  defaultOutfit: 'Clean neutral studio outfit',
+  personality: '자연스럽고 친근하며 브랜드 콘텐츠에 어울리는 이미지',
+  voice: 'Clear natural Korean',
+  pose: 'Natural front portrait',
+  expression: 'Calm and approachable',
+  promptSeed: '',
+  status: 'Draft',
+  imageUrl: '/ai-studio/characters/female-01.png',
+}
+
+const aiCharacterOptions = {
+  ageGroup: ['20대 초반', '20대 후반', '30대 초반', '30대 후반', '40대'],
+  concept: ['청순하고 자연스러운', '세련되고 도시적인', '밝고 에너지 넘치는', '고급스럽고 우아한', '친근하고 편안한', '강렬하고 카리스마 있는'],
+  face: ['부드러운 타원형', '선명한 계란형', '세련된 각진형', '둥글고 친근한형'],
+  hair: ['긴 생머리', '자연스러운 웨이브', '단정한 단발', '포니테일', '짧고 세련된 헤어'],
+  body: ['슬림 밸런스', '내추럴 밸런스', '애슬레틱', '큰 키의 모델 체형'],
+  outfit: ['화이트 미니멀 캐주얼', '블랙 모던 룩', '베이지 니트 룩', '스포티 애슬레저', '고급스러운 리조트 룩', '비즈니스 캐주얼'],
+} as const
+
+const makeGeneratedImageUrl = (prompt: string, seed: number, width = 768, height = 1152) =>
+  `https://image.pollinations.ai/prompt/${encodeURIComponent(`${prompt}, professional commercial character reference photography, ultra detailed, realistic skin texture, sharp focus, studio lighting, no text, no watermark`)}?width=${width}&height=${height}&nologo=true&seed=${seed}`
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(value))
@@ -104,12 +130,12 @@ function CharacterDetail({
             <span className="detail-version">v{draft.version}</span>
           </div>
           {!editing ? (
-            <button className="studio-button primary" onClick={() => setEditing(true)}>Edit profile</button>
+            <button className="studio-button primary" onClick={() => setEditing(true)}>프로필 수정</button>
           ) : (
             <div className="detail-actions">
-              <button className="studio-button ghost" onClick={() => { setDraft(character); setEditing(false) }}>Cancel</button>
+              <button className="studio-button ghost" onClick={() => { setDraft(character); setEditing(false) }}>취소</button>
               <button className="studio-button primary" onClick={() => void handleSave()} disabled={saving}>
-                <Check size={16} /> {saving ? 'Saving…' : 'Save new version'}
+                <Check size={16} /> {saving ? '저장 중…' : '새 버전 저장'}
               </button>
             </div>
           )}
@@ -129,27 +155,168 @@ function CharacterDetail({
                 <span>{label}</span>
                 {editing ? (
                   key === 'promptSeed' || key === 'personality' ? (
-                    <textarea
-                      value={String(draft[key])}
-                      onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
-                      rows={3}
-                    />
+                    <textarea value={String(draft[key])} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} rows={3} />
                   ) : (
                     <input
                       type={key === 'age' || key === 'height' ? 'number' : 'text'}
                       value={String(draft[key])}
-                      onChange={(event) =>
-                        setDraft({ ...draft, [key]: key === 'age' || key === 'height' ? Number(event.target.value) : event.target.value })
-                      }
+                      onChange={(event) => setDraft({
+                        ...draft,
+                        [key]: key === 'age' || key === 'height' ? Number(event.target.value) : event.target.value,
+                      })}
                     />
                   )
-                ) : (
-                  <p>{String(draft[key])}</p>
-                )}
+                ) : <p>{String(draft[key])}</p>}
               </label>
             ))}
           </div>
         </div>
+      </section>
+    </div>
+  )
+}
+
+function NewCharacterDialog({
+  onClose,
+  onCreated,
+  createCharacter,
+}: {
+  onClose: () => void
+  onCreated: (character: Character) => void
+  createCharacter: (update: CharacterUpdate) => Promise<Character>
+}) {
+  const [draft, setDraft] = useState<CharacterUpdate>(newCharacterDefaults)
+  const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState('')
+  const [choices, setChoices] = useState({
+    ageGroup: aiCharacterOptions.ageGroup[1],
+    concept: aiCharacterOptions.concept[0],
+    face: aiCharacterOptions.face[0],
+    hair: aiCharacterOptions.hair[0],
+    body: aiCharacterOptions.body[0],
+    outfit: aiCharacterOptions.outfit[0],
+  })
+
+  const update = <K extends keyof CharacterUpdate>(key: K, value: CharacterUpdate[K]) =>
+    setDraft((current) => ({ ...current, [key]: value }))
+
+  const handleImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+      setError('5MB 이하 이미지 파일을 선택해 주세요.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => update('imageUrl', String(reader.result))
+    reader.readAsDataURL(file)
+  }
+
+  const handleCreate = async () => {
+    if (!draft.name.trim() || !draft.promptSeed.trim()) {
+      setError('모델 이름과 Prompt Seed를 입력해 주세요.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createCharacter(draft)
+      onCreated(created)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '모델 생성에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const generateCharacterBoard = async () => {
+    setGenerating(true)
+    setError('')
+    try {
+      const prompt = `당신은 AI 영상 제작용 캐릭터 디렉터입니다. 아래 선택값을 바탕으로 장면마다 동일 인물로 유지될 마스터 모델 프로필을 만드세요.
+입력: ${JSON.stringify({ gender: draft.gender, nationality: draft.nationality, ...choices })}
+반드시 JSON만 반환:
+{"name":"자연스러운 한국 이름","age":28,"height":168,"body":"English","face":"English","hair":"English","eyes":"English","eyebrows":"English","nose":"English","mouth":"English","skin":"English","defaultOutfit":"English","personality":"한글 한 문장","voice":"English","pose":"English","expression":"English","promptSeed":"Detailed English identity lock prompt for consistent AI video character, front-facing waist-up character board"}`
+      const response = await callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], {
+        responseMimeType: 'application/json',
+        temperature: 0.65,
+        maxOutputTokens: 2048,
+      })
+      const parsed = JSON.parse(response.match(/\{[\s\S]*\}/)?.[0] ?? response) as Partial<CharacterUpdate>
+      if (!parsed.promptSeed || !parsed.name) throw new Error('AI 캐릭터 프로필 형식이 올바르지 않습니다.')
+      const seed = Math.floor(Math.random() * 900000) + 100000
+      setDraft((current) => ({
+        ...current,
+        ...parsed,
+        gender: current.gender,
+        nationality: current.nationality,
+        status: 'Active',
+        imageUrl: makeGeneratedImageUrl(parsed.promptSeed!, seed),
+      }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'AI 모델 생성에 실패했습니다.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="new-character-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="new-character-dialog" role="dialog" aria-modal="true" aria-label="새 모델과 캐릭터보드 생성">
+        <header>
+          <div><span>NEW MASTER ASSET</span><h2>새 모델 프로필 & 캐릭터보드</h2><p>한 번 등록한 외형 정보는 모든 Higgsfield 프롬프트의 일관성 기준으로 사용됩니다.</p></div>
+          <button onClick={onClose} aria-label="새 모델 창 닫기"><X size={18} /></button>
+        </header>
+
+        <div className="new-character-layout">
+          <aside className="character-board-editor">
+            <span>CHARACTER BOARD</span>
+            <div className="board-portrait">
+              <img src={draft.imageUrl} alt="새 모델 캐릭터보드" />
+              <label><ImagePlus size={15} /> 기준 이미지 변경<input type="file" accept="image/*" onChange={handleImage} hidden /></label>
+            </div>
+            <div className="board-profile">
+              <strong>{draft.name || '새 모델 이름'}</strong>
+              <p>{draft.nationality} · {draft.age}세 · {draft.height}cm</p>
+              <span>{draft.personality}</span>
+            </div>
+          </aside>
+
+          <div className="new-profile-form">
+            <div className="form-section-title"><span>01</span><div><strong>AI 모델 디자인</strong><small>원하는 항목만 선택하면 프로필과 캐릭터보드를 자동 생성합니다.</small></div></div>
+            <div className="new-form-grid">
+              <label><span>성별</span><select value={draft.gender} onChange={(event) => update('gender', event.target.value as CharacterGender)}><option value="Female">Female</option><option value="Male">Male</option></select></label>
+              {(Object.keys(aiCharacterOptions) as Array<keyof typeof aiCharacterOptions>).map((key) => (
+                <label key={key}>
+                  <span>{{ ageGroup: '연령대', concept: '전체 분위기', face: '얼굴형', hair: '헤어', body: '체형', outfit: '기본 의상' }[key]}</span>
+                  <select value={choices[key]} onChange={(event) => setChoices((current) => ({ ...current, [key]: event.target.value }))}>
+                    {aiCharacterOptions[key].map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </label>
+              ))}
+              <label><span>국적</span><select value={draft.nationality} onChange={(event) => update('nationality', event.target.value)}><option>Korean</option><option>Japanese</option><option>Chinese</option><option>American</option><option>European</option></select></label>
+              <button className="ai-character-generate" onClick={() => void generateCharacterBoard()} disabled={generating}>
+                <Sparkles size={16} /> {generating ? 'AI가 모델을 디자인하는 중…' : '선택값으로 AI 모델 생성'}
+              </button>
+            </div>
+
+            <div className="form-section-title"><span>02</span><div><strong>AI 생성 결과</strong><small>필요한 경우 이름과 일관성 프롬프트를 수정할 수 있습니다.</small></div></div>
+            <div className="new-form-grid">
+              <label><span>모델 이름 *</span><input value={draft.name} onChange={(event) => update('name', event.target.value)} placeholder="AI가 자동 생성합니다" /></label>
+              <label><span>나이</span><input type="number" value={draft.age} onChange={(event) => update('age', Number(event.target.value))} /></label>
+              <label><span>키(cm)</span><input type="number" value={draft.height} onChange={(event) => update('height', Number(event.target.value))} /></label>
+              <label className="wide"><span>성격과 이미지</span><textarea rows={2} value={draft.personality} onChange={(event) => update('personality', event.target.value)} /></label>
+              <label className="wide"><span>Prompt Seed *</span><textarea rows={3} value={draft.promptSeed} onChange={(event) => update('promptSeed', event.target.value)} placeholder="young Korean woman, natural dark hair, clean studio portrait, consistent identity..." /></label>
+            </div>
+            {error && <p className="new-character-error">{error}</p>}
+          </div>
+        </div>
+
+        <footer>
+          <button className="studio-button ghost" onClick={onClose}>취소</button>
+          <button className="studio-button primary" onClick={() => void handleCreate()} disabled={saving}><CircleUserRound size={16} /> {saving ? '생성 중…' : '모델과 캐릭터보드 생성'}</button>
+        </footer>
       </section>
     </div>
   )
@@ -164,18 +331,8 @@ function CharacterCard({ character, onClick }: { character: Character; onClick: 
         <span className="character-version">v{character.version}</span>
       </div>
       <div className="character-card-body">
-        <div className="character-title">
-          <div>
-            <h3>{character.name}</h3>
-            <p>{character.modelCode}</p>
-          </div>
-          <ChevronRight size={18} />
-        </div>
-        <div className="character-tags">
-          <span>{character.nationality}</span>
-          <span>{character.age} yrs</span>
-          <span>{character.height} cm</span>
-        </div>
+        <div className="character-title"><div><h3>{character.name}</h3><p>{character.modelCode}</p></div><ChevronRight size={18} /></div>
+        <div className="character-tags"><span>{character.nationality}</span><span>{character.age} yrs</span><span>{character.height} cm</span></div>
         <p className="character-trait">{character.personality}</p>
       </div>
     </button>
@@ -187,176 +344,86 @@ function CharacterListRow({ character, onClick }: { character: Character; onClic
     <button className="character-row" onClick={onClick}>
       <img src={character.imageUrl} alt="" />
       <div className="row-primary"><strong>{character.name}</strong><span>{character.characterId}</span></div>
-      <span>{character.modelCode}</span>
-      <span>{character.nationality}</span>
-      <span>{character.gender}</span>
-      <span>v{character.version}</span>
-      <span className={`row-status ${character.status.toLowerCase()}`}>{character.status}</span>
-      <ChevronRight size={18} />
+      <span>{character.modelCode}</span><span>{character.nationality}</span><span>{character.gender}</span><span>v{character.version}</span>
+      <span className={`row-status ${character.status.toLowerCase()}`}>{character.status}</span><ChevronRight size={18} />
     </button>
   )
 }
 
-function CharacterLibrary() {
-  const { characters, isLoading, createVersion } = useCharacters()
+function CharacterLibrary({ onClose }: { onClose: () => void }) {
+  const { characters, isLoading, createVersion, createCharacter } = useCharacters()
   const [query, setQuery] = useState('')
   const [gender, setGender] = useState<'All' | CharacterGender>('All')
   const [status, setStatus] = useState<'All' | CharacterStatus>('All')
   const [view, setView] = useState<ViewMode>('grid')
   const [selected, setSelected] = useState<Character | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return characters.filter((character) => {
       const matchesQuery = !normalizedQuery ||
-        [character.name, character.characterId, character.modelCode, character.nationality]
-          .some((value) => value.toLowerCase().includes(normalizedQuery))
-      return matchesQuery &&
-        (gender === 'All' || character.gender === gender) &&
-        (status === 'All' || character.status === status)
+        [character.name, character.characterId, character.modelCode, character.nationality].some((value) => value.toLowerCase().includes(normalizedQuery))
+      return matchesQuery && (gender === 'All' || character.gender === gender) && (status === 'All' || character.status === status)
     })
   }, [characters, gender, query, status])
 
   return (
-    <>
-      <header className="library-header">
-        <div>
-          <p className="eyebrow"><Sparkles size={14} /> AI ASSET MANAGEMENT</p>
-          <h1>Character Library</h1>
-          <p>일관된 AI 콘텐츠 제작을 위한 마스터 캐릭터를 관리하세요.</p>
-        </div>
-        <button className="studio-button primary"><CircleUserRound size={17} /> New character</button>
-      </header>
+    <div className="library-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="library-modal" role="dialog" aria-modal="true" aria-label="캐릭터 라이브러리">
+        <header className="library-header">
+          <div><p className="eyebrow"><Sparkles size={14} /> MASTER CHARACTER ASSETS</p><h1>Character Library</h1><p>모델 프로필과 캐릭터보드를 생성하고 일관성 기준을 관리합니다.</p></div>
+          <div className="library-header-actions">
+            <button className="studio-button primary" onClick={() => setCreating(true)}><CircleUserRound size={17} /> 새 모델 생성</button>
+            <button className="icon-button" onClick={onClose} aria-label="캐릭터 라이브러리 닫기"><X size={18} /></button>
+          </div>
+        </header>
 
-      <section className="library-stats">
-        <div><span>Total characters</span><strong>{characters.length}</strong><small>Master assets</small></div>
-        <div><span>Female models</span><strong>{characters.filter((item) => item.gender === 'Female').length}</strong><small>Available now</small></div>
-        <div><span>Male models</span><strong>{characters.filter((item) => item.gender === 'Male').length}</strong><small>Available now</small></div>
-        <div><span>Recently updated</span><strong>4</strong><small>Last 30 days</small></div>
+        <section className="library-stats">
+          <div><span>Total characters</span><strong>{characters.length}</strong><small>Master assets</small></div>
+          <div><span>Female models</span><strong>{characters.filter((item) => item.gender === 'Female').length}</strong><small>Available now</small></div>
+          <div><span>Male models</span><strong>{characters.filter((item) => item.gender === 'Male').length}</strong><small>Available now</small></div>
+          <div><span>Active models</span><strong>{characters.filter((item) => item.status === 'Active').length}</strong><small>Production ready</small></div>
+        </section>
+
+        <div className="library-controls">
+          <label className="studio-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름, ID, 모델 코드 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={15} /></button>}</label>
+          <div className="filter-control"><SlidersHorizontal size={16} /><select value={gender} onChange={(event) => setGender(event.target.value as 'All' | CharacterGender)} aria-label="성별 필터"><option value="All">All genders</option><option value="Female">Female</option><option value="Male">Male</option></select></div>
+          <div className="filter-control"><select value={status} onChange={(event) => setStatus(event.target.value as 'All' | CharacterStatus)} aria-label="상태 필터"><option value="All">All status</option><option value="Active">Active</option><option value="Draft">Draft</option><option value="Archived">Archived</option></select></div>
+          <div className="view-toggle"><button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} aria-label="카드 보기"><Grid2X2 size={17} /></button><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} aria-label="리스트 보기"><List size={18} /></button></div>
+        </div>
+
+        <div className="results-meta"><span>{filtered.length} characters</span><span>Updated by latest version</span></div>
+        {isLoading ? <div className="studio-empty">캐릭터를 불러오는 중입니다.</div> : filtered.length === 0 ? (
+          <div className="studio-empty"><Search size={24} /><strong>검색 결과가 없습니다.</strong><span>필터나 검색어를 변경해 보세요.</span></div>
+        ) : view === 'grid' ? (
+          <div className="character-grid">{filtered.map((character) => <CharacterCard key={character.characterId} character={character} onClick={() => setSelected(character)} />)}</div>
+        ) : (
+          <div className="character-list"><div className="character-list-head"><span>Character</span><span>Model</span><span>Nationality</span><span>Gender</span><span>Version</span><span>Status</span><span /></div>{filtered.map((character) => <CharacterListRow key={character.characterId} character={character} onClick={() => setSelected(character)} />)}</div>
+        )}
+
+        {selected && <CharacterDetail character={selected} onClose={() => setSelected(null)} onSaved={setSelected} createVersion={createVersion} />}
+        {creating && <NewCharacterDialog onClose={() => setCreating(false)} onCreated={(character) => { setCreating(false); setSelected(character) }} createCharacter={createCharacter} />}
       </section>
-
-      <div className="library-controls">
-        <label className="studio-search">
-          <Search size={18} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름, ID, 모델 코드 검색" />
-          {query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={15} /></button>}
-        </label>
-        <div className="filter-control">
-          <SlidersHorizontal size={16} />
-          <select value={gender} onChange={(event) => setGender(event.target.value as 'All' | CharacterGender)} aria-label="성별 필터">
-            <option value="All">All genders</option>
-            <option value="Female">Female</option>
-            <option value="Male">Male</option>
-          </select>
-        </div>
-        <div className="filter-control">
-          <select value={status} onChange={(event) => setStatus(event.target.value as 'All' | CharacterStatus)} aria-label="상태 필터">
-            <option value="All">All status</option>
-            <option value="Active">Active</option>
-            <option value="Draft">Draft</option>
-            <option value="Archived">Archived</option>
-          </select>
-        </div>
-        <div className="view-toggle">
-          <button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} aria-label="카드 보기"><Grid2X2 size={17} /></button>
-          <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} aria-label="리스트 보기"><List size={18} /></button>
-        </div>
-      </div>
-
-      <div className="results-meta"><span>{filtered.length} characters</span><span>Updated by latest version</span></div>
-      {isLoading ? (
-        <div className="studio-empty">캐릭터를 불러오는 중입니다.</div>
-      ) : filtered.length === 0 ? (
-        <div className="studio-empty"><Search size={24} /><strong>검색 결과가 없습니다.</strong><span>필터나 검색어를 변경해 보세요.</span></div>
-      ) : view === 'grid' ? (
-        <div className="character-grid">
-          {filtered.map((character) => <CharacterCard key={character.characterId} character={character} onClick={() => setSelected(character)} />)}
-        </div>
-      ) : (
-        <div className="character-list">
-          <div className="character-list-head"><span>Character</span><span>Model</span><span>Nationality</span><span>Gender</span><span>Version</span><span>Status</span><span /></div>
-          {filtered.map((character) => <CharacterListRow key={character.characterId} character={character} onClick={() => setSelected(character)} />)}
-        </div>
-      )}
-
-      {selected && (
-        <CharacterDetail
-          character={selected}
-          onClose={() => setSelected(null)}
-          onSaved={setSelected}
-          createVersion={createVersion}
-        />
-      )}
-    </>
-  )
-}
-
-function PlaceholderPage({ section }: { section: Exclude<NavSection, 'characters'> }) {
-  const content = {
-    dashboard: ['Studio Dashboard', 'AI 콘텐츠 제작 에셋과 프로젝트 현황을 한곳에서 확인합니다.'],
-    project: ['Project Manager', 'MVP 0.2에서 영상 프로젝트 생성과 에셋 연결 기능이 추가됩니다.'],
-    settings: ['Studio Settings', '워크스페이스, 생성 모델, 권한 설정을 위한 확장 영역입니다.'],
-  }[section]
-
-  return (
-    <div className="placeholder-page">
-      <div className="placeholder-orb"><Sparkles /></div>
-      <p className="eyebrow">AI VIDEO STUDIO</p>
-      <h1>{content[0]}</h1>
-      <p>{content[1]}</p>
-      <span>MVP 0.1 · Character Library is now active</span>
     </div>
   )
 }
 
 export default function AIStudio() {
-  const location = useLocation()
   const navigate = useNavigate()
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const pathSection = location.pathname.split('/')[2] as NavSection | undefined
-  const section: NavSection = navItems.some((item) => item.id === pathSection) ? pathSection as NavSection : 'characters'
-
-  const changeSection = (next: NavSection) => {
-    navigate(`/ai-studio/${next}`)
-    setMobileNavOpen(false)
-  }
+  const [libraryOpen, setLibraryOpen] = useState(false)
 
   return (
     <div className="ai-studio-shell">
-      <aside className={`studio-sidebar ${mobileNavOpen ? 'open' : ''}`}>
-        <div className="studio-brand">
-          <div className="brand-mark"><Sparkles size={17} /></div>
-          <div><strong>AI VIDEO</strong><span>STUDIO</span></div>
-          <button className="studio-mobile-close" onClick={() => setMobileNavOpen(false)}><X size={18} /></button>
-        </div>
-        <nav>
-          <p>WORKSPACE</p>
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => changeSection(item.id)}>
-                <Icon size={18} /><span>{item.label}</span>{item.id === 'characters' && <em>10</em>}
-              </button>
-            )
-          })}
-        </nav>
-        <div className="studio-sidebar-footer">
-          <button onClick={() => navigate('/')}><ArrowLeft size={17} /><span>Sales Tools로 돌아가기</span></button>
-          <div className="workspace-user"><div>MK</div><p><strong>Minzza Workspace</strong><span>Administrator</span></p></div>
-        </div>
-      </aside>
-      {mobileNavOpen && <button className="studio-nav-backdrop" onClick={() => setMobileNavOpen(false)} aria-label="메뉴 닫기" />}
-
+      <header className="studio-topbar">
+        <button className="studio-back-button" onClick={() => navigate('/')}><ArrowLeft size={16} /><span>Sales Tools</span></button>
+        <div className="studio-compact-brand"><span><Sparkles size={15} /></span><p><strong>AI VIDEO STUDIO</strong><small>Higgsfield Production</small></p></div>
+        <button className="studio-library-button" onClick={() => setLibraryOpen(true)}><Users size={16} /> 캐릭터 라이브러리</button>
+      </header>
       <main className="studio-main">
-        <div className="studio-mobile-header">
-          <button onClick={() => setMobileNavOpen(true)} aria-label="메뉴 열기"><Menu size={20} /></button>
-          <strong>AI VIDEO STUDIO</strong>
-          <span />
-        </div>
-        <div className="studio-content">
-          {section === 'characters' ? <CharacterLibrary /> : section === 'project' ? <VideoProductionPlanner /> : <PlaceholderPage section={section} />}
-        </div>
+        <div className="studio-content"><VideoProductionPlanner onOpenCharacterLibrary={() => setLibraryOpen(true)} /></div>
       </main>
+      {libraryOpen && <CharacterLibrary onClose={() => setLibraryOpen(false)} />}
     </div>
   )
 }

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
-  Camera,
+  BrainCircuit,
   Check,
   ChevronDown,
   Circle,
@@ -11,6 +11,7 @@ import {
   Copy,
   FileCheck2,
   Film,
+  ImagePlus,
   LayoutPanelTop,
   LockKeyhole,
   MessageSquareText,
@@ -19,9 +20,10 @@ import {
   Send,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react'
+import { callGeminiWithFallback } from '../../../utils/apiProxy'
 import { useCharacters } from '../character/hooks/useCharacters'
-import type { Character } from '../character/types/character'
 import './video-production-planner.css'
 
 type ApprovalStage = 'brief' | 'boards' | 'continuity' | 'prompt'
@@ -29,6 +31,7 @@ type ApprovalState = Record<ApprovalStage, boolean>
 
 interface ProductionConfig {
   title: string
+  creativeBrief: string
   purpose: string
   platform: string
   aspectRatio: string
@@ -58,10 +61,80 @@ interface Shot {
   camera: string
   audio: string
   prompt: string
+  imagePrompt?: string
+}
+
+interface AiProductionPackage {
+  creativeSummary: string
+  creativeRationale: string
+  shots: Shot[]
+  finalPrompt: string
+  storyboardImageUrl?: string
+}
+
+const makeStoryboardSketchUrl = (shots: Shot[], seed: number) => {
+  const panelDirections = shots.map((shot, index) =>
+    `Panel ${index + 1}: ${shot.imagePrompt || shot.visual}. Composition: ${shot.framing}. Show the described action, environment, props, blocking and relationship clearly.`,
+  ).join(' ')
+  const prompt = `BLACK AND WHITE ROUGH PENCIL ADVERTISING STORYBOARD CONTACT SHEET. THIS MUST LOOK HAND DRAWN, NEVER LIKE A PHOTO. Exactly six distinct rectangular frames arranged in 2 columns and 3 rows. Each frame must show a visibly different scene, action, composition and camera distance. Anonymous simplified actors only; prioritize staging, environment, props, gestures and screen direction. Loose graphite lines, storyboard artist thumbnails, white paper, grayscale, no captions, no words, no logos. ${panelDirections}`
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1200&height=1200&nologo=true&enhance=false&seed=${seed}`
+}
+
+const convertImageToPencilSketch = (image: HTMLImageElement) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth
+  canvas.height = image.naturalHeight
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return image.src
+  context.drawImage(image, 0, 0)
+  const source = context.getImageData(0, 0, canvas.width, canvas.height)
+  const output = context.createImageData(canvas.width, canvas.height)
+  const gray = new Float32Array(canvas.width * canvas.height)
+  for (let index = 0; index < gray.length; index += 1) {
+    const offset = index * 4
+    gray[index] = source.data[offset] * .299 + source.data[offset + 1] * .587 + source.data[offset + 2] * .114
+  }
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const index = y * canvas.width + x
+      const left = gray[y * canvas.width + Math.max(0, x - 1)]
+      const right = gray[y * canvas.width + Math.min(canvas.width - 1, x + 1)]
+      const top = gray[Math.max(0, y - 1) * canvas.width + x]
+      const bottom = gray[Math.min(canvas.height - 1, y + 1) * canvas.width + x]
+      const edge = Math.min(255, Math.hypot(right - left, bottom - top) * 3.4)
+      const shade = Math.max(0, (145 - gray[index]) * .18)
+      const paperGrain = ((x * 13 + y * 7) % 17) * .42
+      const pencil = Math.max(18, Math.min(255, 252 - edge - shade - paperGrain))
+      const offset = index * 4
+      output.data[offset] = pencil
+      output.data[offset + 1] = pencil
+      output.data[offset + 2] = Math.max(0, pencil - 3)
+      output.data[offset + 3] = 255
+    }
+  }
+  context.putImageData(output, 0, 0)
+  return canvas.toDataURL('image/jpeg', .9)
+}
+
+interface ReferenceImage {
+  dataUrl: string
+  mimeType: string
+  name: string
+}
+
+interface GenerationProgress {
+  open: boolean
+  phase: 'planning' | 'images' | 'complete' | 'error'
+  step: number
+  percent: number
+  completed: number
+  failed: number
+  previewUrl: string
 }
 
 const DEFAULT_CONFIG: ProductionConfig = {
   title: '웰리힐리 브랜드 필름',
+  creativeBrief: '리조트에 도착한 순간 일상에서 벗어나는 설렘과 따뜻한 환대를 보여주세요.',
   purpose: '브랜드 인지도',
   platform: 'Instagram Reels',
   aspectRatio: '9:16',
@@ -143,64 +216,6 @@ function SelectField({
   )
 }
 
-function makeShots(config: ProductionConfig, cast: Character[]): Shot[] {
-  const lead = cast[0]?.name ?? '메인 모델'
-  const partner = cast[1]?.name
-  const beats = [
-    {
-      role: 'HOOK',
-      visual: `${config.location}의 인상적인 디테일과 ${lead}의 시선으로 시작`,
-      framing: 'Extreme close-up → Close-up',
-      camera: config.movement,
-      audio: '첫 1초 안에 음악 훅과 공간음',
-    },
-    {
-      role: 'INTRO',
-      visual: `${lead}가 공간으로 들어서며 분위기와 세계관을 소개`,
-      framing: 'Medium full shot',
-      camera: 'Smooth tracking shot',
-      audio: config.dialogue === '대사 없음' ? '음악 빌드업' : config.dialogue,
-    },
-    {
-      role: 'DISCOVER',
-      visual: partner ? `${lead}와 ${partner}가 핵심 경험을 함께 발견` : `${lead}가 핵심 경험을 발견하고 자연스럽게 반응`,
-      framing: 'Medium shot → Insert',
-      camera: 'Gentle orbit 90°',
-      audio: '현장음 강조 + 음악 전개',
-    },
-    {
-      role: 'HERO',
-      visual: `브랜드의 핵심 경험을 가장 매력적인 한 장면으로 표현`,
-      framing: 'Wide hero shot',
-      camera: config.cameraStyle === 'Dynamic action' ? 'Fast push-in' : 'Slow crane reveal',
-      audio: '음악 클라이맥스',
-    },
-    {
-      role: 'EMOTION',
-      visual: `${lead}의 표정과 공간 디테일을 교차해 감정적 여운 형성`,
-      framing: 'Close-up + Detail cut',
-      camera: 'Subtle handheld drift',
-      audio: '음악을 낮추고 공간음 강조',
-    },
-    {
-      role: 'CTA',
-      visual: `${config.cta} 문구와 브랜드 엔딩 프레임`,
-      framing: 'Clean end card',
-      camera: 'Static locked',
-      audio: '짧은 sonic logo',
-    },
-  ]
-
-  const totalSeconds = Number.parseInt(config.duration, 10)
-  const shotDuration = Math.max(1, Math.round(totalSeconds / beats.length))
-  return beats.map((beat, index) => ({
-    number: String(index + 1).padStart(2, '0'),
-    duration: index === beats.length - 1 ? `${Math.max(1, totalSeconds - shotDuration * (beats.length - 1))}s` : `${shotDuration}s`,
-    ...beat,
-    prompt: `${beat.framing}, ${beat.camera}. ${beat.visual}. ${config.lighting} lighting, ${config.tone} mood, ${config.genre.toLowerCase()} commercial film, ${config.aspectRatio}.`,
-  }))
-}
-
 function ApprovalRail({ approvals }: { approvals: ApprovalState }) {
   const completed = approvalOrder.filter((stage) => approvals[stage]).length
   return (
@@ -234,10 +249,14 @@ function ApprovalBar({
   stage,
   approvals,
   onApprove,
+  canApprove = true,
+  prerequisiteText,
 }: {
   stage: ApprovalStage
   approvals: ApprovalState
   onApprove: (stage: ApprovalStage) => void
+  canApprove?: boolean
+  prerequisiteText?: string
 }) {
   const index = approvalOrder.indexOf(stage)
   const unlocked = approvalOrder.slice(0, index).every((item) => approvals[item])
@@ -245,20 +264,20 @@ function ApprovalBar({
   return (
     <div className={`approval-bar ${approved ? 'done' : ''}`}>
       <div>
-        {approved ? <BadgeCheck size={19} /> : unlocked ? <FileCheck2 size={19} /> : <LockKeyhole size={18} />}
+        {approved ? <BadgeCheck size={19} /> : unlocked && canApprove ? <FileCheck2 size={19} /> : <LockKeyhole size={18} />}
         <p>
-          <strong>{approved ? '승인 완료' : unlocked ? '검토 후 승인해 주세요' : '이전 단계 승인이 필요합니다'}</strong>
-          <span>{approved ? '다음 제작 단계에 반영되었습니다.' : '승인 전까지 다음 산출물은 잠금 상태입니다.'}</span>
+          <strong>{approved ? '승인 완료' : unlocked && canApprove ? '검토 후 승인해 주세요' : prerequisiteText ?? '이전 단계 승인이 필요합니다'}</strong>
+          <span>{approved ? '다음 제작 단계에 반영되었습니다.' : unlocked && !canApprove ? 'Gemini 생성 결과가 있어야 승인할 수 있습니다.' : '승인 전까지 다음 산출물은 잠금 상태입니다.'}</span>
         </p>
       </div>
-      <button disabled={!unlocked || approved} onClick={() => onApprove(stage)}>
+      <button disabled={!unlocked || !canApprove || approved} onClick={() => onApprove(stage)}>
         {approved ? <><Check size={15} /> Approved</> : <>이 단계 승인 <ArrowRight size={15} /></>}
       </button>
     </div>
   )
 }
 
-export default function VideoProductionPlanner() {
+export default function VideoProductionPlanner({ onOpenCharacterLibrary }: { onOpenCharacterLibrary?: () => void }) {
   const { characters } = useCharacters()
   const [config, setConfig] = useState<ProductionConfig>(() => {
     const saved = localStorage.getItem('ai-studio.production-config.v1')
@@ -267,23 +286,39 @@ export default function VideoProductionPlanner() {
   const [selectedCast, setSelectedCast] = useState<string[]>(['CHAR_F02'])
   const [approvals, setApprovals] = useState<ApprovalState>({ brief: false, boards: false, continuity: false, prompt: false })
   const [copied, setCopied] = useState(false)
+  const [aiPackage, setAiPackage] = useState<AiProductionPackage | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState('')
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
+    open: false,
+    phase: 'planning',
+    step: 0,
+    percent: 0,
+    completed: 0,
+    failed: 0,
+    previewUrl: '',
+  })
+  const [referenceImage, setReferenceImage] = useState<ReferenceImage | null>(null)
+  const referenceInputRef = useRef<HTMLInputElement>(null)
 
   const cast = characters.filter((character) => selectedCast.includes(character.characterId))
-  const shots = useMemo(() => makeShots(config, cast), [cast, config])
+  const shots = aiPackage?.shots ?? []
   const selectedModel = modelOptions.find((model) => model.value === config.higgsfieldModel) ?? modelOptions[0]
 
   const updateConfig = (key: keyof ProductionConfig, value: string) => {
     const next = { ...config, [key]: value }
     setConfig(next)
     localStorage.setItem('ai-studio.production-config.v1', JSON.stringify(next))
-    const briefKeys: Array<keyof ProductionConfig> = ['title', 'purpose', 'platform', 'aspectRatio', 'duration', 'genre', 'tone', 'audience']
+    setAiPackage(null)
+    setGenerationError('')
+    const briefKeys: Array<keyof ProductionConfig> = ['title', 'creativeBrief', 'purpose', 'platform', 'aspectRatio', 'duration', 'genre', 'tone', 'audience']
     const boardKeys: Array<keyof ProductionConfig> = ['location', 'time', 'lighting', 'cameraStyle', 'movement', 'pacing']
     const continuityKeys: Array<keyof ProductionConfig> = ['audio', 'dialogue', 'cta']
     setApprovals((current) => {
       if (briefKeys.includes(key)) return { brief: false, boards: false, continuity: false, prompt: false }
       if (boardKeys.includes(key)) return { ...current, boards: false, continuity: false, prompt: false }
       if (continuityKeys.includes(key)) return { ...current, continuity: false, prompt: false }
-      return { ...current, prompt: false }
+      return { ...current, continuity: false, prompt: false }
     })
   }
 
@@ -292,29 +327,207 @@ export default function VideoProductionPlanner() {
       if (current.includes(characterId)) return current.filter((id) => id !== characterId)
       return current.length >= 2 ? current : [...current, characterId]
     })
+    setAiPackage(null)
+    setGenerationError('')
     setApprovals((current) => ({ ...current, boards: false, continuity: false, prompt: false }))
   }
 
   const approve = (stage: ApprovalStage) => setApprovals((current) => ({ ...current, [stage]: true }))
 
-  const finalPrompt = useMemo(() => {
-    const characterText = cast.length
-      ? cast.map((character) => `${character.name} (${character.promptSeed})`).join('; ')
-      : 'No visible character, environment-led brand film'
-    return [
-      `[PROJECT] ${config.title}`,
-      `[FORMAT] ${config.duration} ${config.aspectRatio} ${config.resolution} video for ${config.platform}`,
-      `[MODEL] ${selectedModel.label}`,
-      `[OBJECTIVE] ${config.purpose}, targeting ${config.audience}`,
-      `[CHARACTERS] ${characterText}`,
-      `[SETTING] ${config.location}, ${config.time}, ${config.lighting} lighting`,
-      `[CREATIVE DIRECTION] ${config.tone} ${config.genre.toLowerCase()} film, ${config.cameraStyle}, ${config.pacing}`,
-      `[SHOT PLAN] ${shots.map((shot) => `Shot ${shot.number}: ${shot.prompt}`).join(' ')}`,
-      `[AUDIO] ${config.audio}. ${config.dialogue}.`,
-      `[ENDING] ${config.cta}. Clean brand-safe end frame.`,
-      `[CONTINUITY] Preserve exact face, hairstyle, wardrobe, body proportions and color palette across every shot. Natural anatomy, realistic motion, coherent spatial continuity, no identity drift, no text artifacts.`,
-    ].join('\n')
-  }, [cast, config, selectedModel.label, shots])
+  const invalidateVisualPlan = () => {
+    setAiPackage(null)
+    setGenerationError('')
+    setApprovals((current) => ({ ...current, boards: false, continuity: false, prompt: false }))
+  }
+
+  const handleReferenceImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setGenerationError('이미지 파일만 업로드할 수 있습니다.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setGenerationError('기준 이미지는 10MB 이하로 업로드해 주세요.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setReferenceImage({
+        dataUrl: String(reader.result),
+        mimeType: file.type,
+        name: file.name,
+      })
+      invalidateVisualPlan()
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const clearReferenceImage = () => {
+    setReferenceImage(null)
+    if (referenceInputRef.current) referenceInputRef.current.value = ''
+    invalidateVisualPlan()
+  }
+
+  const generateWithGemini = async () => {
+    if (!approvals.boards || isGenerating) return
+
+    setIsGenerating(true)
+    setGenerationError('')
+    setAiPackage(null)
+    setGenerationProgress({ open: true, phase: 'planning', step: 0, percent: 8, completed: 0, failed: 0, previewUrl: '' })
+    setApprovals((current) => ({ ...current, continuity: false, prompt: false }))
+
+    const characterData = cast.map((character) => ({
+      name: character.name,
+      id: character.characterId,
+      identityPrompt: character.promptSeed,
+      appearance: {
+        face: character.face,
+        hair: character.hair,
+        body: character.body,
+        outfit: character.defaultOutfit,
+      },
+      personality: character.personality,
+    }))
+
+    const requestPrompt = `
+You are a senior AI video creative director and an expert Higgsfield prompt engineer.
+Create a production-ready package from the Korean brief below. Do not merely repeat the inputs: improve the hook, visual storytelling, camera language, action, continuity, and commercial impact.
+
+PRODUCTION INPUT
+${JSON.stringify({
+  project: config,
+  selectedHiggsfieldModel: selectedModel,
+  characters: characterData,
+  hasReferenceImage: Boolean(referenceImage),
+}, null, 2)}
+
+REQUIREMENTS
+- Return exactly 6 shots whose durations add up to ${config.duration}.
+- creativeSummary and creativeRationale must be written in Korean.
+- visual and audio must be clear Korean production directions.
+- framing, camera, and every shot prompt must be professional English suitable for an AI video model.
+- finalPrompt must be a detailed English master prompt optimized for ${selectedModel.label}, not Markdown.
+- imagePrompt must be a literal English visualization of the corresponding Korean visual field. It must contain the exact same number of people, location, action, emotion, props, screen direction and composition with no additions or substitutions.
+- imagePrompt must describe only visible staging: environment, props, actor blocking, gesture, action and composition. Make every scene visibly distinct. Do not request beauty photography, facial detail, photorealism, rendering style, text or logos.
+- Start with a strong first-second hook and end with the requested CTA.
+- Preserve each selected character's exact identity, face, hair, outfit, age, body proportions, and ethnicity across all shots.
+- If a reference image is attached, analyze it as the visual source and opening-frame reference. Preserve its architecture, spatial layout, materials, season, and recognizable location details while adding only actions requested in the creative brief.
+- When a reference image is attached, explicitly describe the transition from that exact first frame in the shot prompts and finalPrompt.
+- Include realistic physics, natural anatomy, spatial continuity, lighting continuity, brand-safe composition, and negative constraints against identity drift, morphing, extra limbs, flicker, warped hands, and unwanted text.
+- If there is no cast, create an environment-led film without adding people.
+- Avoid unsupported claims about the model. Do not include explanations outside JSON.
+
+Return only this JSON shape:
+{
+  "creativeSummary": "한글 핵심 콘셉트 2~3문장",
+  "creativeRationale": "한글 연출 전략 2~3문장",
+  "shots": [
+    {
+      "number": "01",
+      "duration": "2s",
+      "role": "HOOK",
+      "visual": "한글 화면과 인물 동작",
+      "framing": "English framing and lens",
+      "camera": "English camera movement",
+      "audio": "한글 사운드 지시",
+      "prompt": "Detailed English video shot prompt",
+      "imagePrompt": "Detailed English still-image prompt that visualizes this exact storyboard frame"
+    }
+  ],
+  "finalPrompt": "Complete English Higgsfield master generation prompt"
+}`
+
+    try {
+      const parts = referenceImage
+        ? [
+            { text: requestPrompt },
+            {
+              inlineData: {
+                data: referenceImage.dataUrl.split(',')[1],
+                mimeType: referenceImage.mimeType,
+              },
+            },
+          ]
+        : [{ text: requestPrompt }]
+      let responseText = await callGeminiWithFallback(
+        parts,
+        ['gemini-2.5-flash', 'gemini-2.5-pro'],
+        {
+          responseMimeType: 'application/json',
+          temperature: 0.55,
+          maxOutputTokens: 16384,
+        },
+      )
+      setGenerationProgress((current) => ({ ...current, step: 1, percent: 55 }))
+      let parsed: Partial<AiProductionPackage>
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+        parsed = JSON.parse(jsonMatch?.[0] ?? responseText) as Partial<AiProductionPackage>
+      } catch {
+        responseText = await callGeminiWithFallback(
+          [{
+            text: `Repair the malformed JSON below. Preserve every field and all 6 shots, fix syntax only, and return valid JSON with no Markdown.\n\n${responseText}`,
+          }],
+          ['gemini-2.5-flash', 'gemini-2.5-pro'],
+          { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 16384 },
+        )
+        const repairedMatch = responseText.match(/\{[\s\S]*\}/)
+        parsed = JSON.parse(repairedMatch?.[0] ?? responseText) as Partial<AiProductionPackage>
+      }
+      setGenerationProgress((current) => ({ ...current, step: 2, percent: 70 }))
+      if (
+        !parsed.creativeSummary ||
+        !parsed.creativeRationale ||
+        !parsed.finalPrompt ||
+        !Array.isArray(parsed.shots) ||
+        parsed.shots.length !== 6 ||
+        parsed.shots.some((shot) => !shot.number || !shot.visual || !shot.prompt)
+      ) {
+        throw new Error('AI 결과에 필요한 콘티 항목이 빠져 있습니다.')
+      }
+      const textPackage = {
+        ...parsed,
+        shots: parsed.shots.map((shot) => ({
+          ...shot,
+          imagePrompt: shot.imagePrompt || shot.prompt,
+        })),
+      } as AiProductionPackage
+      setAiPackage(textPackage)
+      setGenerationProgress((current) => ({ ...current, phase: 'images', step: 3, percent: 82 }))
+
+      const imageSeed = Math.floor(Math.random() * 800000) + 100000
+      let sketchUrl = ''
+      for (let attempt = 0; attempt < 3 && !sketchUrl; attempt += 1) {
+        const candidateUrl = makeStoryboardSketchUrl(textPackage.shots, imageSeed + attempt * 101)
+        try {
+          const loadedImage = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const image = new Image()
+            const timeout = window.setTimeout(() => reject(new Error('스케치 생성 시간 초과')), 45000)
+            image.crossOrigin = 'anonymous'
+            image.onload = () => { window.clearTimeout(timeout); resolve(image) }
+            image.onerror = () => { window.clearTimeout(timeout); reject(new Error('스케치 생성 실패')) }
+            image.src = candidateUrl
+          })
+          sketchUrl = convertImageToPencilSketch(loadedImage)
+        } catch {
+          // Retry the single six-frame sketch sheet with a new seed.
+        }
+      }
+      if (!sketchUrl) throw new Error('연필 스토리보드를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')
+      setAiPackage((current) => current ? { ...current, storyboardImageUrl: sketchUrl } : current)
+      setGenerationProgress({ open: true, phase: 'complete', step: 4, percent: 100, completed: 1, failed: 0, previewUrl: sketchUrl })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI 생성 중 알 수 없는 오류가 발생했습니다.'
+      setGenerationError(message)
+      setGenerationProgress((current) => ({ ...current, phase: 'error' }))
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const finalPrompt = aiPackage?.finalPrompt ?? 'Gemini AI 콘티를 생성하면 선택한 Higgsfield 모델에 최적화된 마스터 프롬프트가 표시됩니다.'
 
   const copyPrompt = async () => {
     await navigator.clipboard.writeText(finalPrompt)
@@ -326,18 +539,68 @@ export default function VideoProductionPlanner() {
     setConfig(DEFAULT_CONFIG)
     setSelectedCast(['CHAR_F02'])
     setApprovals({ brief: false, boards: false, continuity: false, prompt: false })
+    setAiPackage(null)
+    setGenerationError('')
+    setReferenceImage(null)
+    if (referenceInputRef.current) referenceInputRef.current.value = ''
     localStorage.removeItem('ai-studio.production-config.v1')
   }
 
   return (
     <div className="production-planner">
+      {generationProgress.open && (
+        <div className="generation-progress-backdrop">
+          <section className={`generation-progress-modal ${generationProgress.phase}`} role="dialog" aria-modal="true" aria-label="AI 콘티 생성 진행 상황">
+            <div className="generation-compact-heading">
+              <div><p className="eyebrow">AI STORYBOARD DIRECTOR</p>
+            <h2>
+              {generationProgress.phase === 'planning' && '기획을 분석하고 콘티를 작성하고 있어요'}
+              {generationProgress.phase === 'images' && '6분할 연필 스케치 컨셉보드를 그리고 있어요'}
+              {generationProgress.phase === 'complete' && 'AI 스토리보드가 완성됐어요'}
+              {generationProgress.phase === 'error' && '생성 중 문제가 발생했어요'}
+            </h2>
+              </div>
+            </div>
+            <p className="generation-status-copy">
+              {generationProgress.phase === 'planning' && '선택한 캐릭터, 장소, 조명, 카메라와 메시지를 하나의 연출 흐름으로 구성합니다.'}
+              {generationProgress.phase === 'images' && '전체 영상 흐름을 한 장의 3×2 광고 촬영 컨셉보드로 구성합니다.'}
+              {generationProgress.phase === 'complete' && '6개 장면의 흐름을 담은 단일 스케치 컨셉보드가 준비됐습니다.'}
+              {generationProgress.phase === 'error' && generationError}
+            </p>
+            <div className="generation-percent-head"><strong>실제 진행률</strong><span>{generationProgress.percent}%</span></div>
+            <div className="generation-percent-track"><i style={{ width: `${generationProgress.percent}%` }} /></div>
+            <div className="generation-step-list">
+              {[
+                ['기획 조건 분석', '목적·플랫폼·캐릭터·공간 확인'],
+                ['6개 장면 흐름 구성', '도입부터 CTA까지 장면 연결'],
+                ['촬영 연출 메모 정리', '화각·카메라·사운드 확정'],
+                ['연필 콘티 문서 조립', '2열×3장면 스토리보드 완성'],
+              ].map(([title, description], index) => (
+                <div className={generationProgress.step > index ? 'done' : generationProgress.step === index && generationProgress.phase !== 'complete' ? 'active' : ''} key={title}>
+                  <span>{generationProgress.step > index || generationProgress.phase === 'complete' ? <Check size={13} /> : index + 1}</span>
+                  <p><strong>{title}</strong><small>{description}</small></p>
+                  {generationProgress.step === index && generationProgress.phase !== 'complete' && <i />}
+                </div>
+              ))}
+            </div>
+            {(generationProgress.phase === 'complete' || generationProgress.phase === 'error') && (
+              <button onClick={() => setGenerationProgress((current) => ({ ...current, open: false }))}>
+                {generationProgress.phase === 'complete' ? '스토리보드 확인' : '닫기'}
+              </button>
+            )}
+          </section>
+        </div>
+      )}
       <header className="planner-header">
         <div>
           <p className="eyebrow"><Sparkles size={14} /> AI PRODUCTION ASSISTANT</p>
           <h1>Video Production Planner</h1>
           <p>선택하고, 검토하고, 승인하세요. 제작 비서가 Higgsfield용 프롬프트까지 완성합니다.</p>
         </div>
-        <button className="planner-reset" onClick={resetProject}><RotateCcw size={15} /> 새 기획</button>
+        <div className="planner-header-actions">
+          <button className="planner-library" onClick={onOpenCharacterLibrary}><Users size={15} /> 캐릭터 라이브러리</button>
+          <button className="planner-reset" onClick={resetProject}><RotateCcw size={15} /> 새 기획</button>
+        </div>
       </header>
 
       <div className="planner-layout">
@@ -354,6 +617,10 @@ export default function VideoProductionPlanner() {
                 <span>프로젝트명</span>
                 <input value={config.title} onChange={(event) => updateConfig('title', event.target.value)} />
               </label>
+              <label className="planner-field creative-brief">
+                <span>AI 연출 요청 · 반드시 담고 싶은 장면과 메시지</span>
+                <textarea value={config.creativeBrief} onChange={(event) => updateConfig('creativeBrief', event.target.value)} />
+              </label>
               <SelectField label="제작 목적" value={config.purpose} options={selectOptions.purpose} onChange={(value) => updateConfig('purpose', value)} />
               <SelectField label="게시 플랫폼" value={config.platform} options={selectOptions.platform} onChange={(value) => updateConfig('platform', value)} />
               <SelectField label="화면 비율" value={config.aspectRatio} options={selectOptions.aspectRatio} onChange={(value) => updateConfig('aspectRatio', value)} />
@@ -368,8 +635,29 @@ export default function VideoProductionPlanner() {
           <section className={`planner-card ${!approvals.brief ? 'locked-card' : ''}`}>
             <div className="planner-card-heading">
               <span><Users size={17} /></span>
-              <div><p>STEP 02</p><h2>캐릭터보드 & 무드 설정</h2><small>출연 캐릭터는 최대 2명까지 선택할 수 있습니다.</small></div>
+              <div><p>STEP 02</p><h2>기준 이미지·캐릭터보드 & 무드 설정</h2><small>현장 사진과 출연 캐릭터를 함께 사용해 첫 프레임을 설계합니다.</small></div>
               <em className={approvals.boards ? 'approved' : ''}>{approvals.boards ? 'APPROVED' : 'REVIEW'}</em>
+            </div>
+            <div className="reference-image-panel">
+              <div className="reference-copy">
+                <ImagePlus size={19} />
+                <p>
+                  <strong>Higgsfield 기준 이미지 · 선택사항</strong>
+                  <span>현장 사진을 올리면 Gemini가 공간과 구도를 분석해 첫 프레임 기반 영상 프롬프트로 통합합니다.</span>
+                </p>
+              </div>
+              {referenceImage ? (
+                <div className="reference-preview">
+                  <img src={referenceImage.dataUrl} alt="Higgsfield 기준 이미지" />
+                  <p><strong>{referenceImage.name}</strong><span>첫 프레임 및 공간 일관성 기준</span></p>
+                  <button onClick={clearReferenceImage} aria-label="기준 이미지 삭제"><X size={14} /></button>
+                </div>
+              ) : (
+                <button className="reference-upload" onClick={() => referenceInputRef.current?.click()} disabled={!approvals.brief}>
+                  <ImagePlus size={15} /> 현장 사진 업로드
+                </button>
+              )}
+              <input ref={referenceInputRef} type="file" accept="image/*" onChange={handleReferenceImage} hidden />
             </div>
             <div className="cast-grid">
               {characters.map((character) => {
@@ -405,21 +693,34 @@ export default function VideoProductionPlanner() {
               <div><p>STEP 03</p><h2>스토리보드 & 촬영 콘티</h2><small>6개 장면으로 구성된 실행 가능한 숏리스트입니다.</small></div>
               <em className={approvals.continuity ? 'approved' : ''}>{approvals.continuity ? 'APPROVED' : 'REVIEW'}</em>
             </div>
-            <div className="storyboard-strip">
-              {shots.map((shot) => (
-                <article key={shot.number}>
-                  <div className="story-frame">
-                    <span>{shot.number}</span>
-                    <Camera size={22} />
-                    <small>{shot.framing}</small>
+            {aiPackage ? <><div className="storyboard-document">
+              <header><h3>{config.title} 광고 촬영 콘티</h3><p>{config.purpose} · {config.platform} · {config.duration} · {config.aspectRatio}</p></header>
+              <div className="storyboard-document-columns">
+                {[shots.slice(0, 3), shots.slice(3, 6)].map((columnShots, columnIndex) => (
+                  <div className="storyboard-sequence" key={columnIndex}>
+                    {columnShots.map((shot, rowIndex) => {
+                      const globalIndex = columnIndex * 3 + rowIndex
+                      return (
+                        <article className="storyboard-document-shot" key={shot.number}>
+                          <div className="storyboard-action-note"><strong>{shot.number}. {shot.role}</strong><p>{shot.visual}</p></div>
+                          <div
+                            className="storyboard-sketch-frame"
+                            style={aiPackage.storyboardImageUrl ? {
+                              backgroundImage: `url("${aiPackage.storyboardImageUrl}")`,
+                              backgroundSize: '200% 300%',
+                              backgroundPosition: `${columnIndex * 100}% ${rowIndex * 50}%`,
+                            } : undefined}
+                            aria-label={`${globalIndex + 1}번 장면 연필 스케치`}
+                          />
+                          <div className="storyboard-camera-note"><strong>{shot.framing}</strong><span>{shot.camera}</span><small>{shot.duration} · {shot.audio}</small></div>
+                          {rowIndex < 2 && <i className="storyboard-flow-arrow">↓</i>}
+                        </article>
+                      )
+                    })}
                   </div>
-                  <div className="story-copy">
-                    <p><strong>{shot.role}</strong><em>{shot.duration}</em></p>
-                    <h3>{shot.visual}</h3>
-                    <span>{shot.camera}</span>
-                  </div>
-                </article>
-              ))}
+                ))}
+              </div>
+              <footer>LOCATION {config.location} · TONE {config.tone} · CAMERA {config.cameraStyle}</footer>
             </div>
             <div className="continuity-table">
               <div className="continuity-head"><span>SHOT</span><span>화면/연기</span><span>카메라</span><span>사운드</span></div>
@@ -431,13 +732,39 @@ export default function VideoProductionPlanner() {
                   <p>{shot.audio}</p>
                 </div>
               ))}
-            </div>
+            </div></> : (
+              <div className="storyboard-empty">
+                <Clapperboard size={25} />
+                <strong>아직 생성된 콘티가 없습니다</strong>
+                <span>아래 설정을 확인하고 AI 콘티 생성을 시작해 주세요.</span>
+              </div>
+            )}
             <div className="sound-settings">
               <SelectField label="음악·사운드" value={config.audio} options={selectOptions.audio} onChange={(value) => updateConfig('audio', value)} />
               <SelectField label="대사 방식" value={config.dialogue} options={selectOptions.dialogue} onChange={(value) => updateConfig('dialogue', value)} />
               <SelectField label="엔딩 CTA" value={config.cta} options={selectOptions.cta} onChange={(value) => updateConfig('cta', value)} />
             </div>
-            <ApprovalBar stage="continuity" approvals={approvals} onApprove={approve} />
+            <div className={`ai-generation-panel ${aiPackage ? 'complete' : ''} ${generationError ? 'error' : ''}`}>
+              <div>
+                <BrainCircuit size={22} />
+                <p>
+                  <strong>{aiPackage ? 'Gemini 연출 패키지 생성 완료' : isGenerating ? 'Gemini가 콘티를 연출하고 있습니다' : 'Gemini AI로 콘티 고도화'}</strong>
+                  <span>{aiPackage ? aiPackage.creativeSummary : isGenerating ? '기획 의도, 캐릭터 일관성, 카메라와 모델 문법을 최적화하는 중입니다.' : '승인된 기획을 분석해 6개 장면과 Higgsfield 마스터 프롬프트를 생성합니다.'}</span>
+                </p>
+              </div>
+              <button onClick={() => void generateWithGemini()} disabled={!approvals.boards || isGenerating}>
+                <Sparkles size={15} /> {isGenerating ? 'AI 생성 중...' : aiPackage ? '다시 생성' : 'AI 콘티 생성'}
+              </button>
+              {aiPackage && <small>{aiPackage.creativeRationale}</small>}
+              {generationError && <small>{generationError}</small>}
+            </div>
+            <ApprovalBar
+              stage="continuity"
+              approvals={approvals}
+              onApprove={approve}
+              canApprove={Boolean(aiPackage)}
+              prerequisiteText="먼저 Gemini AI 콘티를 생성해 주세요"
+            />
           </section>
 
           <section className={`planner-card final-prompt-card ${!approvals.continuity ? 'locked-card' : ''}`}>
@@ -460,7 +787,13 @@ export default function VideoProductionPlanner() {
               <div><span>MASTER GENERATION PROMPT</span><button onClick={() => void copyPrompt()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy prompt'}</button></div>
               <pre>{finalPrompt}</pre>
             </div>
-            <ApprovalBar stage="prompt" approvals={approvals} onApprove={approve} />
+            <ApprovalBar
+              stage="prompt"
+              approvals={approvals}
+              onApprove={approve}
+              canApprove={Boolean(aiPackage)}
+              prerequisiteText="Gemini 생성 패키지가 필요합니다"
+            />
             <div className={`production-ready ${approvals.prompt ? 'ready' : ''}`}>
               <div>{approvals.prompt ? <BadgeCheck size={22} /> : <LockKeyhole size={20} />}<p><strong>{approvals.prompt ? '제작 결재 완료' : '최종 결재 대기'}</strong><span>{approvals.prompt ? 'Higgsfield 영상 생성을 시작할 수 있습니다.' : '모든 산출물을 확인한 뒤 최종 승인해 주세요.'}</span></p></div>
               <button disabled={!approvals.prompt}><Play size={16} /> Higgsfield 생성 준비 <Send size={14} /></button>

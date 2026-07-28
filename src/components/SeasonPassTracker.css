@@ -17,6 +17,18 @@
   margin-bottom: 32px;
 }
 
+.tracker-header-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .tracker-header { align-items: stretch; flex-direction: column; gap: 16px; }
+  .tracker-header-actions { flex-wrap: wrap; }
+  .tracker-header-actions .crawler-sync { flex: 1; }
+}
+
 .tracker-title {
   font-size: 28px;
   font-weight: 800;

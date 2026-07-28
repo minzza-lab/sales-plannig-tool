@@ -27,11 +27,28 @@ export function useCharacters() {
     }
   }, [])
 
+  useEffect(() => {
+    const handleUpdated = () => void refresh()
+    window.addEventListener('ai-studio-characters-updated', handleUpdated)
+    return () => window.removeEventListener('ai-studio-characters-updated', handleUpdated)
+  }, [refresh])
+
   const createVersion = useCallback(async (characterId: string, update: CharacterUpdate) => {
     const saved = await service.createVersion(characterId, update)
     await refresh()
+    window.dispatchEvent(new Event('ai-studio-characters-updated'))
     return saved
   }, [refresh])
 
-  return useMemo(() => ({ characters, isLoading, createVersion }), [characters, isLoading, createVersion])
+  const createCharacter = useCallback(async (update: CharacterUpdate) => {
+    const saved = await service.createCharacter(update)
+    await refresh()
+    window.dispatchEvent(new Event('ai-studio-characters-updated'))
+    return saved
+  }, [refresh])
+
+  return useMemo(
+    () => ({ characters, isLoading, createVersion, createCharacter }),
+    [characters, isLoading, createVersion, createCharacter],
+  )
 }

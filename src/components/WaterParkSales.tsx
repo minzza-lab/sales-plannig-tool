@@ -12,6 +12,7 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './WaterParkSales.css';
+import CrawlerSyncButton from './CrawlerSyncButton';
 
 type ReportType = 'CUSTOMER_TYPE' | 'HOURLY_SALES' | 'RATE_ZONE' | 'REALTIME_SALES' | 'UNKNOWN';
 
@@ -185,8 +186,7 @@ const WaterParkSales: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchReports = async () => {
+  async function fetchReports() {
       try {
         const { data, error } = await supabase
           .from('daily_reports')
@@ -219,7 +219,9 @@ const WaterParkSales: React.FC = () => {
       } catch (err) {
         console.log('DB fetch error:', err);
       }
-    };
+  }
+
+  useEffect(() => {
     fetchReports();
   }, []);
 
@@ -1394,8 +1396,9 @@ const WaterParkSales: React.FC = () => {
   return (
     <div className="waterpark-sales-container">
       <div className="sales-header">
-        <h1>📅 일일 영업 실적 & 날씨 대시보드</h1>
-        <p>기상 데이터 연동을 통해 날씨와 매출의 상관관계를 한눈에 파악하세요.</p>
+        <div><h1>📅 일일 영업 실적 & 날씨 대시보드</h1>
+        <p>기상 데이터 연동을 통해 날씨와 매출의 상관관계를 한눈에 파악하세요.</p></div>
+        <CrawlerSyncButton target="waterpark" label="최신 매출 동기화" onComplete={fetchReports} />
       </div>
       {selectedDate ? renderDetail() : renderCalendar()}
     </div>

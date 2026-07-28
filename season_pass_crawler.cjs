@@ -179,22 +179,32 @@ async function runSeasonPassCrawler() {
         return key ? row[key] : '';
       };
 
-      // 관리자 엑셀 양식의 열 이름에 맞게 유연하게 대처
-      // 기존 '주문번호' 대신 고유한 '접수번호'나 '시즌권번호'를 우선으로 찾음
-      const orderIdRaw = getVal(['접수번호', '시즌권번호', '주문번호', '예약번호', '결제번호', 'ID']);
+      // 매출과 판매수량은 이용자별 접수번호가 아니라 실제 결제 단위인 주문번호로 집계한다.
+      // 패밀리권은 한 주문에 접수번호가 여러 개이므로 접수번호를 키로 쓰면 중복 매출이 된다.
+      const orderIdRaw = getVal(['주문번호', '예약번호', '결제번호']) || getVal(['접수번호', '시즌권번호', 'ID']);
       if (!orderIdRaw) continue; // 고유번호가 없으면 빈 행으로 간주
       
       const orderDateStr = getVal(['접수일', '주문일', '거래일', '결제일시']) || new Date().toISOString();
       const paymentDateStr = getVal(['결제일', '승인일']) || new Date().toISOString();
       const productName = getVal(['상품명', '권종', '품목']) || '시즌권';
       
+      const orderStatus = String(getVal(['결제여부', '상태', '진행상태']) || '').trim();
+      const cancelDate = String(getVal(['취소일시', '취소일']) || '').trim();
+
       // 필터링: 4월 14일 이전 데이터 무시, 1차판매/MTB 무시
       if (orderDateStr < '2026-04-14') continue;
       if (productName.includes('1차판매') || productName.includes('MTB')) continue;
       
       const orderId = String(orderIdRaw).trim();
-      const priceRaw = getVal(['금액', '매출', '단가', '결제액']);
+      // 원본의 결제금액을 최우선으로 사용한다. 주문금액은 보조값일 뿐이다.
+      const priceRaw = getVal(['결제금액']) || getVal(['주문금액']) || getVal(['금액', '매출', '단가', '결제액']);
       const price = Number(String(priceRaw).replace(/[^0-9]/g, '')) || 0;
+
+      const isCancelled = Boolean(cancelDate)
+        || /(취소|환불|반품|무효|해지|cancel|refund)/i.test(orderStatus);
+
+      // 한 주문의 동반자 행은 결제금액이 0원이다. 실제 결제 행만 저장한다.
+      if (!isCancelled && (orderStatus !== '결제' || price <= 0)) continue;
       
       const payload = {
         order_id: orderId,
@@ -207,7 +217,7 @@ async function runSeasonPassCrawler() {
         ssn: String(getVal(['주민번호', '생년월일'])),
         phone: String(getVal(['휴대번호', '전화번호', '연락처', '휴대폰'])),
         address: getVal(['주소', '거주지', '기본주소', '상세주소', '배송지']) || '',
-        status: getVal(['결제여부', '상태', '진행상태']) || '완료',
+        status: isCancelled ? '취소' : '결제',
         price: price
       };
 
@@ -231,12 +241,19 @@ async function runSeasonPassCrawler() {
   }
 }
 
-console.log('⏰ 스케줄러 세팅 완료. 15분마다 크롤러가 자동으로 실행됩니다.');
-// 스크립트 실행 시 최초 1회 즉시 실행
-runSeasonPassCrawler();
+const runOnce = process.argv.includes('--once');
 
-// 이후 매 15분마다 반복 실행 (예: 0분, 15분, 30분, 45분)
-cron.schedule('*/15 * * * *', () => {
-  console.log(`\n[${new Date().toLocaleString()}] 🔄 정기 크롤링 작업을 시작합니다...`);
+if (runOnce) {
+  console.log('▶ 웹 요청 1회 동기화 모드로 실행합니다.');
+  runSeasonPassCrawler().then(() => process.exit(0));
+} else {
+  console.log('⏰ 스케줄러 세팅 완료. 15분마다 크롤러가 자동으로 실행됩니다.');
+  // 스크립트 실행 시 최초 1회 즉시 실행
   runSeasonPassCrawler();
-});
+
+  // 이후 매 15분마다 반복 실행 (예: 0분, 15분, 30분, 45분)
+  cron.schedule('*/15 * * * *', () => {
+    console.log(`\n[${new Date().toLocaleString()}] 🔄 정기 크롤링 작업을 시작합니다...`);
+    runSeasonPassCrawler();
+  });
+}

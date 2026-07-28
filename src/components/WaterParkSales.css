@@ -19,6 +19,13 @@
   color: var(--text-primary);
 }
 
+.sales-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
 .auto-fit-text {
   display: block;
   width: 100%;
@@ -45,6 +52,11 @@
   color: var(--text-secondary); 
   font-size: 15px; 
   margin-bottom: 18px; 
+}
+
+@media (max-width: 760px) {
+  .sales-header { flex-direction: column; }
+  .sales-header .crawler-sync { width: 100%; }
 }
 
 /* Calendar Dashboard */

@@ -86,40 +86,6 @@
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
-.sidebar-nav .ai-studio-entry {
-  margin: 8px 0 10px;
-}
-
-.sidebar-nav .ai-studio-entry a {
-  min-height: 58px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(59, 130, 246, 0.08));
-  border: 1px solid rgba(129, 140, 248, 0.2);
-  color: #c7d2fe;
-}
-
-.sidebar-nav .ai-studio-entry a:hover {
-  border-color: rgba(129, 140, 248, 0.42);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28), rgba(59, 130, 246, 0.12));
-}
-
-.ai-studio-entry a > span:last-child {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.ai-studio-entry strong {
-  color: #eef2ff;
-  font-size: 0.82rem;
-  letter-spacing: 0.025em;
-}
-
-.ai-studio-entry small {
-  margin-top: 3px;
-  color: #818cf8;
-  font-size: 0.68rem;
-}
-
 .sidebar-nav .icon {
   margin-right: 12px;
   font-size: 1.1rem;

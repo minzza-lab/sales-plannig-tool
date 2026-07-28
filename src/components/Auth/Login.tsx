@@ -111,22 +111,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleKakaoLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'kakao',
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: { scope: 'profile_nickname', prompt: 'login' }
-      }
-    });
-    if (error) {
-      setError(`카카오 로그인 오류: ${error.message}`);
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="login-wrapper">
       <div className="login-card animate-fade-in">
@@ -198,18 +182,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {isSignUp ? '로그인으로 돌아가기' : '사번 등록'}
           </button>
         </div>
-
-        {!isSignUp && (
-          <>
-            <div className="login-divider">
-              <span>또는</span>
-            </div>
-            <button onClick={handleKakaoLogin} className="kakao-login-btn" disabled={isLoading}>
-              <span className="kakao-icon">💬</span>
-              카카오로 간편 시작
-            </button>
-          </>
-        )}
 
         {showInstallPrompt && (
           <div className="ios-install-prompt">

@@ -19,10 +19,6 @@ const ProductProposals = lazy(() => import('./components/ProductProposals'))
 const TTSGenerator = lazy(() => import('./components/TTSGenerator'))
 const ThumbnailGenerator = lazy(() => import('./components/ThumbnailGenerator'))
 const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
-const SpaceSimulator = lazy(() => import('./components/SpaceSimulator'))
-const PhotoShortsMaker = lazy(() => import('./components/PhotoShortsMaker'))
-const VideoPromptGenerator = lazy(() => import('./components/VideoPromptGenerator'))
-const RoomReservationAutomator = lazy(() => import('./components/RoomReservationAutomator'))
 const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
 const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
 const QRVerifier = lazy(() => import('./components/QRVerifier'))
@@ -84,10 +80,6 @@ function App() {
                 <Route path="tools/tts-generator" element={<TTSGenerator />} />
                 <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
                 <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
-                <Route path="tools/space-simulator" element={<SpaceSimulator />} />
-                <Route path="tools/photo-shorts-maker" element={<PhotoShortsMaker />} />
-                <Route path="tools/video-prompt-generator" element={<VideoPromptGenerator />} />
-                <Route path="tools/room-reservation" element={<RoomReservationAutomator />} />
                 <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
                 <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
                 <Route path="tools/qr-verifier" element={<QRVerifier />} />

@@ -6,6 +6,7 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import './SeasonPassTracker.css';
+import CrawlerSyncButton from './CrawlerSyncButton';
 
 interface BaselineData {
   id: string;
@@ -97,7 +98,21 @@ const SeasonPassTracker: React.FC = () => {
   const totalRevenue2025 = baselines.reduce((acc, curr) => acc + Number(curr.revenue_2025), 0) * 1000;
   const totalQty2025 = baselines.reduce((acc, curr) => acc + Number(curr.qty_2025), 0);
   
-  let validOrders = orders.filter(o => o.status === '결제');
+  // 관리자 엑셀은 한 주문(결제) 안의 이용자마다 접수번호를 따로 발급한다.
+  // 과거 접수번호를 order_id로 저장한 데이터는 패밀리권 인원수만큼 중복될 수
+  // 있으므로, 실제 결제 단위인 원본 주문번호 형식만 매출 집계에 사용한다.
+  let validOrders = orders.filter(order => {
+    const status = String(order.status || '').trim();
+    const productName = String(order.product_name || '');
+    const orderId = String(order.order_id || '').trim();
+    const price = Number(order.price) || 0;
+
+    return status === '결제'
+      && orderId.includes('-')
+      && price > 0
+      && !/(취소|환불|반품|무효|해지|cancel|refund)/i.test(status)
+      && !/(1차판매|MTB)/i.test(productName);
+  });
   
   if (activeStartDate && activeEndDate) {
     const start = new Date(activeStartDate);
@@ -511,10 +526,13 @@ const SeasonPassTracker: React.FC = () => {
             2025년 대비 2026년 시즌권 실시간 판매 실적을 대분류(일반/특가/특별권종/프로모션) 기준으로 분석합니다.
           </p>
         </div>
-        <button className="btn-download" onClick={downloadExcel}>
-          <Download size={18} />
-          <span>실적 엑셀 다운로드 (자동양식)</span>
-        </button>
+        <div className="tracker-header-actions">
+          <CrawlerSyncButton target="season-pass" label="최신 시즌권 동기화" onComplete={fetchData} />
+          <button className="btn-download" onClick={downloadExcel}>
+            <Download size={18} />
+            <span>실적 엑셀 다운로드 (자동양식)</span>
+          </button>
+        </div>
       </header>
 
       <div className="tracker-filter-bar">

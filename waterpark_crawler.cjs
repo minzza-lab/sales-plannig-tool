@@ -54,6 +54,28 @@ function getAllDatesFrom(startDateStr) {
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
+async function getMissingDatesFrom(startDateStr) {
+  const allDates = getAllDatesFrom(startDateStr);
+  const existingDates = new Set();
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('daily_reports')
+      .select('report_date')
+      .eq('report_type', 'REALTIME_SALES')
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    (data || []).forEach(row => existingDates.add(row.report_date));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allDates.filter(date => !existingDates.has(date.dbDate));
+}
+
 async function fetchSalesData(apiDate) {
   const payload = new URLSearchParams({
     p_sale_sdate: apiDate,
@@ -106,14 +128,29 @@ async function fetchDetailedSalesData(apiDate, zonecode) {
 
 async function run() {
   const isAll = process.argv[2] === 'all';
+  const isMissing = process.argv[2] === 'missing';
   console.log(chalk.bold.blue('\n🌊 워터파크 매출 자동 수집기 가동'));
   if (isAll) {
     console.log(chalk.bold.cyan('👉 모드: 전체 과거 데이터 수집 (2025-01-01 ~ 오늘)\n'));
+  } else if (isMissing) {
+    console.log(chalk.bold.cyan('👉 모드: 누락 날짜 복구 후 최근 3일 갱신 (2025-04-02 ~ 오늘)\n'));
   } else {
     console.log(chalk.bold.cyan('👉 모드: 최근 3일 치 실시간 수집\n'));
   }
 
-  const datesToCrawl = isAll ? getAllDatesFrom('2025-01-01') : getKstDates(3);
+  let datesToCrawl;
+  if (isAll) {
+    datesToCrawl = getAllDatesFrom('2025-01-01');
+  } else if (isMissing) {
+    const missingDates = await getMissingDatesFrom('2025-04-02');
+    const dateMap = new Map(
+      [...missingDates, ...getKstDates(3)].map(date => [date.dbDate, date])
+    );
+    datesToCrawl = [...dateMap.values()].sort((a, b) => b.dbDate.localeCompare(a.dbDate));
+    console.log(chalk.cyan(`확인할 누락 날짜: ${missingDates.length}일 (최근 3일 포함 총 ${datesToCrawl.length}일)\n`));
+  } else {
+    datesToCrawl = getKstDates(3);
+  }
   let successCount = 0;
   let failCount = 0;
 
@@ -124,12 +161,6 @@ async function run() {
     try {
       const rawData = await fetchSalesData(dateInfo.apiDate);
       
-      if (rawData.length === 0) {
-        console.log(chalk.yellow(`[${dateInfo.dbDate}] 매출 데이터가 없습니다. (수집 생략)`));
-        if (isAll) await delay(150); // 안전 딜레이
-        continue;
-      }
-
       // 데이터 가공
       let totalAmount = 0;
       let totalQty = 0;
@@ -228,7 +259,8 @@ async function run() {
         throw error;
       }
 
-      console.log(chalk.green(`[${dateInfo.dbDate}] 수집 완료! (총매출: ${totalAmount.toLocaleString()}원, 발권: ${totalQty.toLocaleString()}건, 상세품목: ${tableData.length}개)`));
+      const emptyLabel = rawData.length === 0 ? ' / 매출 없음 확인' : '';
+      console.log(chalk.green(`[${dateInfo.dbDate}] 수집 완료! (총매출: ${totalAmount.toLocaleString()}원, 발권: ${totalQty.toLocaleString()}건, 상세품목: ${tableData.length}개${emptyLabel})`));
       successCount++;
     } catch (error) {
       console.log(chalk.red(`[${dateInfo.dbDate}] 수집 실패: ${error.message}`));
@@ -236,7 +268,7 @@ async function run() {
     }
 
     // 호출 과부하 방지 딜레이
-    if (isAll) {
+    if (isAll || isMissing) {
       await delay(200);
     }
   }

@@ -43,12 +43,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
               <span className="icon">🏠</span> 대시보드
             </NavLink>
           </li>
-          <li className="ai-studio-entry">
-            <NavLink to="/ai-studio/characters" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">✦</span>
-              <span><strong>AI VIDEO STUDIO</strong><small>Character Library</small></span>
-            </NavLink>
-          </li>
           <li className="menu-highlight">
             <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">⚡</span> 자동화 요청 게시판
@@ -99,11 +93,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                   </NavLink>
                 </li>
                 <li className="menu-highlight">
-                  <NavLink to="/tools/room-reservation" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🏨</span> 객실 예약 메일 자동화
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
                   <NavLink to="/tools/package-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">📦</span> 패키지 판매 현황
                   </NavLink>
@@ -124,16 +113,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                 <li>
                   <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">📸</span> 현장 스케치 생성기
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/photo-shorts-maker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎬</span> AI 숏폼 자동 메이커
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/video-prompt-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🤖</span> 비디오 프롬프트 생성기
                   </NavLink>
                 </li>
                 <li>
@@ -159,11 +138,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
             </div>
             {openGroups.util && (
               <ul className="accordion-content">
-                <li className="menu-highlight">
-                  <NavLink to="/tools/space-simulator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🪄</span> 공간 시뮬레이터 (AI)
-                  </NavLink>
-                </li>
                 <li>
                   <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🔍</span> QR 코드 생성기

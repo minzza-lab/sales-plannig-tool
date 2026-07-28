@@ -1,210 +1,130 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import './Dashboard.css';
+import { Link } from 'react-router-dom'
+import './Dashboard.css'
 
-const Dashboard: React.FC = () => {
-  const tools = [
-    {
-      id: 'waterpark-sales',
-      title: '워터파크 매출 관리',
-      description: '일일 영업 실적 데이터를 비교하고 분석하는 대시보드입니다.',
-      icon: '🌊',
-      path: '/tools/waterpark-sales',
-      status: 'active'
-    },
-    {
-      id: 'automation-request',
-      title: '자동화 요청 게시판',
-      description: '반복적인 업무나 필요한 기능 개발을 요청하는 공간입니다.',
-      icon: '⚡',
-      path: '/tools/automation-request',
-      status: 'active'
-    },
-    {
-      id: 'knowledge-base',
-      title: '공유 지식 베이스',
-      description: '팀원들과 업무 노하우 및 자료를 공유하는 게시판입니다.',
-      icon: '🤝',
-      path: '/tools/knowledge-base',
-      status: 'active'
-    },
-    {
-      id: 'approvals',
-      title: '품의서 보관함',
-      description: '부서별 결재 품의서를 체계적으로 관리하고 핵심 내용을 요약합니다.',
-      icon: '📄',
-      path: '/tools/approvals',
-      status: 'active'
-    },
-    {
-      id: 'product-proposals',
-      title: '상품안 보관함',
-      description: '부서별 상품안을 체계적으로 관리하고 핵심 내용을 요약합니다.',
-      icon: '💡',
-      path: '/tools/product-proposals',
-      status: 'active'
-    },
-    {
-      id: 'voc-assistant',
-      title: '고객의 소리(VOC) 어시스턴트',
-      description: '고객 문의사항을 분석하고 담당자에게 알맞은 답변 초안을 제안합니다.',
-      icon: '🎧',
-      path: '/tools/voc-assistant',
-      status: 'active'
-    },
-    {
-      id: 'season-pass-tracker',
-      title: '시즌권 주문 추적 관리',
-      description: '시즌권 판매 실적을 분석하고 주문 데이터를 한눈에 관리합니다.',
-      icon: '🎟️',
-      path: '/tools/season-pass-tracker',
-      status: 'active'
-    },
-    {
-      id: 'room-reservation',
-      title: '객실 예약 메일 자동화',
-      description: '네이버 메일로 들어온 예약 요청을 파싱해 엑셀로 변환하고 발송합니다.',
-      icon: '🏨',
-      path: '/tools/room-reservation',
-      status: 'active'
-    },
-    {
-      id: 'space-simulator',
-      title: '공간 시뮬레이터 (AI)',
-      description: 'AI를 활용하여 새로운 공간 기획 및 렌더링 시뮬레이션을 진행합니다.',
-      icon: '🪄',
-      path: '/tools/space-simulator',
-      status: 'active'
-    },
-    {
-      id: 'photo-shorts-maker',
-      title: 'AI 숏폼 자동 메이커',
-      description: '사진과 텍스트만으로 눈길을 끄는 숏폼 영상 콘텐츠를 자동 생성합니다.',
-      icon: '🎬',
-      path: '/tools/photo-shorts-maker',
-      status: 'active'
-    },
-    {
-      id: 'video-prompt-generator',
-      title: '비디오 프롬프트 생성기',
-      description: 'AI 비디오 생성에 최적화된 프롬프트를 자동으로 작성해 줍니다.',
-      icon: '🤖',
-      path: '/tools/video-prompt-generator',
-      status: 'active'
-    },
-    {
-      id: 'field-sketch',
-      title: '현장 스케치 생성기',
-      description: '현장 사진과 소식을 생생하고 매력적인 마케팅 문구로 변환합니다.',
-      icon: '📸',
-      path: '/tools/field-sketch',
-      status: 'active'
-    },
-    {
-      id: 'tts-generator',
-      title: '안내방송용 TTS 생성기',
-      description: '상황에 맞는 대본을 작성하고 자연스러운 음성 안내방송을 제작합니다.',
-      icon: '🎙️',
-      path: '/tools/tts-generator',
-      status: 'active'
-    },
-    {
-      id: 'thumbnail-generator',
-      title: '상품 썸네일 제작기',
-      description: '기획 의도에 맞는 홍보 배경 이미지와 마케팅 카피를 한 번에 생성합니다.',
-      icon: '🎨',
-      path: '/tools/thumbnail-generator',
-      status: 'active'
-    },
-    {
-      id: 'qr-generator',
-      title: 'QR 코드 생성기',
-      description: '인터넷 주소를 QR 코드로 변환하고 이미지로 쉽게 다운로드하세요.',
-      icon: '🔍',
-      path: '/tools/qr-generator',
-      status: 'active'
-    },
-    {
-      id: 'url-shortener',
-      title: 'URL 단축기',
-      description: '고객에게 발송할 길고 복잡한 인터넷 주소를 짧고 간결하게 줄여줍니다.',
-      icon: '🔗',
-      path: '/tools/url-shortener',
-      status: 'active'
-    },
-    {
-      id: 'barcode-generator',
-      title: '바코드 생성기',
-      description: '상품 번호나 식별 코드를 스캐너로 읽을 수 있는 바코드로 변환합니다.',
-      icon: '📊',
-      path: '/tools/barcode-generator',
-      status: 'active'
-    },
-    {
-      id: 'qr-verifier',
-      title: '대체업장 조회 도구',
-      description: '카메라로 QR 코드를 스캔하거나 코드를 직접 입력해 매칭되는 대체 사용 가능 업장과 혜택을 조회합니다.',
-      icon: '📷',
-      path: '/tools/qr-verifier',
-      status: 'active'
-    }
-  ];
+interface Tool {
+  id: string
+  title: string
+  description: string
+  icon: string
+  path: string
+}
 
-  const categories = [
-    {
-      title: '✨ 핵심 업무 도구',
-      id: 'common',
-      tools: tools.filter(t => ['automation-request', 'knowledge-base', 'approvals', 'product-proposals', 'voc-assistant'].includes(t.id))
-    },
-    {
-      title: '📊 매출/운영 관리',
-      id: 'sales',
-      tools: tools.filter(t => ['waterpark-sales', 'season-pass-tracker', 'room-reservation'].includes(t.id))
-    },
-    {
-      title: '📢 홍보/마케팅 파트',
-      id: 'promo',
-      tools: tools.filter(t => ['field-sketch', 'photo-shorts-maker', 'video-prompt-generator', 'tts-generator', 'thumbnail-generator'].includes(t.id))
-    },
-    {
-      title: '🛠️ 유틸리티 모음',
-      id: 'util',
-      tools: tools.filter(t => ['space-simulator', 'qr-generator', 'qr-verifier', 'url-shortener', 'barcode-generator'].includes(t.id))
-    }
-  ];
+interface ToolCategory {
+  id: string
+  eyebrow: string
+  title: string
+  description: string
+  tools: Tool[]
+}
 
+const categories: ToolCategory[] = [
+  {
+    id: 'work',
+    eyebrow: 'WORKSPACE',
+    title: '핵심 업무와 협업',
+    description: '팀의 요청, 지식, 문서와 고객 응대를 한곳에서 관리합니다.',
+    tools: [
+      { id: 'automation-request', title: '자동화 요청 게시판', description: '반복 업무와 필요한 기능을 등록하고 함께 검토합니다.', icon: '⚡', path: '/tools/automation-request' },
+      { id: 'knowledge-base', title: '공유 지식 베이스', description: '업무 노하우와 참고 자료를 팀원들과 축적합니다.', icon: '🤝', path: '/tools/knowledge-base' },
+      { id: 'approvals', title: '품의서 보관함', description: '품의서를 보관하고 Gemini로 핵심 내용을 요약합니다.', icon: '📄', path: '/tools/approvals' },
+      { id: 'product-proposals', title: '상품안 보관함', description: '상품안과 의견을 관리하고 AI 요약을 확인합니다.', icon: '💡', path: '/tools/product-proposals' },
+      { id: 'voc-assistant', title: 'VOC 어시스턴트', description: '고객 문의를 분석해 답변 초안을 빠르게 작성합니다.', icon: '🎧', path: '/tools/voc-assistant' },
+    ],
+  },
+  {
+    id: 'sales',
+    eyebrow: 'SALES & OPERATION',
+    title: '매출과 운영 관리',
+    description: '현장 판매 데이터를 비교하고 운영 현황을 빠르게 파악합니다.',
+    tools: [
+      { id: 'waterpark-sales', title: '워터파크 매출 관리', description: '일별 실적과 날씨, 전년 데이터를 함께 분석합니다.', icon: '🌊', path: '/tools/waterpark-sales' },
+      { id: 'season-pass-tracker', title: '시즌권 주문 추적', description: '목표 대비 판매 실적과 권종별 주문을 관리합니다.', icon: '🎟️', path: '/tools/season-pass-tracker' },
+      { id: 'package-sales', title: '패키지 판매 현황', description: '월별·일별 패키지 판매와 주문 상세를 조회합니다.', icon: '📦', path: '/tools/package-sales' },
+    ],
+  },
+  {
+    id: 'marketing',
+    eyebrow: 'AI MARKETING',
+    title: '홍보 콘텐츠 제작',
+    description: 'Gemini를 활용해 현장 콘텐츠와 홍보물을 제작합니다.',
+    tools: [
+      { id: 'field-sketch', title: '현장 스케치 생성기', description: '현장 사진을 블로그와 SNS용 콘텐츠로 변환합니다.', icon: '📸', path: '/tools/field-sketch' },
+      { id: 'tts-generator', title: '안내방송 TTS', description: '상황에 맞는 안내 대본과 음성을 제작합니다.', icon: '🎙️', path: '/tools/tts-generator' },
+      { id: 'thumbnail-generator', title: '상품 썸네일 제작기', description: '홍보 배경과 카피를 조합해 썸네일을 만듭니다.', icon: '🎨', path: '/tools/thumbnail-generator' },
+    ],
+  },
+  {
+    id: 'utility',
+    eyebrow: 'QUICK TOOLS',
+    title: '빠른 현장 도구',
+    description: '자주 쓰는 코드 생성과 현장 조회 기능을 모았습니다.',
+    tools: [
+      { id: 'qr-generator', title: 'QR 코드 생성기', description: '단일 또는 대량 QR 코드를 생성하고 내려받습니다.', icon: '🔍', path: '/tools/qr-generator' },
+      { id: 'qr-verifier', title: '대체업장 조회', description: 'QR을 스캔해 사용 가능한 업장과 혜택을 확인합니다.', icon: '📷', path: '/tools/qr-verifier' },
+      { id: 'url-shortener', title: 'URL 단축기', description: '긴 인터넷 주소를 고객 전달용 주소로 줄입니다.', icon: '🔗', path: '/tools/url-shortener' },
+      { id: 'barcode-generator', title: '바코드 생성기', description: '상품 번호와 식별 코드를 바코드로 변환합니다.', icon: '▥', path: '/tools/barcode-generator' },
+    ],
+  },
+]
+
+const toolCount = categories.reduce((total, category) => total + category.tools.length, 0) + 1
+
+export default function Dashboard() {
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
-        <h1>영업기획 도구 대시보드</h1>
-        <p>업무 효율을 높여주는 다양한 카테고리별 도구들을 확인해보세요.</p>
+        <div>
+          <p className="dashboard-eyebrow">WELLIHILLI SALES PLANNING</p>
+          <h1>오늘의 업무를<br />한곳에서 시작하세요.</h1>
+          <p>매출 관리부터 AI 콘텐츠 제작까지, 실제 사용하는 도구만 보기 쉽게 정리했습니다.</p>
+        </div>
+        <div className="dashboard-summary">
+          <strong>{toolCount}</strong>
+          <span>사용 가능한 도구</span>
+        </div>
       </header>
 
-      {categories.map(category => (
-        <section key={category.id} className="dashboard-section">
-          <h2 className="section-title">{category.title}</h2>
-          <div className="tool-grid">
-            {category.tools.map((tool) => (
-              <div key={tool.id} className={`tool-card ${tool.status}`}>
-                <div className="tool-icon">{tool.icon}</div>
-                <div className="tool-info">
-                  <h3>{tool.title}</h3>
-                  <p>{tool.description}</p>
-                  {tool.status === 'active' ? (
-                    <Link to={tool.path} className="tool-link">
-                      이동하기 <span>→</span>
-                    </Link>
-                  ) : (
-                    <span className="upcoming-badge">준비 중</span>
-                  )}
-                </div>
-              </div>
-            ))}
+      <Link to="/ai-studio/project" className="studio-spotlight">
+        <div className="spotlight-mark">✦</div>
+        <div className="spotlight-copy">
+          <span>FEATURED · GEMINI CONNECTED</span>
+          <h2>AI Video Studio</h2>
+          <p>캐릭터와 현장 사진을 기반으로 콘티를 설계하고 Higgsfield용 영상 프롬프트를 완성합니다.</p>
+          <div className="spotlight-tags">
+            <em>Character Library</em>
+            <em>Image Analysis</em>
+            <em>Higgsfield Prompt</em>
           </div>
-        </section>
-      ))}
-    </div>
-  );
-};
+        </div>
+        <div className="spotlight-action">스튜디오 열기 <b>→</b></div>
+      </Link>
 
-export default Dashboard;
+      <div className="dashboard-sections">
+        {categories.map((category) => (
+          <section key={category.id} className={`dashboard-section category-${category.id}`}>
+            <div className="section-heading">
+              <div>
+                <span>{category.eyebrow}</span>
+                <h2>{category.title}</h2>
+                <p>{category.description}</p>
+              </div>
+              <em>{category.tools.length} tools</em>
+            </div>
+            <div className="tool-grid">
+              {category.tools.map((tool) => (
+                <Link key={tool.id} to={tool.path} className="tool-card">
+                  <div className="tool-icon">{tool.icon}</div>
+                  <div className="tool-info">
+                    <h3>{tool.title}</h3>
+                    <p>{tool.description}</p>
+                  </div>
+                  <span className="tool-arrow">→</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
