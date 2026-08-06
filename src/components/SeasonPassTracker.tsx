@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Download, TrendingUp, Users, CreditCard } from 'lucide-react';
+import { Download, TrendingUp, Users, CreditCard, Info } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList,
   PieChart, Pie, Cell
@@ -527,7 +527,13 @@ const SeasonPassTracker: React.FC = () => {
           </p>
         </div>
         <div className="tracker-header-actions">
-          <CrawlerSyncButton target="season-pass" label="최신 시즌권 동기화" onComplete={fetchData} />
+          <div className="season-sync-wrap">
+            <CrawlerSyncButton target="season-pass" label="최신 시즌권 동기화" onComplete={fetchData} />
+            <div className="season-sync-guide">
+              <Info size={14} />
+              <span><strong>사용 안내</strong> 전용 윈도우 PC에서 통합 수집기의 <b>START_HERE.cmd</b>가 실행 중이어야 합니다. PC가 꺼져 있거나 수집기가 닫혔으면 요청은 대기 상태로 남습니다.</span>
+            </div>
+          </div>
           <button className="btn-download" onClick={downloadExcel}>
             <Download size={18} />
             <span>실적 엑셀 다운로드 (자동양식)</span>

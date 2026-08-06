@@ -115,6 +115,34 @@ export default function CrawlerSyncButton({
     setError('')
     setIsStarting(true)
     try {
+      if (target === 'waterpark') {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) throw new Error('로그인 정보가 없습니다. 다시 로그인해주세요.')
+
+        const response = await fetch('/api/waterpark-sync', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const result = await response.json().catch(() => ({})) as {
+          error?: string
+          message?: string
+          finishedAt?: string
+        }
+        if (!response.ok) throw new Error(result.error || '서버에서 매출을 수집하지 못했습니다.')
+        await onCompleteRef.current()
+        setState({
+          id: null,
+          status: 'completed',
+          progress: 100,
+          message: result.message || '최신 매출 동기화가 완료되었습니다.',
+          startedAt: null,
+          finishedAt: result.finishedAt || new Date().toISOString(),
+        })
+        return
+      }
+
       const { data: recentRows, error: recentError } = await supabase
         .from('sync_status')
         .select('id,synced_by_id')
@@ -165,7 +193,7 @@ export default function CrawlerSyncButton({
 
   const isBusy = state.status === 'queued' || state.status === 'running'
   const buttonLabel = isStarting
-    ? '동기화 요청 중'
+    ? target === 'waterpark' ? '서버에서 매출 수집 중' : '동기화 요청 중'
     : state.status === 'queued'
       ? '동기화 요청 대기 중'
       : state.status === 'running'
@@ -178,7 +206,11 @@ export default function CrawlerSyncButton({
         {isStarting || isBusy ? <LoaderCircle size={17} className="crawler-spin" /> : <DatabaseZap size={17} />}
         {buttonLabel}
       </button>
-      {isStarting && <small className="crawler-sync-pending">전용 수집 PC에 요청을 보내고 있습니다.</small>}
+      {isStarting && (
+        <small className="crawler-sync-pending">
+          {target === 'waterpark' ? '홈페이지 서버가 최신 매출을 직접 수집하고 있습니다.' : '전용 수집 PC에 요청을 보내고 있습니다.'}
+        </small>
+      )}
       {state.status !== 'idle' && (
         <div className="crawler-sync-status">
           <div><span>{state.status === 'completed' ? <CheckCircle2 size={14} /> : state.status === 'failed' ? <TriangleAlert size={14} /> : <LoaderCircle size={14} className="crawler-spin" />}{state.message}</span><strong>{state.progress}%</strong></div>

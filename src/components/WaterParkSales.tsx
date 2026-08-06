@@ -1397,7 +1397,8 @@ const WaterParkSales: React.FC = () => {
     <div className="waterpark-sales-container">
       <div className="sales-header">
         <div><h1>📅 일일 영업 실적 & 날씨 대시보드</h1>
-        <p>기상 데이터 연동을 통해 날씨와 매출의 상관관계를 한눈에 파악하세요.</p></div>
+        <p>기상 데이터 연동을 통해 날씨와 매출의 상관관계를 한눈에 파악하세요.</p>
+        <span className="sales-sync-guide">전용 PC 없이 홈페이지 서버에서 최신 10일 매출을 직접 수집합니다.</span></div>
         <CrawlerSyncButton target="waterpark" label="최신 매출 동기화" onComplete={fetchReports} />
       </div>
       {selectedDate ? renderDetail() : renderCalendar()}
