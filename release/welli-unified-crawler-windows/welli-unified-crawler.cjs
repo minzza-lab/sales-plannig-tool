@@ -792,7 +792,11 @@ async function processNextSyncRequest(context, options) {
       say(`원격 동기화 요청 확인 실패: ${findError.message}`, 'yellow');
       return;
     }
-    const pending = (rows || []).map(parseSyncRequest).filter(Boolean).reverse().find((request) => request.status === 'queued');
+    const pending = (rows || [])
+      .map(parseSyncRequest)
+      .filter(Boolean)
+      .reverse()
+      .find((request) => request.status === 'queued' && (request.target !== 'waterpark' || !options.skipWaterpark));
     if (!pending || running) return;
 
     await updateSyncRequest(context.supabase, pending, {
@@ -898,7 +902,9 @@ async function main() {
 
   say(`실행 모드: ${options.mode}`, 'cyan');
   say(`로그 폴더: ${logDir}`, 'dim');
-  say('수집 대상: VOC / 시즌권 주문 / 패키지 주문 / 워터파크 일일 실시간 매출', 'green');
+  say(options.skipWaterpark
+    ? '수집 대상: VOC / 시즌권 주문 / 패키지 주문 (워터파크 매출은 홈페이지 서버에서 처리)'
+    : '수집 대상: VOC / 시즌권 주문 / 패키지 주문 / 워터파크 일일 실시간 매출', 'green');
 
   if (options.mode === 'status') {
     await printStatus(context.supabase);

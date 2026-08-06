@@ -103,11 +103,12 @@ if not exist "node_modules" (
 )
 
 echo.
-echo [실행 시작] 15분마다 VOC / 시즌권 / 패키지 / 워터파크 매출을 자동 수집합니다.
+echo [실행 시작] 15분마다 VOC / 시즌권 / 패키지를 자동 수집합니다.
+echo 워터파크 매출은 홈페이지 서버가 직접 수집하므로 이 PC에서는 실행하지 않습니다.
 echo 이 창을 닫으면 자동 수집이 멈춥니다.
 echo.
 
-"%NODE_EXE%" welli-unified-crawler.cjs watch --days 10 --interval 15
+"%NODE_EXE%" welli-unified-crawler.cjs watch --days 10 --interval 15 --skip-waterpark
 
 echo.
 echo 크롤러가 종료되었습니다.
