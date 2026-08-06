@@ -11,5 +11,6 @@
 .crawler-sync.completed .crawler-sync-status strong { color: #059669; }
 .crawler-sync.failed .crawler-sync-track i { background: #ef4444; }
 .crawler-sync-error { color: #c24141; font-size: 9px; }
+.crawler-sync-pending { color: #475467; font-size: 10px; }
 .crawler-spin { animation: crawler-spin .8s linear infinite; }
 @keyframes crawler-spin { to { transform: rotate(360deg); } }

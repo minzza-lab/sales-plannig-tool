@@ -7,6 +7,8 @@ const APP_NAME = 'Welli Waterpark Sales Crawler';
 const API_URL = 'https://wapi.wellihillipark.com/sub2/portal/portal.asp';
 const DEFAULT_RECENT_DAYS = 10;
 const DEFAULT_INTERVAL_MINUTES = 15;
+const SYNC_REQUEST_POLL_MILLISECONDS = 4000;
+const SYNC_REQUEST_MARKER = '[CRAWLER_SYNC]';
 
 const colors = {
   reset: '\x1b[0m',
@@ -293,6 +295,94 @@ async function printStatus(supabase) {
 }
 
 let running = false;
+let checkingSyncRequests = false;
+
+function parseSyncRequest(row) {
+  try {
+    return { id: row.id, ...JSON.parse(row.synced_by_id) };
+  } catch {
+    return null;
+  }
+}
+
+async function updateSyncRequest(supabase, request, values) {
+  const next = { ...request, ...values };
+  delete next.id;
+  const { error } = await supabase
+    .from('sync_status')
+    .update({ synced_by_id: JSON.stringify(next) })
+    .eq('id', request.id);
+  if (error) throw error;
+  Object.assign(request, values);
+}
+
+async function processNextSyncRequest(supabase, options) {
+  if (running || checkingSyncRequests) return;
+  checkingSyncRequests = true;
+
+  try {
+    const { data: rows, error: findError } = await supabase
+      .from('sync_status')
+      .select('id,synced_by_id,synced_at')
+      .eq('synced_by_name', SYNC_REQUEST_MARKER)
+      .order('synced_at', { ascending: false })
+      .limit(100);
+
+    if (findError) {
+      say(`홈페이지 동기화 요청 확인 실패: ${findError.message}`, 'yellow');
+      return;
+    }
+
+    const pending = (rows || [])
+      .map(parseSyncRequest)
+      .filter(Boolean)
+      .reverse()
+      .find((request) => request.target === 'waterpark' && request.status === 'queued');
+    if (!pending || running) return;
+
+    await updateSyncRequest(supabase, pending, {
+      status: 'running',
+      progress: 10,
+      message: '전용 수집 PC가 요청을 확인했습니다.',
+      startedAt: new Date().toISOString(),
+      error: null,
+    });
+
+    running = true;
+    say(`\n홈페이지 요청 수집 시작 (${pending.id})`, 'cyan');
+    try {
+      await updateSyncRequest(supabase, pending, {
+        progress: 20,
+        message: `최근 ${options.days}일 워터파크 매출을 수집하고 있습니다.`,
+      });
+      const stats = await collectDates(supabase, getRecentKstDates(options.days), `홈페이지 요청 · 최근 ${options.days}일`);
+      if (stats.failed > 0 && stats.success === 0) {
+        throw new Error('워터파크 매출 수집에 실패했습니다.');
+      }
+      await updateSyncRequest(supabase, pending, {
+        status: 'completed',
+        progress: 100,
+        message: '최신 매출 동기화가 완료되었습니다.',
+        finishedAt: new Date().toISOString(),
+        error: null,
+      });
+      say('홈페이지 요청 수집 완료', 'green');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      say(`홈페이지 요청 수집 실패: ${message}`, 'red');
+      await updateSyncRequest(supabase, pending, {
+        status: 'failed',
+        message: '동기화 중 오류가 발생했습니다.',
+        error: message.slice(0, 500),
+        finishedAt: new Date().toISOString(),
+      });
+    } finally {
+      running = false;
+    }
+  } finally {
+    checkingSyncRequests = false;
+  }
+}
 
 async function runOnce(supabase, options) {
   if (running) {
@@ -332,9 +422,15 @@ async function main() {
   }
 
   say(`상시 실행: 시작 즉시 1회 수집 후 ${options.interval}분마다 최근 ${options.days}일을 다시 확인합니다.`, 'green');
+  say('홈페이지의 "최신 매출 동기화" 요청을 4초마다 확인합니다.', 'green');
   say('창을 닫으면 자동 수집이 멈춥니다. 전용 컴퓨터에서는 이 창을 계속 켜두세요.\n', 'yellow');
 
+  setInterval(() => {
+    processNextSyncRequest(supabase, options).catch((error) => say(`홈페이지 요청 처리 오류: ${error.message}`, 'red'));
+  }, SYNC_REQUEST_POLL_MILLISECONDS);
+
   await runOnce(supabase, options);
+  await processNextSyncRequest(supabase, options);
   setInterval(() => {
     runOnce(supabase, options).catch((error) => say(`예약 수집 오류: ${error.message}`, 'red'));
   }, options.interval * 60 * 1000);

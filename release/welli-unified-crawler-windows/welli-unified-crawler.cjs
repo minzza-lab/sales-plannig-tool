@@ -12,6 +12,8 @@ const ADMIN_BASE_URL = 'https://wadm.wellihillipark.com';
 
 const DEFAULT_RECENT_DAYS = 10;
 const DEFAULT_INTERVAL_MINUTES = 15;
+const SYNC_REQUEST_POLL_MILLISECONDS = 4000;
+const SYNC_REQUEST_MARKER = '[CRAWLER_SYNC]';
 
 const colors = {
   reset: '\x1b[0m',
@@ -692,6 +694,32 @@ async function runAdminCrawlers(supabase, adminId, adminPw, options) {
   }
 }
 
+async function runSeasonPassCrawler(supabase, adminId, adminPw) {
+  say('\n[원격 요청] 시즌권 주문 수집 시작', 'blue');
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    defaultViewport: { width: 1440, height: 1000 },
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  const page = await browser.newPage();
+  const client = await page.target().createCDPSession();
+  await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath });
+  page.on('dialog', async (dialog) => {
+    try {
+      await dialog.dismiss();
+    } catch (error) {
+      say(`알림창 처리 실패: ${error.message}`, 'yellow');
+    }
+  });
+
+  try {
+    await loginAdmin(page, adminId, adminPw);
+    return await scrapeSeasonPass(page, supabase);
+  } finally {
+    await browser.close();
+  }
+}
+
 async function tableStatus(supabase, table, columns, orderColumn) {
   const { count, error: countError } = await supabase.from(table).select('*', { count: 'exact', head: true });
   if (countError) return { table, count: null, latest: null, error: countError.message };
@@ -727,6 +755,108 @@ async function printStatus(supabase) {
 }
 
 let running = false;
+let checkingSyncRequests = false;
+
+function parseSyncRequest(row) {
+  try {
+    return { id: row.id, ...JSON.parse(row.synced_by_id) };
+  } catch (error) {
+    return null;
+  }
+}
+
+async function updateSyncRequest(supabase, request, values) {
+  const next = { ...request, ...values };
+  delete next.id;
+  const { error } = await supabase
+    .from('sync_status')
+    .update({ synced_by_id: JSON.stringify(next) })
+    .eq('id', request.id);
+  if (error) throw error;
+  Object.assign(request, values);
+}
+
+async function processNextSyncRequest(context, options) {
+  if (running || checkingSyncRequests) return;
+  checkingSyncRequests = true;
+
+  try {
+    const { data: rows, error: findError } = await context.supabase
+      .from('sync_status')
+      .select('id,synced_by_id,synced_at')
+      .eq('synced_by_name', SYNC_REQUEST_MARKER)
+      .order('synced_at', { ascending: false })
+      .limit(100);
+
+    if (findError) {
+      say(`원격 동기화 요청 확인 실패: ${findError.message}`, 'yellow');
+      return;
+    }
+    const pending = (rows || []).map(parseSyncRequest).filter(Boolean).reverse().find((request) => request.status === 'queued');
+    if (!pending || running) return;
+
+    await updateSyncRequest(context.supabase, pending, {
+      status: 'running',
+      progress: 5,
+      message: '전용 수집 PC가 요청을 확인했습니다.',
+      startedAt: new Date().toISOString(),
+      error: null,
+    });
+
+    running = true;
+    say(`\n원격 동기화 요청 시작: ${pending.target} (${pending.id})`, 'cyan');
+
+    try {
+      if (pending.target === 'waterpark') {
+        await updateSyncRequest(context.supabase, pending, {
+          progress: 20,
+          message: `최근 ${options.days}일 워터파크 매출을 수집하고 있습니다.`,
+        });
+        const stats = await collectWaterparkDates(
+          context.supabase,
+          getRecentKstDates(options.days),
+          `원격 요청 · 최근 ${options.days}일`,
+        );
+        if (stats.failed > 0 && stats.success === 0) throw new Error('워터파크 매출 수집에 실패했습니다.');
+      } else if (pending.target === 'season-pass') {
+        await updateSyncRequest(context.supabase, pending, {
+          progress: 20,
+          message: '관리자 시스템에 접속해 최신 시즌권 주문을 수집하고 있습니다.',
+        });
+        const stats = await runSeasonPassCrawler(context.supabase, context.adminId, context.adminPw);
+        if (stats.failed > 0 && stats.success === 0) throw new Error('시즌권 주문 수집에 실패했습니다.');
+      } else {
+        throw new Error(`지원하지 않는 동기화 대상: ${pending.target}`);
+      }
+
+      await updateSyncRequest(context.supabase, pending, {
+        status: 'completed',
+        progress: 100,
+        message: '최신 데이터 동기화가 완료되었습니다.',
+        finishedAt: new Date().toISOString(),
+        error: null,
+      });
+      say(`원격 동기화 요청 완료: ${pending.target}`, 'green');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      say(`원격 동기화 요청 실패: ${message}`, 'red');
+      try {
+        await updateSyncRequest(context.supabase, pending, {
+          status: 'failed',
+          message: '동기화 중 오류가 발생했습니다.',
+          error: message.slice(0, 500),
+          finishedAt: new Date().toISOString(),
+        });
+      } catch (updateError) {
+        say(`요청 실패 상태 저장 오류: ${updateError.message}`, 'red');
+      }
+    } finally {
+      running = false;
+    }
+  } finally {
+    checkingSyncRequests = false;
+  }
+}
 
 async function runOnce(context, options) {
   if (running) {
@@ -781,9 +911,15 @@ async function main() {
   }
 
   say(`상시 실행: 시작 즉시 1회 수집 후 ${options.interval}분마다 최근 ${options.days}일과 관리자 데이터를 다시 확인합니다.`, 'green');
+  say('웹 대시보드의 동기화 요청을 4초마다 확인합니다.', 'green');
   say('창을 닫으면 자동 수집이 멈춥니다. 전용 컴퓨터에서는 이 창을 계속 켜두세요.\n', 'yellow');
 
+  setInterval(() => {
+    processNextSyncRequest(context, options).catch((error) => say(`원격 요청 처리 오류: ${error.message}`, 'red'));
+  }, SYNC_REQUEST_POLL_MILLISECONDS);
+
   await runOnce(context, options);
+  await processNextSyncRequest(context, options);
   setInterval(() => {
     runOnce(context, options).catch((error) => say(`예약 수집 오류: ${error.message}`, 'red'));
   }, options.interval * 60 * 1000);
