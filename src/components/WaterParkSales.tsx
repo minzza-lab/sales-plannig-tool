@@ -1022,9 +1022,21 @@ const WaterParkSales: React.FC = () => {
                         </div>
 
                         {snapshot.hasData ? (
-                          <div className="monthly-day-sales">
-                            <span><small>입장객</small><b>{snapshot.admission.quantity.toLocaleString()}명</b></span>
-                            <span><small>총매출</small><b title={formatCurrency(snapshot.totalAmount)}>{compactWon(snapshot.totalAmount)}원</b></span>
+                          <div className="monthly-sales-compare">
+                            <div className="current">
+                              <small>올해</small>
+                              <span><em>입장</em><b>{snapshot.admission.quantity.toLocaleString()}명</b></span>
+                              <span><em>매출</em><b title={formatCurrency(snapshot.totalAmount)}>{compactWon(snapshot.totalAmount)}원</b></span>
+                            </div>
+                            <div className="previous">
+                              <small>전년</small>
+                              {previousSnapshot.hasData ? (
+                                <>
+                                  <span><em>입장</em><b>{previousSnapshot.admission.quantity.toLocaleString()}명</b></span>
+                                  <span><em>매출</em><b title={formatCurrency(previousSnapshot.totalAmount)}>{compactWon(previousSnapshot.totalAmount)}원</b></span>
+                                </>
+                              ) : <span className="no-compare">비교 데이터 없음</span>}
+                            </div>
                           </div>
                         ) : (
                           <div className="monthly-day-empty">수집 전</div>
@@ -1056,35 +1068,135 @@ const WaterParkSales: React.FC = () => {
 
     const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
     const holidayName = KOREAN_HOLIDAYS[dateStr];
+    const currentSnapshot = getDaySalesSnapshot(dayReports);
+    const previousReports = reports.filter(r => r.report_date === prevYearStr);
+    const previousSnapshot = getDaySalesSnapshot(previousReports);
+    const currentUnitPrice = currentSnapshot.admission.quantity > 0
+      ? Math.round(currentSnapshot.totalAmount / currentSnapshot.admission.quantity)
+      : 0;
+    const previousUnitPrice = previousSnapshot.admission.quantity > 0
+      ? Math.round(previousSnapshot.totalAmount / previousSnapshot.admission.quantity)
+      : 0;
+    const detailGrowth = (currentValue: number, previousValue: number) => previousValue > 0
+      ? ((currentValue - previousValue) / previousValue) * 100
+      : null;
+    const detailMetrics = [
+      {
+        key: 'guests', label: '입장객 (발권 기준)', code: 'GUEST',
+        current: `${currentSnapshot.admission.quantity.toLocaleString()}명`,
+        previous: `${previousSnapshot.admission.quantity.toLocaleString()}명`,
+        currentValue: currentSnapshot.admission.quantity,
+        previousValue: previousSnapshot.admission.quantity,
+        sub: formatCurrency(currentSnapshot.admission.amount),
+      },
+      {
+        key: 'admission', label: '입장 매출', code: 'TICKET SALES',
+        current: formatCurrency(currentSnapshot.admission.amount),
+        previous: formatCurrency(previousSnapshot.admission.amount),
+        currentValue: currentSnapshot.admission.amount,
+        previousValue: previousSnapshot.admission.amount,
+        sub: `${currentSnapshot.admission.quantity.toLocaleString()}명`,
+      },
+      {
+        key: 'food', label: '식음', code: 'F&B',
+        current: formatCurrency(currentSnapshot.food.amount),
+        previous: formatCurrency(previousSnapshot.food.amount),
+        currentValue: currentSnapshot.food.amount,
+        previousValue: previousSnapshot.food.amount,
+        sub: `${currentSnapshot.food.quantity.toLocaleString()}건`,
+      },
+      {
+        key: 'rental', label: '물품대여', code: 'RENTAL',
+        current: formatCurrency(currentSnapshot.rental.amount),
+        previous: formatCurrency(previousSnapshot.rental.amount),
+        currentValue: currentSnapshot.rental.amount,
+        previousValue: previousSnapshot.rental.amount,
+        sub: `${currentSnapshot.rental.quantity.toLocaleString()}건`,
+      },
+      {
+        key: 'unit', label: '입장객 1인당 매출', code: 'PER CAPITA',
+        current: formatCurrency(currentUnitPrice),
+        previous: formatCurrency(previousUnitPrice),
+        currentValue: currentUnitPrice,
+        previousValue: previousUnitPrice,
+        sub: '총매출 ÷ 입장객',
+      },
+    ];
 
     return (
       <div className="detail-container animate-fade-in">
-        <div className="detail-header">
-          <button className="back-btn" onClick={() => { setSelectedDate(null); }}><ArrowLeft /> 7일 보드로 돌아가기</button>
-          <h2>
-            {format(selectedDate, 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })} 영업 보고서
-            {isHoliday && <span className="detail-holiday">🎈 {holidayName}</span>}
-          </h2>
-          
-          <div className="weather-compare-box">
-            {wInfo && (
-              <div className="detail-weather current-year">
-                <span className="w-label">당해:</span>
-                {getWeatherIcon(wInfo.code, 20)}
-                <span>{wInfo.temp}°C</span>
-                {wInfo.rain > 0 && <span className="rain-info">({wInfo.rain}mm)</span>}
-              </div>
-            )}
-            {prevWInfo && (
-              <div className="detail-weather prev-year">
-                <span className="w-label">전년동기({format(subMonths(selectedDate, 12), 'yyyy')}):</span>
-                {getWeatherIcon(prevWInfo.code, 20)}
-                <span>{prevWInfo.temp}°C</span>
-                {prevWInfo.rain > 0 && <span className="rain-info">({prevWInfo.rain}mm)</span>}
-              </div>
-            )}
+        <div className="api-detail-header">
+          <button className="back-btn" onClick={() => { setSelectedDate(null); }}><ArrowLeft /> 매출 달력으로 돌아가기</button>
+          <div className="api-detail-title-row">
+            <div>
+              <span>API DAILY SALES REPORT</span>
+              <h2>{format(selectedDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })}</h2>
+              <p>서버에서 수집된 매출 데이터를 입장객·식음·물품대여로 분류한 결과입니다.</p>
+            </div>
+            <div className="api-source-badges">
+              <span className={currentSnapshot.hasBreakdown ? 'live' : 'legacy'}>{currentSnapshot.hasBreakdown ? 'API 분류 완료' : '통합 데이터'}</span>
+              {isHoliday && <span className="holiday">{holidayName}</span>}
+            </div>
           </div>
         </div>
+
+        {currentSnapshot.hasData && (
+          <section className="api-detail-board">
+            <div className="api-detail-overview">
+              <div className="api-total-card">
+                <span>당일 총매출</span>
+                <strong>{formatCurrency(currentSnapshot.totalAmount)}</strong>
+                {(() => {
+                  const growth = detailGrowth(currentSnapshot.totalAmount, previousSnapshot.totalAmount);
+                  return <em className={growth !== null && growth >= 0 ? 'up' : 'down'}>전년 대비 {growth === null ? '비교 없음' : `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)}%`}</em>;
+                })()}
+              </div>
+              <div className="api-weather-compare">
+                <span>날씨 비교</span>
+                <div className="current">
+                  <small>올해</small>
+                  {wInfo ? getWeatherIcon(manualWeathers[dateStr] ?? wInfo.code, 18) : <i>—</i>}
+                  <b>{wInfo ? `${Math.round(wInfo.temp)}°` : '-'}</b>
+                  <em>{wInfo ? getWeatherLabel(manualWeathers[dateStr] ?? wInfo.code) : '정보 없음'}</em>
+                </div>
+                <div className="previous">
+                  <small>전년</small>
+                  {prevWInfo ? getWeatherIcon(manualWeathers[prevYearStr] ?? prevWInfo.code, 18) : <i>—</i>}
+                  <b>{prevWInfo ? `${Math.round(prevWInfo.temp)}°` : '-'}</b>
+                  <em>{prevWInfo ? getWeatherLabel(manualWeathers[prevYearStr] ?? prevWInfo.code) : '정보 없음'}</em>
+                </div>
+              </div>
+            </div>
+
+            <div className="api-detail-metrics">
+              {detailMetrics.map((metric) => {
+                const growth = detailGrowth(metric.currentValue, metric.previousValue);
+                return (
+                  <article className={`api-metric-card ${metric.key}`} key={metric.key}>
+                    <div className="api-metric-heading">
+                      <div><small>{metric.code}</small><span>{metric.label}</span></div>
+                      <em className={growth !== null && growth >= 0 ? 'up' : 'down'}>
+                        {growth === null ? '비교 없음' : `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)}%`}
+                      </em>
+                    </div>
+                    <div className="api-metric-current">
+                      <small>올해</small>
+                      <AutoFitText as="div" min={15} max={23}>{metric.current}</AutoFitText>
+                      <span>{metric.sub}</span>
+                    </div>
+                    <div className="api-metric-previous">
+                      <span>전년 동일일</span>
+                      <b>{previousSnapshot.hasData ? metric.previous : '데이터 없음'}</b>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {!currentSnapshot.hasBreakdown && (
+              <p className="api-breakdown-note">이 날짜는 과거 통합 형식으로 저장되어 식음·물품대여 분류가 제공되지 않습니다.</p>
+            )}
+          </section>
+        )}
 
         {combinedReports.length === 0 && (
            <div className="empty-state" style={{ padding: '64px 0', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', color: '#64748b', border: '1px dashed #cbd5e1' }}>
@@ -1243,7 +1355,10 @@ const WaterParkSales: React.FC = () => {
             })()}
             {/* --- 통합 요약 대시보드 끝 --- */}
 
-            <h3 style={{ marginBottom: '16px', color: '#1e293b', fontSize: '18px', fontWeight: 800 }}>🔍 개별 리포트 상세보기</h3>
+            <div className="api-raw-section-heading">
+              <div><span>API SOURCE DETAIL</span><h3>수집 원본 품목 분석</h3></div>
+              <p>리포트 유형을 선택하면 품목별 매출과 수량을 확인할 수 있습니다.</p>
+            </div>
             <div className="tabs">
               {combinedReports.map(report => (
                 <button 
