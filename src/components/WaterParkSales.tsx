@@ -9,7 +9,10 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, Thermometer
 } from 'lucide-react';
-import { format, subMonths, isSameDay, addDays, startOfWeek } from 'date-fns';
+import {
+  format, subMonths, isSameDay, addDays, startOfWeek,
+  startOfMonth, endOfMonth, endOfWeek, isSameMonth, addMonths,
+} from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './WaterParkSales.css';
 import CrawlerSyncButton from './CrawlerSyncButton';
@@ -293,10 +296,9 @@ const WaterParkSales: React.FC = () => {
             newMap[dateStr] = { temp: dataNow.daily.temperature_2m_max[index], rain: dataNow.daily.precipitation_sum[index], code: dataNow.daily.weather_code[index] };
           });
         }
-        const currentWeekStart = startOfWeek(currentMonth, { weekStartsOn: 1 });
-        const prevYearDate = subMonths(currentWeekStart, 12);
-        const startStr = format(prevYearDate, 'yyyy-MM-dd');
-        const endStr = format(addDays(prevYearDate, 6), 'yyyy-MM-dd');
+        const previousMonth = subMonths(currentMonth, 12);
+        const startStr = format(startOfMonth(previousMonth), 'yyyy-MM-dd');
+        const endStr = format(endOfMonth(previousMonth), 'yyyy-MM-dd');
         const resPrev = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${LAT}&longitude=${LNG}&start_date=${startStr}&end_date=${endStr}&daily=weather_code,temperature_2m_max,precipitation_sum&timezone=Asia%2FSeoul`);
         const dataPrev = await resPrev.json();
         if (dataPrev.daily) {
@@ -505,6 +507,20 @@ const WaterParkSales: React.FC = () => {
     const totalGrowth = previousWeekTotals.totalAmount > 0
       ? ((weekTotals.totalAmount - previousWeekTotals.totalAmount) / previousWeekTotals.totalAmount) * 100
       : null;
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const monthGridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const monthGridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    const monthGridDates = Array.from(
+      { length: Math.round((monthGridEnd.getTime() - monthGridStart.getTime()) / 86_400_000) + 1 },
+      (_, index) => addDays(monthGridStart, index),
+    );
+    const monthSnapshots = monthGridDates
+      .filter((date) => isSameMonth(date, currentMonth))
+      .map((date) => getDaySalesSnapshot(
+        reports.filter((report) => report.report_date === format(date, 'yyyy-MM-dd')),
+      ));
+    const monthTotals = aggregateSnapshots(monthSnapshots);
 
     const renderPeriodComparison = ({
       kicker,
@@ -920,6 +936,108 @@ const WaterParkSales: React.FC = () => {
             {rows}
           </div>
         </div>
+
+        <details className="monthly-calendar-accordion">
+          <summary>
+            <div className="monthly-accordion-title">
+              <span>MONTHLY VIEW</span>
+              <strong>{format(currentMonth, 'yyyy년 M월')} 전체 달력 보기</strong>
+              <small>월요일 시작 · {format(monthStart, 'M월 d일')}부터 {format(monthEnd, 'M월 d일')}까지</small>
+            </div>
+            <div className="monthly-accordion-kpis">
+              <span><b>{monthTotals.admission.quantity.toLocaleString()}명</b> 입장객</span>
+              <span><b>{compactWon(monthTotals.totalAmount)}원</b> 총매출</span>
+            </div>
+            <span className="monthly-accordion-chevron"><ChevronRight size={20} /></span>
+          </summary>
+
+          <div className="monthly-calendar-panel">
+            <div className="monthly-calendar-toolbar">
+              <div>
+                <span>30-DAY BUSINESS FLOW</span>
+                <h3>{format(currentMonth, 'yyyy년 M월')} 일별 영업 흐름</h3>
+              </div>
+              <div className="monthly-calendar-actions">
+                <button onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} aria-label="이전 달"><ChevronLeft size={16} /> 이전 달</button>
+                <button onClick={() => setCurrentMonth(new Date())}>이번 달</button>
+                <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} aria-label="다음 달">다음 달 <ChevronRight size={16} /></button>
+              </div>
+            </div>
+
+            <div className="monthly-calendar-weekdays">
+              {['월', '화', '수', '목', '금', '토', '일'].map((weekday) => <span key={weekday}>{weekday}</span>)}
+            </div>
+            <div className="monthly-calendar-grid">
+              {monthGridDates.map((date) => {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const previousDate = subMonths(date, 12);
+                const previousDateStr = format(previousDate, 'yyyy-MM-dd');
+                const inMonth = isSameMonth(date, currentMonth);
+                const snapshot = getDaySalesSnapshot(reports.filter((report) => report.report_date === dateStr));
+                const previousSnapshot = getDaySalesSnapshot(reports.filter((report) => report.report_date === previousDateStr));
+                const weather = weatherMap[dateStr];
+                const previousWeather = weatherMap[previousDateStr];
+                const weatherCode = weather ? (manualWeathers[dateStr] ?? weather.code) : null;
+                const previousWeatherCode = previousWeather ? (manualWeathers[previousDateStr] ?? previousWeather.code) : null;
+                const growth = previousSnapshot.totalAmount > 0
+                  ? ((snapshot.totalAmount - previousSnapshot.totalAmount) / previousSnapshot.totalAmount) * 100
+                  : null;
+                const isHoliday = Boolean(KOREAN_HOLIDAYS[dateStr]);
+                const isSunday = date.getDay() === 0;
+                const isSaturday = date.getDay() === 6;
+
+                return (
+                  <button
+                    type="button"
+                    key={dateStr}
+                    disabled={!inMonth}
+                    className={`monthly-day-card ${!inMonth ? 'outside' : ''} ${isSameDay(date, new Date()) ? 'today' : ''}`}
+                    onClick={() => inMonth && setSelectedDate(date)}
+                  >
+                    {inMonth && (
+                      <>
+                        <div className="monthly-day-head">
+                          <span className={`${isHoliday || isSunday ? 'red-day' : ''} ${isSaturday && !isHoliday ? 'blue-day' : ''}`}>
+                            {format(date, 'd')}
+                          </span>
+                          {isHoliday && <em title={KOREAN_HOLIDAYS[dateStr]}>공휴일</em>}
+                          {growth !== null && (
+                            <b className={growth >= 0 ? 'up' : 'down'}>{growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(0)}%</b>
+                          )}
+                        </div>
+
+                        <div className="monthly-weather-lines">
+                          <span className="current">
+                            <small>올해</small>
+                            {weatherCode !== null ? getWeatherIcon(weatherCode, 12) : <i>—</i>}
+                            <b>{weather ? `${Math.round(weather.temp)}°` : '-'}</b>
+                            <em>{weatherCode !== null ? getWeatherLabel(weatherCode) : '날씨 없음'}</em>
+                          </span>
+                          <span className="previous">
+                            <small>전년</small>
+                            {previousWeatherCode !== null ? getWeatherIcon(previousWeatherCode, 12) : <i>—</i>}
+                            <b>{previousWeather ? `${Math.round(previousWeather.temp)}°` : '-'}</b>
+                            <em>{previousWeatherCode !== null ? getWeatherLabel(previousWeatherCode) : '날씨 없음'}</em>
+                          </span>
+                        </div>
+
+                        {snapshot.hasData ? (
+                          <div className="monthly-day-sales">
+                            <span><small>입장객</small><b>{snapshot.admission.quantity.toLocaleString()}명</b></span>
+                            <span><small>총매출</small><b title={formatCurrency(snapshot.totalAmount)}>{compactWon(snapshot.totalAmount)}원</b></span>
+                          </div>
+                        ) : (
+                          <div className="monthly-day-empty">수집 전</div>
+                        )}
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="monthly-calendar-note">날짜를 누르면 해당 일자의 상세 영업 보고서가 열립니다. 입장객은 발권 수량 기준입니다.</p>
+          </div>
+        </details>
       </div>
     );
   };
