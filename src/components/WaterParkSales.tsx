@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, Thermometer
 } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
+import { format, subMonths, isSameDay, addDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './WaterParkSales.css';
 import CrawlerSyncButton from './CrawlerSyncButton';
@@ -41,6 +41,64 @@ interface ParsedReport {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 const LAT = 37.486;
 const LNG = 128.223;
+const FOOD_CATEGORIES = new Set(['푸드게이트', '나로', '아폴로', '트레일러1', '트레일러2', '트레일러3']);
+
+type SalesMetric = { quantity: number; amount: number };
+type DaySalesSnapshot = {
+  hasData: boolean;
+  hasBreakdown: boolean;
+  totalAmount: number;
+  admission: SalesMetric;
+  food: SalesMetric;
+  rental: SalesMetric;
+};
+
+const normalizeSalesCategory = (value: unknown) => String(value || '').replace(/\s/g, '');
+const isAdmissionTicketItem = (item: any) => (
+  ['매표소', '입장권'].includes(normalizeSalesCategory(item.category))
+  || ['매표소', '입장권'].includes(normalizeSalesCategory(item.name))
+) && !String(item.name || '').includes('추가요금');
+
+const summarizeRows = (rows: any[], predicate: (row: any) => boolean): SalesMetric => rows
+  .filter(predicate)
+  .reduce((total, row) => ({
+    quantity: total.quantity + (Number(row.quantity) || 0),
+    amount: total.amount + (Number(row.amount) || 0),
+  }), { quantity: 0, amount: 0 });
+
+const getDaySalesSnapshot = (dayReports: ParsedReport[]): DaySalesSnapshot => {
+  const realtime = dayReports.find((report) => report.type === 'REALTIME_SALES');
+  if (realtime) {
+    return {
+      hasData: true,
+      hasBreakdown: true,
+      totalAmount: Number(realtime.summary.totalAmount) || 0,
+      admission: summarizeRows(realtime.tableData, isAdmissionTicketItem),
+      food: summarizeRows(realtime.tableData, (row) => FOOD_CATEGORIES.has(normalizeSalesCategory(row.category))),
+      rental: summarizeRows(realtime.tableData, (row) => normalizeSalesCategory(row.category) === '물품대여'),
+    };
+  }
+
+  const admission = dayReports.find((report) => report.type === 'CUSTOMER_TYPE');
+  const product = dayReports.find((report) => report.type === 'HOURLY_SALES');
+  return {
+    hasData: Boolean(admission || product),
+    hasBreakdown: false,
+    totalAmount: (Number(admission?.summary.totalAmount) || 0) + (Number(product?.summary.totalAmount) || 0),
+    admission: {
+      quantity: Number(admission?.summary.totalQty) || 0,
+      amount: Number(admission?.summary.totalAmount) || 0,
+    },
+    food: { quantity: 0, amount: 0 },
+    rental: { quantity: 0, amount: 0 },
+  };
+};
+
+const compactWon = (amount: number) => {
+  if (Math.abs(amount) >= 100_000_000) return `${(amount / 100_000_000).toFixed(2)}억`;
+  if (Math.abs(amount) >= 10_000) return `${Math.round(amount / 10_000).toLocaleString()}만`;
+  return amount.toLocaleString();
+};
 
 const KOREAN_HOLIDAYS: Record<string, string> = {
   // 2025년
@@ -143,7 +201,7 @@ const WaterParkSales: React.FC = () => {
   const [reports, setReports] = useState<ParsedReport[]>([]);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1);
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
   });
   const [summaryViewMode, setSummaryViewMode] = useState<'ADMISSION' | 'TOTAL'>('ADMISSION');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -152,7 +210,6 @@ const WaterParkSales: React.FC = () => {
   const [detailSearchTerm, setDetailSearchTerm] = useState('');
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
   const [manualWeathers, setManualWeathers] = useState<Record<string, number>>({});
-  const [calendarViewMode, setCalendarViewMode] = useState<'ADMISSION' | 'PRODUCT' | 'TOTAL'>('ADMISSION');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -237,8 +294,8 @@ const WaterParkSales: React.FC = () => {
           });
         }
         const prevYearDate = subMonths(currentMonth, 12);
-        const startStr = format(startOfMonth(prevYearDate), 'yyyy-MM-dd');
-        const endStr = format(endOfMonth(prevYearDate), 'yyyy-MM-dd');
+        const startStr = format(addDays(prevYearDate, -6), 'yyyy-MM-dd');
+        const endStr = format(prevYearDate, 'yyyy-MM-dd');
         const resPrev = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${LAT}&longitude=${LNG}&start_date=${startStr}&end_date=${endStr}&daily=weather_code,temperature_2m_max,precipitation_sum&timezone=Asia%2FSeoul`);
         const dataPrev = await resPrev.json();
         if (dataPrev.daily) {
@@ -294,7 +351,7 @@ const WaterParkSales: React.FC = () => {
           amt = r.summary.totalAmount;
           ppl = r.summary.totalQty;
         } else if (r.type === 'REALTIME_SALES') {
-          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketItems = r.tableData.filter(isAdmissionTicketItem);
           amt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
           ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
         } else {
@@ -310,7 +367,7 @@ const WaterParkSales: React.FC = () => {
           ppl = 0; // 상품 개수는 인원수 집계에서 배제
         } else if (r.type === 'REALTIME_SALES') {
           amt = r.summary.totalAmount;
-          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketItems = r.tableData.filter(isAdmissionTicketItem);
           ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
         } else {
           return;
@@ -364,7 +421,7 @@ const WaterParkSales: React.FC = () => {
           amt = r.summary.totalAmount;
           ppl = r.summary.totalQty;
         } else if (r.type === 'REALTIME_SALES') {
-          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketItems = r.tableData.filter(isAdmissionTicketItem);
           amt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
           ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
         } else {
@@ -380,7 +437,7 @@ const WaterParkSales: React.FC = () => {
           ppl = 0;
         } else if (r.type === 'REALTIME_SALES') {
           amt = r.summary.totalAmount;
-          const ticketItems = r.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+          const ticketItems = r.tableData.filter(isAdmissionTicketItem);
           ppl = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
         } else {
           return;
@@ -400,10 +457,40 @@ const WaterParkSales: React.FC = () => {
   };
 
   const renderCalendar = () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart);
-    const endDate = endOfWeek(monthEnd);
+    const endDate = currentMonth;
+    const startDate = addDays(endDate, -6);
+    const visibleDates = Array.from({ length: 7 }, (_, index) => addDays(startDate, index));
+    const currentWeekSnapshots = visibleDates.map((date) => getDaySalesSnapshot(
+      reports.filter((report) => report.report_date === format(date, 'yyyy-MM-dd')),
+    ));
+    const previousWeekSnapshots = visibleDates.map((date) => getDaySalesSnapshot(
+      reports.filter((report) => report.report_date === format(subMonths(date, 12), 'yyyy-MM-dd')),
+    ));
+    const aggregateSnapshots = (snapshots: DaySalesSnapshot[]) => snapshots.reduce((total, snapshot) => ({
+      totalAmount: total.totalAmount + snapshot.totalAmount,
+      admission: {
+        quantity: total.admission.quantity + snapshot.admission.quantity,
+        amount: total.admission.amount + snapshot.admission.amount,
+      },
+      food: {
+        quantity: total.food.quantity + snapshot.food.quantity,
+        amount: total.food.amount + snapshot.food.amount,
+      },
+      rental: {
+        quantity: total.rental.quantity + snapshot.rental.quantity,
+        amount: total.rental.amount + snapshot.rental.amount,
+      },
+    }), {
+      totalAmount: 0,
+      admission: { quantity: 0, amount: 0 },
+      food: { quantity: 0, amount: 0 },
+      rental: { quantity: 0, amount: 0 },
+    });
+    const weekTotals = aggregateSnapshots(currentWeekSnapshots);
+    const previousWeekTotals = aggregateSnapshots(previousWeekSnapshots);
+    const totalGrowth = previousWeekTotals.totalAmount > 0
+      ? ((weekTotals.totalAmount - previousWeekTotals.totalAmount) / previousWeekTotals.totalAmount) * 100
+      : null;
 
     const rows = [];
     let days = [];
@@ -414,98 +501,13 @@ const WaterParkSales: React.FC = () => {
         const cloneDay = day;
         const dateStr = format(day, 'yyyy-MM-dd');
         const dayReports = reports.filter(r => r.report_date === dateStr);
-        const admissionReport = dayReports.find(r => r.type === 'CUSTOMER_TYPE');
-        const productReport = dayReports.find(r => r.type === 'HOURLY_SALES');
-        const realtimeReport = dayReports.find(r => r.type === 'REALTIME_SALES');
         const wInfo = weatherMap[dateStr];
 
         const prevYearStr = format(subMonths(day, 12), 'yyyy-MM-dd');
         const prevDayReports = reports.filter(r => r.report_date === prevYearStr);
-        const prevAdmissionReport = prevDayReports.find(r => r.type === 'CUSTOMER_TYPE');
-        const prevProductReport = prevDayReports.find(r => r.type === 'HOURLY_SALES');
-        const prevRealtimeReport = prevDayReports.find(r => r.type === 'REALTIME_SALES');
         const prevWInfo = weatherMap[prevYearStr];
-
-        let currentDispAmt = 0;
-        let prevDispAmt = 0;
-        let currentDispQty = 0;
-        let prevDispQty = 0;
-
-        // 당해 데이터 연산
-        if (realtimeReport) {
-          const ticketItems = realtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
-          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-          const ticketQty = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
-          const productAmt = realtimeReport.summary.totalAmount - ticketAmt;
-
-          if (calendarViewMode === 'ADMISSION') {
-            currentDispAmt = ticketAmt;
-            currentDispQty = ticketQty;
-          } else if (calendarViewMode === 'PRODUCT') {
-            currentDispAmt = productAmt;
-            currentDispQty = 0;
-          } else {
-            currentDispAmt = realtimeReport.summary.totalAmount;
-            currentDispQty = ticketQty;
-          }
-        } else {
-          if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
-            currentDispAmt += admissionReport?.summary?.totalAmount || 0;
-            currentDispQty += admissionReport?.summary?.totalQty || 0;
-          }
-          if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
-            currentDispAmt += productReport?.summary?.totalAmount || 0;
-          }
-        }
-
-        // 전년 데이터 연산
-        if (prevRealtimeReport) {
-          const ticketItems = prevRealtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
-          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-          const ticketQty = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
-          const productAmt = prevRealtimeReport.summary.totalAmount - ticketAmt;
-
-          if (calendarViewMode === 'ADMISSION') {
-            prevDispAmt = ticketAmt;
-            prevDispQty = ticketQty;
-          } else if (calendarViewMode === 'PRODUCT') {
-            prevDispAmt = productAmt;
-            prevDispQty = 0;
-          } else {
-            prevDispAmt = prevRealtimeReport.summary.totalAmount;
-            prevDispQty = ticketQty;
-          }
-        } else {
-          if (calendarViewMode === 'ADMISSION' || calendarViewMode === 'TOTAL') {
-            prevDispAmt += prevAdmissionReport?.summary?.totalAmount || 0;
-            prevDispQty += prevAdmissionReport?.summary?.totalQty || 0;
-          }
-          if (calendarViewMode === 'PRODUCT' || calendarViewMode === 'TOTAL') {
-            prevDispAmt += prevProductReport?.summary?.totalAmount || 0;
-          }
-        }
-
-        const hasCurrentData = !!admissionReport || !!productReport || !!realtimeReport;
-        const hasPrevData = !!prevAdmissionReport || !!prevProductReport || !!prevRealtimeReport;
-        
-        let tooltipContent = '';
-        if (realtimeReport) {
-          const ticketItems = realtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
-          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-          const productAmt = realtimeReport.summary.totalAmount - ticketAmt;
-          tooltipContent += `[올해]\n입장: ${ticketAmt.toLocaleString()}원\n상품: ${productAmt.toLocaleString()}원`;
-        } else {
-          tooltipContent += `[올해]\n입장: ${(admissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(productReport?.summary?.totalAmount || 0).toLocaleString()}원`;
-        }
-
-        if (prevRealtimeReport) {
-          const ticketItems = prevRealtimeReport.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
-          const ticketAmt = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-          const productAmt = prevRealtimeReport.summary.totalAmount - ticketAmt;
-          tooltipContent += `\n\n[작년]\n입장: ${ticketAmt.toLocaleString()}원\n상품: ${productAmt.toLocaleString()}원`;
-        } else {
-          tooltipContent += `\n\n[작년]\n입장: ${(prevAdmissionReport?.summary?.totalAmount || 0).toLocaleString()}원\n상품: ${(prevProductReport?.summary?.totalAmount || 0).toLocaleString()}원`;
-        }
+        const currentSnapshot = getDaySalesSnapshot(dayReports);
+        const previousSnapshot = getDaySalesSnapshot(prevDayReports);
 
         const isHoliday = !!KOREAN_HOLIDAYS[dateStr];
         const holidayName = KOREAN_HOLIDAYS[dateStr];
@@ -515,13 +517,13 @@ const WaterParkSales: React.FC = () => {
 
         days.push(
           <div 
-            className={`cal-cell ${!isSameMonth(day, monthStart) ? 'disabled' : ''} ${selectedDate && isSameDay(day, selectedDate) ? 'selected' : ''}`} 
+            className={`cal-cell weekly-sales-card ${selectedDate && isSameDay(day, selectedDate) ? 'selected' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}
             key={day.toString()}
             onClick={() => setSelectedDate(cloneDay)}
           >
             <div className="cal-cell-header">
               <span className={`cal-date ${isRedDay ? 'red-day' : ''} ${isSaturday && !isHoliday ? 'blue-day' : ''}`}>
-                {format(day, "d")}
+                {format(day, "M/d")}
                 {isHoliday && <span className="holiday-badge">{holidayName}</span>}
               </span>
               <div className="cal-weathers" style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
@@ -580,42 +582,58 @@ const WaterParkSales: React.FC = () => {
               </div>
             </div>
 
-            {(hasCurrentData || hasPrevData) && (
-              <div className="cal-data-box" title={tooltipContent}>
-                {hasCurrentData ? (
-                  <div className="cal-data-row current">
-                    <span className="year-label">올해</span>
-                    <AutoFitText className="amt" min={9} max={13}>{(currentDispAmt / 10000).toFixed(0)}만</AutoFitText>
-                    <AutoFitText className="qty" min={8} max={11}>{calendarViewMode === 'PRODUCT' ? '-' : `${currentDispQty}명`}</AutoFitText>
+            {currentSnapshot.hasData ? (
+              <div className="weekly-card-content">
+                <div className="weekly-card-total">
+                  <span>일 매출 합계</span>
+                  <strong title={formatCurrency(currentSnapshot.totalAmount)}>{compactWon(currentSnapshot.totalAmount)}원</strong>
+                </div>
+                {currentSnapshot.hasBreakdown ? (
+                  <div className="weekly-category-list">
+                    {([
+                      { key: 'admission', code: 'TICKET', label: '입장권', metric: currentSnapshot.admission },
+                      { key: 'food', code: 'F&B', label: '식음', metric: currentSnapshot.food },
+                      { key: 'rental', code: 'RENTAL', label: '물품대여', metric: currentSnapshot.rental },
+                    ] as const).map((category) => (
+                      <div className={`weekly-category-row ${category.key}`} key={category.key}>
+                        <div><span>{category.code}</span><strong>{category.label}</strong></div>
+                        <b>{category.metric.quantity.toLocaleString()}건</b>
+                        <em title={formatCurrency(category.metric.amount)}>{compactWon(category.metric.amount)}원</em>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="cal-data-row current" style={{ opacity: 0.5 }}>
-                    <span className="year-label">올해</span>
-                    <AutoFitText className="amt" min={9} max={13}>-</AutoFitText>
-                    <AutoFitText className="qty" min={8} max={11}>-</AutoFitText>
+                  <div className="weekly-legacy-data">
+                    <span>과거 통합 데이터</span>
+                    <strong>입장 {currentSnapshot.admission.quantity.toLocaleString()}건</strong>
                   </div>
                 )}
-                
-                {hasPrevData ? (() => {
-                  const growthAmt = currentDispAmt - prevDispAmt;
-                  const pct = prevDispAmt > 0 ? (growthAmt / prevDispAmt * 100).toFixed(0) : 0;
+                {previousSnapshot.hasData ? (() => {
+                  const salesGrowth = previousSnapshot.totalAmount > 0
+                    ? ((currentSnapshot.totalAmount - previousSnapshot.totalAmount) / previousSnapshot.totalAmount) * 100
+                    : null;
+                  const admissionGrowth = previousSnapshot.admission.quantity > 0
+                    ? ((currentSnapshot.admission.quantity - previousSnapshot.admission.quantity) / previousSnapshot.admission.quantity) * 100
+                    : null;
                   return (
-                    <>
-                      <div className="cal-data-row prev">
-                        <span className="year-label">작년</span>
-                        <AutoFitText className="amt" min={9} max={13}>{(prevDispAmt / 10000).toFixed(0)}만</AutoFitText>
-                        <AutoFitText className="qty" min={8} max={11}>{calendarViewMode === 'PRODUCT' ? '-' : `${prevDispQty}명`}</AutoFitText>
-                      </div>
-                      {hasCurrentData && (
-                        <AutoFitText as="div" className={`cal-yoy-bar ${growthAmt >= 0 ? 'up' : 'down'}`} min={9} max={11}>
-                          {growthAmt >= 0 ? '▲' : '▼'} {Math.abs(Number(pct))}%
-                        </AutoFitText>
-                      )}
-                    </>
-                  )
+                    <div className="weekly-yoy-panel">
+                      <span>전년 대비</span>
+                      <b className={salesGrowth !== null && salesGrowth >= 0 ? 'up' : 'down'}>
+                        매출 {salesGrowth === null ? '-' : `${salesGrowth >= 0 ? '▲' : '▼'} ${Math.abs(salesGrowth).toFixed(1)}%`}
+                      </b>
+                      <b className={admissionGrowth !== null && admissionGrowth >= 0 ? 'up' : 'down'}>
+                        입장권 {admissionGrowth === null ? '-' : `${admissionGrowth >= 0 ? '▲' : '▼'} ${Math.abs(admissionGrowth).toFixed(1)}%`}
+                      </b>
+                    </div>
+                  );
                 })() : (
-                  <div className="cal-yoy-bar empty">전년 비교데이터 없음</div>
+                  <div className="weekly-yoy-panel empty">전년 비교 데이터 없음</div>
                 )}
+              </div>
+            ) : (
+              <div className="weekly-empty-card">
+                <span>NO DATA</span>
+                <p>수집된 매출이 없습니다.</p>
               </div>
             )}
             <div className="cal-dots">
@@ -825,23 +843,55 @@ const WaterParkSales: React.FC = () => {
           })()}
         </div>
 
-        <div className="cal-header-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
-          <div className="cal-header" style={{ marginBottom: 0 }}>
-            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}><ChevronLeft /></button>
-            <h2>{format(currentMonth, 'yyyy년 MM월')}</h2>
-            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}><ChevronRight /></button>
+        <div className="weekly-board-header">
+          <div className="weekly-board-title">
+            <span>ROLLING 7 DAYS</span>
+            <h2>{format(startDate, 'yyyy년 M월 d일')} — {format(endDate, 'M월 d일')}</h2>
+            <p>최근 7일의 입장권·식음·물품대여 실적과 전년 동기 증감을 비교합니다.</p>
           </div>
-          <div className="cal-view-toggle" style={{ display: 'flex', gap: '8px' }}>
-            <button className={`tab-button ${calendarViewMode === 'ADMISSION' ? 'active' : ''}`} onClick={() => setCalendarViewMode('ADMISSION')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>🎟️ 입장 매출</button>
-            <button className={`tab-button ${calendarViewMode === 'PRODUCT' ? 'active' : ''}`} onClick={() => setCalendarViewMode('PRODUCT')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>🍔 상품 매출</button>
-            <button className={`tab-button ${calendarViewMode === 'TOTAL' ? 'active' : ''}`} onClick={() => setCalendarViewMode('TOTAL')} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '20px' }}>💰 전체 합산</button>
+          <div className="weekly-board-actions">
+            <button onClick={() => setCurrentMonth(addDays(currentMonth, -7))} aria-label="이전 7일"><ChevronLeft size={18} /> 이전 7일</button>
+            <button className="today-button" onClick={() => setCurrentMonth(new Date())}><CalendarIcon size={16} /> 오늘 기준</button>
+            <button onClick={() => setCurrentMonth(addDays(currentMonth, 7))} aria-label="다음 7일">다음 7일 <ChevronRight size={18} /></button>
           </div>
         </div>
-        <div className="cal-grid">
-          <div className="cal-days-header">
-            {['일','월','화','수','목','금','토'].map(d => <div key={d}>{d}</div>)}
+
+        <div className="weekly-kpi-strip">
+          <div className="weekly-kpi-card total">
+            <span>7일 총매출</span>
+            <strong>{formatCurrency(weekTotals.totalAmount)}</strong>
+            <em className={totalGrowth !== null && totalGrowth >= 0 ? 'up' : 'down'}>
+              전년 대비 {totalGrowth === null ? '-' : `${totalGrowth >= 0 ? '▲' : '▼'} ${Math.abs(totalGrowth).toFixed(1)}%`}
+            </em>
           </div>
-          {rows}
+          <div className="weekly-kpi-card admission">
+            <span>입장권</span>
+            <strong>{weekTotals.admission.quantity.toLocaleString()}건</strong>
+            <em>{formatCurrency(weekTotals.admission.amount)}</em>
+          </div>
+          <div className="weekly-kpi-card food">
+            <span>식음</span>
+            <strong>{weekTotals.food.quantity.toLocaleString()}건</strong>
+            <em>{formatCurrency(weekTotals.food.amount)}</em>
+          </div>
+          <div className="weekly-kpi-card rental">
+            <span>물품대여</span>
+            <strong>{weekTotals.rental.quantity.toLocaleString()}건</strong>
+            <em>{formatCurrency(weekTotals.rental.amount)}</em>
+          </div>
+        </div>
+
+        <div className="weekly-board-scroll">
+          <div className="cal-grid weekly-board-grid">
+            <div className="cal-days-header">
+              {visibleDates.map((date) => (
+                <div key={date.toISOString()} className={date.getDay() === 0 ? 'red-day' : date.getDay() === 6 ? 'blue-day' : ''}>
+                  {format(date, 'EEE', { locale: ko })}
+                </div>
+              ))}
+            </div>
+            {rows}
+          </div>
         </div>
       </div>
     );
@@ -865,7 +915,7 @@ const WaterParkSales: React.FC = () => {
     return (
       <div className="detail-container animate-fade-in">
         <div className="detail-header">
-          <button className="back-btn" onClick={() => { setSelectedDate(null); }}><ArrowLeft /> 달력으로 돌아가기</button>
+          <button className="back-btn" onClick={() => { setSelectedDate(null); }}><ArrowLeft /> 7일 보드로 돌아가기</button>
           <h2>
             {format(selectedDate, 'yyyy년 MM월 dd일 (EEEE)', { locale: ko })} 영업 보고서
             {isHoliday && <span className="detail-holiday">🎈 {holidayName}</span>}
@@ -917,7 +967,7 @@ const WaterParkSales: React.FC = () => {
               let fbRev = 0;
 
               if (rs) {
-                const ticketItems = rs.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+                const ticketItems = rs.tableData.filter(isAdmissionTicketItem);
                 ticketRev = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
                 totalAdmissions = ticketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
                 fbRev = rs.summary.totalAmount - ticketRev;
@@ -936,7 +986,7 @@ const WaterParkSales: React.FC = () => {
               let prevFbRev = 0;
 
               if (prs) {
-                const prevTicketItems = prs.tableData.filter((t: any) => t.category === '매표소' || t.category === '입장권' || t.name === '매표소' || t.name === '입장권');
+                const prevTicketItems = prs.tableData.filter(isAdmissionTicketItem);
                 prevTicketRev = prevTicketItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
                 prevAdmissions = prevTicketItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
                 prevFbRev = prs.summary.totalAmount - prevTicketRev;
@@ -1398,7 +1448,7 @@ const WaterParkSales: React.FC = () => {
       <div className="sales-header">
         <div><h1>📅 일일 영업 실적 & 날씨 대시보드</h1>
         <p>기상 데이터 연동을 통해 날씨와 매출의 상관관계를 한눈에 파악하세요.</p>
-        <span className="sales-sync-guide">전용 PC 없이 홈페이지 서버에서 최신 10일 매출을 직접 수집합니다.</span></div>
+        <span className="sales-sync-guide">전용 PC 없이 홈페이지 서버에서 최신 5일 매출을 안전하게 수집합니다.</span></div>
         <CrawlerSyncButton target="waterpark" label="최신 매출 동기화" onComplete={fetchReports} />
       </div>
       {selectedDate ? renderDetail() : renderCalendar()}
