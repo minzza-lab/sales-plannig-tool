@@ -31,7 +31,7 @@ type SyncStatusRow = {
 }
 
 const syncRequestMarker = '[CRAWLER_SYNC]'
-const WATERPARK_SYNC_DAYS = 10
+const WATERPARK_SYNC_DAYS = 5
 
 type WaterparkModalState = {
   open: boolean
@@ -189,7 +189,7 @@ export default function CrawlerSyncButton({
           id: null,
           status: 'completed',
           progress: 100,
-          message: '최근 10일 매출 동기화가 완료되었습니다.',
+          message: `최근 ${WATERPARK_SYNC_DAYS}일 매출 동기화가 완료되었습니다.`,
           startedAt: null,
           finishedAt,
         })

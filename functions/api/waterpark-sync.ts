@@ -19,7 +19,7 @@ interface PortalRow {
 }
 
 const PORTAL_URL = 'https://wapi.wellihillipark.com/sub2/portal/portal.asp';
-const RECENT_DAYS = 10;
+const RECENT_DAYS = 5;
 const PORTAL_TIMEOUT_MS = 8_000;
 const DETAIL_REQUEST_DELAY_MS = 150;
 const SYNC_LOCK_MARKER = '[WATERPARK_SERVER_SYNC]';
@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Waterpark-Sync-Protection': 'safe-v2',
+      'X-Waterpark-Sync-Protection': 'safe-v3',
     },
   });
 }
@@ -284,7 +284,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const date = requestedDate
       ? allowedDates.find((item) => item.dbDate === requestedDate)
       : allowedDates[0];
-    if (!date) return jsonResponse({ error: '최근 10일 이내의 날짜만 동기화할 수 있습니다.' }, 400);
+    if (!date) return jsonResponse({ error: `최근 ${RECENT_DAYS}일 이내의 날짜만 동기화할 수 있습니다.` }, 400);
     const report = await collectDate(date);
 
     const saveResponse = await fetchWithTimeout(`${supabaseUrl}/rest/v1/daily_reports?on_conflict=report_date,report_type`, {
