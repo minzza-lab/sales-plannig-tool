@@ -39,6 +39,8 @@ type WaterparkModalState = {
   progress: number
   message: string
   completedDays: number
+  activeDate: string | null
+  entries: Array<{ date: string; quantity: number; amount: number }>
 }
 
 const idleState: SyncState = {
@@ -80,6 +82,11 @@ function getRecentKstDateStrings(daysCount: number): string[] {
   })
 }
 
+function formatSyncDate(date: string): string {
+  const [, month, day] = date.split('-')
+  return `${Number(month)}월 ${Number(day)}일`
+}
+
 export default function CrawlerSyncButton({
   target,
   label,
@@ -98,6 +105,8 @@ export default function CrawlerSyncButton({
     progress: 0,
     message: '매출 수집을 준비하고 있습니다.',
     completedDays: 0,
+    activeDate: null,
+    entries: [],
   })
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
@@ -152,6 +161,8 @@ export default function CrawlerSyncButton({
           progress: 0,
           message: '로그인 정보와 수집 범위를 확인하고 있습니다.',
           completedDays: 0,
+          activeDate: null,
+          entries: [],
         })
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
         if (sessionError) throw sessionError
@@ -163,6 +174,7 @@ export default function CrawlerSyncButton({
           setWaterparkModal((current) => ({
             ...current,
             message: `${date} 매출을 안전하게 수집하고 있습니다.`,
+            activeDate: date,
           }))
           const response = await fetch(`/api/waterpark-sync?date=${encodeURIComponent(date)}`, {
             method: 'POST',
@@ -171,7 +183,12 @@ export default function CrawlerSyncButton({
               'X-Sync-Batch-Id': batchId,
             },
           })
-          const result = await response.json().catch(() => ({})) as { error?: string }
+          const result = await response.json().catch(() => ({})) as {
+            error?: string
+            syncedDate?: string
+            totalQty?: number
+            totalAmount?: number
+          }
           if (!response.ok) throw new Error(result.error || `${date} 매출을 수집하지 못했습니다.`)
 
           const completedDays = index + 1
@@ -180,6 +197,15 @@ export default function CrawlerSyncButton({
             progress: Math.round((completedDays / dates.length) * 100),
             message: `${date} 매출 수집을 완료했습니다.`,
             completedDays,
+            activeDate: null,
+            entries: [
+              ...current.entries,
+              {
+                date: result.syncedDate || date,
+                quantity: Number(result.totalQty) || 0,
+                amount: Number(result.totalAmount) || 0,
+              },
+            ],
           }))
         }
 
@@ -193,13 +219,15 @@ export default function CrawlerSyncButton({
           startedAt: null,
           finishedAt,
         })
-        setWaterparkModal({
+        setWaterparkModal((current) => ({
+          ...current,
           open: true,
           phase: 'completed',
           progress: 100,
           message: '최신 매출을 모두 안전하게 불러왔습니다.',
           completedDays: dates.length,
-        })
+          activeDate: null,
+        }))
         return
       }
 
@@ -325,6 +353,35 @@ export default function CrawlerSyncButton({
             </div>
 
             <p>{waterparkModal.message}</p>
+            <div className="waterpark-sync-terminal" aria-live="polite">
+              <div className="waterpark-sync-terminal-bar">
+                <span><i /> <i /> <i /></span>
+                <b>LIVE SALES STREAM</b>
+                <em>{waterparkModal.phase === 'running' ? 'CONNECTED' : waterparkModal.phase.toUpperCase()}</em>
+              </div>
+              <div className="waterpark-sync-terminal-body">
+                <div className="waterpark-sync-terminal-boot">$ secure_channel --source=waterpark_api</div>
+                <div className="waterpark-sync-terminal-boot">[OK] encrypted connection established</div>
+                {waterparkModal.entries.map((entry) => (
+                  <div className="waterpark-sync-terminal-entry" key={entry.date}>
+                    <span>[SYNCED]</span>
+                    <strong>{formatSyncDate(entry.date)}</strong>
+                    <b>{entry.quantity.toLocaleString('ko-KR')}건</b>
+                    <em>{entry.amount.toLocaleString('ko-KR')}원</em>
+                  </div>
+                ))}
+                {waterparkModal.phase === 'running' && (
+                  <div className="waterpark-sync-terminal-scanning">
+                    <span>[READING]</span>
+                    {waterparkModal.activeDate ? formatSyncDate(waterparkModal.activeDate) : '수집 범위 확인 중'}
+                    <i />
+                  </div>
+                )}
+                {waterparkModal.phase === 'completed' && (
+                  <div className="waterpark-sync-terminal-complete">[COMPLETE] DATA COMMIT SUCCESSFUL</div>
+                )}
+              </div>
+            </div>
             <div className="waterpark-sync-modal-progress-row">
               <strong>{waterparkModal.progress}%</strong>
               <span>{waterparkModal.completedDays} / {WATERPARK_SYNC_DAYS}일 완료</span>

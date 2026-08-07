@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Waterpark-Sync-Protection': 'safe-v3',
+      'X-Waterpark-Sync-Protection': 'safe-v4',
     },
   });
 }
@@ -309,6 +309,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       syncedDays: 1,
       failedDays: 0,
       syncedDate: date.dbDate,
+      totalQty: report.data.summary.totalQty,
+      totalAmount: report.data.summary.totalAmount,
       message: `${date.dbDate} 매출 동기화가 완료되었습니다.`,
       finishedAt: new Date().toISOString(),
     });
