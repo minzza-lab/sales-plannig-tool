@@ -21,7 +21,6 @@ interface PortalRow {
 const PORTAL_URL = 'https://wapi.wellihillipark.com/sub2/portal/portal.asp';
 const RECENT_DAYS = 10;
 const PORTAL_TIMEOUT_MS = 8_000;
-const DATE_CONCURRENCY = 2;
 const DETAIL_REQUEST_DELAY_MS = 150;
 const SYNC_LOCK_MARKER = '[WATERPARK_SERVER_SYNC]';
 const SYNC_LOCK_TTL_MS = 10 * 60 * 1000;
@@ -30,7 +29,7 @@ const SYNC_COOLDOWN_MS = 60 * 1000;
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Sync-Batch-Id',
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -39,7 +38,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Waterpark-Sync-Protection': 'safe-v1',
+      'X-Waterpark-Sync-Protection': 'safe-v2',
     },
   });
 }
@@ -138,29 +137,11 @@ async function collectDate(date: DateInfo) {
   };
 }
 
-async function collectDatesWithLimit(dates: DateInfo[]) {
-  const settled: PromiseSettledResult<Awaited<ReturnType<typeof collectDate>>>[] = new Array(dates.length);
-  let nextIndex = 0;
-
-  const worker = async () => {
-    while (nextIndex < dates.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      try {
-        settled[index] = { status: 'fulfilled', value: await collectDate(dates[index]) };
-      } catch (reason) {
-        settled[index] = { status: 'rejected', reason };
-      }
-    }
-  };
-
-  await Promise.all(Array.from({ length: Math.min(DATE_CONCURRENCY, dates.length) }, worker));
-  return settled;
-}
-
 type SyncLock = {
   rowId: number;
   token: string;
+  batchId: string;
+  userId: string;
 };
 
 function databaseHeaders(anonKey: string, authorization: string) {
@@ -176,11 +157,13 @@ async function acquireSyncLock(
   anonKey: string,
   authorization: string,
   userId: string,
+  batchId: string,
 ): Promise<SyncLock | null> {
   const token = crypto.randomUUID();
   const payload = {
     token,
     userId,
+    batchId,
     status: 'running',
     startedAt: new Date().toISOString(),
   };
@@ -218,7 +201,15 @@ async function acquireSyncLock(
     const rows = await listResponse.json() as Array<{ id: number; synced_by_id: string }>;
     const parsedRows = rows.map((row) => {
       try {
-        return { id: row.id, payload: JSON.parse(row.synced_by_id) as { status?: string; finishedAt?: string } };
+        return {
+          id: row.id,
+          payload: JSON.parse(row.synced_by_id) as {
+            status?: string;
+            finishedAt?: string;
+            batchId?: string;
+            userId?: string;
+          },
+        };
       } catch {
         return null;
       }
@@ -226,19 +217,20 @@ async function acquireSyncLock(
 
     const recentlyCompleted = parsedRows.some((row) => {
       if (row.payload.status !== 'completed' || !row.payload.finishedAt) return false;
+      if (row.payload.batchId === batchId && row.payload.userId === userId) return false;
       return Date.now() - new Date(row.payload.finishedAt).getTime() < SYNC_COOLDOWN_MS;
     });
     const winner = parsedRows.find((row) => row.payload.status === 'running');
 
     if (recentlyCompleted || winner?.id !== rowId) {
-      await finishSyncLock(supabaseUrl, anonKey, authorization, { rowId, token }, 'rejected');
+      await finishSyncLock(supabaseUrl, anonKey, authorization, { rowId, token, batchId, userId }, 'rejected');
       return null;
     }
   } catch (error) {
-    await finishSyncLock(supabaseUrl, anonKey, authorization, { rowId, token }, 'failed');
+    await finishSyncLock(supabaseUrl, anonKey, authorization, { rowId, token, batchId, userId }, 'failed');
     throw error;
   }
-  return { rowId, token };
+  return { rowId, token, batchId, userId };
 }
 
 async function finishSyncLock(
@@ -254,6 +246,8 @@ async function finishSyncLock(
     body: JSON.stringify({
       synced_by_id: JSON.stringify({
         token: lock.token,
+        batchId: lock.batchId,
+        userId: lock.userId,
         status,
         finishedAt: new Date().toISOString(),
       }),
@@ -265,8 +259,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const supabaseUrl = context.env.SUPABASE_URL || context.env.VITE_SUPABASE_URL;
   const anonKey = context.env.SUPABASE_ANON_KEY || context.env.VITE_SUPABASE_ANON_KEY;
   const authorization = context.request.headers.get('Authorization');
+  const batchId = context.request.headers.get('X-Sync-Batch-Id') || crypto.randomUUID();
   if (!supabaseUrl || !anonKey) return jsonResponse({ error: '서버의 데이터베이스 연결 설정이 없습니다.' }, 500);
   if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: '로그인이 필요합니다.' }, 401);
+  if (!/^[a-zA-Z0-9-]{8,64}$/.test(batchId)) return jsonResponse({ error: '동기화 요청 정보가 올바르지 않습니다.' }, 400);
 
   let syncLock: SyncLock | null = null;
   let lockStatus: 'completed' | 'failed' = 'failed';
@@ -278,18 +274,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const user = await userResponse.json() as { id?: string };
     if (!user.id) return jsonResponse({ error: '로그인 사용자를 확인하지 못했습니다.' }, 401);
 
-    syncLock = await acquireSyncLock(supabaseUrl, anonKey, authorization, user.id);
+    syncLock = await acquireSyncLock(supabaseUrl, anonKey, authorization, user.id, batchId);
     if (!syncLock) {
       return jsonResponse({ error: '매출 동기화가 진행 중이거나 방금 완료되었습니다. 1분 후 다시 확인해주세요.' }, 409);
     }
 
-    const dates = getRecentKstDates(RECENT_DAYS);
-    const settled = await collectDatesWithLimit(dates);
-    const reports = settled
-      .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof collectDate>>> => result.status === 'fulfilled')
-      .map((result) => result.value);
-    const failed = settled.length - reports.length;
-    if (reports.length === 0) throw new Error('매출 시스템에서 데이터를 가져오지 못했습니다.');
+    const allowedDates = getRecentKstDates(RECENT_DAYS);
+    const requestedDate = new URL(context.request.url).searchParams.get('date');
+    const date = requestedDate
+      ? allowedDates.find((item) => item.dbDate === requestedDate)
+      : allowedDates[0];
+    if (!date) return jsonResponse({ error: '최근 10일 이내의 날짜만 동기화할 수 있습니다.' }, 400);
+    const report = await collectDate(date);
 
     const saveResponse = await fetchWithTimeout(`${supabaseUrl}/rest/v1/daily_reports?on_conflict=report_date,report_type`, {
       method: 'POST',
@@ -299,7 +295,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify(reports),
+      body: JSON.stringify([report]),
     });
     if (!saveResponse.ok) {
       const detail = await saveResponse.text();
@@ -310,11 +306,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return jsonResponse({
       status: 'completed',
       progress: 100,
-      syncedDays: reports.length,
-      failedDays: failed,
-      message: failed > 0
-        ? `최근 ${reports.length}일 매출을 동기화했습니다. ${failed}일은 다시 시도해주세요.`
-        : `최근 ${reports.length}일 매출 동기화가 완료되었습니다.`,
+      syncedDays: 1,
+      failedDays: 0,
+      syncedDate: date.dbDate,
+      message: `${date.dbDate} 매출 동기화가 완료되었습니다.`,
       finishedAt: new Date().toISOString(),
     });
   } catch (error) {

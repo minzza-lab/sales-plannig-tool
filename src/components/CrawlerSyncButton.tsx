@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, DatabaseZap, LoaderCircle, TriangleAlert } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { CheckCircle2, DatabaseZap, LoaderCircle, TriangleAlert, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import './CrawlerSyncButton.css'
 
@@ -30,6 +31,15 @@ type SyncStatusRow = {
 }
 
 const syncRequestMarker = '[CRAWLER_SYNC]'
+const WATERPARK_SYNC_DAYS = 10
+
+type WaterparkModalState = {
+  open: boolean
+  phase: 'running' | 'completed' | 'failed'
+  progress: number
+  message: string
+  completedDays: number
+}
 
 const idleState: SyncState = {
   id: null,
@@ -59,6 +69,17 @@ function parseSyncRequest(row: SyncStatusRow): SyncRequest | null {
   }
 }
 
+function getRecentKstDateStrings(daysCount: number): string[] {
+  const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  return Array.from({ length: daysCount }, (_, index) => {
+    const date = new Date(nowKst.getTime() - index * 24 * 60 * 60 * 1000)
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(date.getUTCDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  })
+}
+
 export default function CrawlerSyncButton({
   target,
   label,
@@ -71,6 +92,13 @@ export default function CrawlerSyncButton({
   const [state, setState] = useState<SyncState>(idleState)
   const [error, setError] = useState('')
   const [isStarting, setIsStarting] = useState(false)
+  const [waterparkModal, setWaterparkModal] = useState<WaterparkModalState>({
+    open: false,
+    phase: 'running',
+    progress: 0,
+    message: '매출 수집을 준비하고 있습니다.',
+    completedDays: 0,
+  })
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
 
@@ -116,29 +144,61 @@ export default function CrawlerSyncButton({
     setIsStarting(true)
     try {
       if (target === 'waterpark') {
+        const dates = getRecentKstDateStrings(WATERPARK_SYNC_DAYS)
+        const batchId = crypto.randomUUID()
+        setWaterparkModal({
+          open: true,
+          phase: 'running',
+          progress: 0,
+          message: '로그인 정보와 수집 범위를 확인하고 있습니다.',
+          completedDays: 0,
+        })
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
         if (sessionError) throw sessionError
         const accessToken = sessionData.session?.access_token
         if (!accessToken) throw new Error('로그인 정보가 없습니다. 다시 로그인해주세요.')
 
-        const response = await fetch('/api/waterpark-sync', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        const result = await response.json().catch(() => ({})) as {
-          error?: string
-          message?: string
-          finishedAt?: string
+        for (let index = 0; index < dates.length; index += 1) {
+          const date = dates[index]
+          setWaterparkModal((current) => ({
+            ...current,
+            message: `${date} 매출을 안전하게 수집하고 있습니다.`,
+          }))
+          const response = await fetch(`/api/waterpark-sync?date=${encodeURIComponent(date)}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'X-Sync-Batch-Id': batchId,
+            },
+          })
+          const result = await response.json().catch(() => ({})) as { error?: string }
+          if (!response.ok) throw new Error(result.error || `${date} 매출을 수집하지 못했습니다.`)
+
+          const completedDays = index + 1
+          setWaterparkModal((current) => ({
+            ...current,
+            progress: Math.round((completedDays / dates.length) * 100),
+            message: `${date} 매출 수집을 완료했습니다.`,
+            completedDays,
+          }))
         }
-        if (!response.ok) throw new Error(result.error || '서버에서 매출을 수집하지 못했습니다.')
+
         await onCompleteRef.current()
+        const finishedAt = new Date().toISOString()
         setState({
           id: null,
           status: 'completed',
           progress: 100,
-          message: result.message || '최신 매출 동기화가 완료되었습니다.',
+          message: '최근 10일 매출 동기화가 완료되었습니다.',
           startedAt: null,
-          finishedAt: result.finishedAt || new Date().toISOString(),
+          finishedAt,
+        })
+        setWaterparkModal({
+          open: true,
+          phase: 'completed',
+          progress: 100,
+          message: '최신 매출을 모두 안전하게 불러왔습니다.',
+          completedDays: dates.length,
         })
         return
       }
@@ -186,6 +246,14 @@ export default function CrawlerSyncButton({
     } catch (startError) {
       const message = startError instanceof Error ? startError.message : '알 수 없는 오류'
       setError(`동기화를 시작하지 못했습니다: ${message}`)
+      if (target === 'waterpark') {
+        setWaterparkModal((current) => ({
+          ...current,
+          open: true,
+          phase: 'failed',
+          message,
+        }))
+      }
     } finally {
       setIsStarting(false)
     }
@@ -218,6 +286,78 @@ export default function CrawlerSyncButton({
         </div>
       )}
       {error && <small className="crawler-sync-error">{error}</small>}
+      {target === 'waterpark' && waterparkModal.open && createPortal(
+        <div className="waterpark-sync-modal-backdrop" role="presentation">
+          <section
+            className={`waterpark-sync-modal ${waterparkModal.phase}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="waterpark-sync-modal-title"
+          >
+            <div className="waterpark-sync-modal-icon">
+              {waterparkModal.phase === 'running'
+                ? <LoaderCircle size={28} className="crawler-spin" />
+                : waterparkModal.phase === 'completed'
+                  ? <CheckCircle2 size={30} />
+                  : <TriangleAlert size={30} />}
+            </div>
+            <div className="waterpark-sync-modal-heading">
+              <div>
+                <span>WATERPARK SALES</span>
+                <h2 id="waterpark-sync-modal-title">
+                  {waterparkModal.phase === 'running'
+                    ? '최신 매출 동기화 중'
+                    : waterparkModal.phase === 'completed'
+                      ? '동기화 완료'
+                      : '동기화 중단'}
+                </h2>
+              </div>
+              {waterparkModal.phase !== 'running' && (
+                <button
+                  type="button"
+                  className="waterpark-sync-modal-close"
+                  onClick={() => setWaterparkModal((current) => ({ ...current, open: false }))}
+                  aria-label="동기화 팝업 닫기"
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            <p>{waterparkModal.message}</p>
+            <div className="waterpark-sync-modal-progress-row">
+              <strong>{waterparkModal.progress}%</strong>
+              <span>{waterparkModal.completedDays} / {WATERPARK_SYNC_DAYS}일 완료</span>
+            </div>
+            <div
+              className="waterpark-sync-modal-track"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={waterparkModal.progress}
+            >
+              <i style={{ width: `${waterparkModal.progress}%` }} />
+            </div>
+            <small>
+              {waterparkModal.phase === 'running'
+                ? '창을 닫지 않고 잠시만 기다려주세요.'
+                : waterparkModal.phase === 'completed'
+                  ? '화면에 최신 매출 데이터가 반영되었습니다.'
+                  : '완료된 날짜까지는 정상 저장되었습니다. 잠시 후 다시 시도해주세요.'}
+            </small>
+            {waterparkModal.phase !== 'running' && (
+              <button
+                type="button"
+                className="waterpark-sync-modal-confirm"
+                onClick={() => setWaterparkModal((current) => ({ ...current, open: false }))}
+              >
+                확인
+              </button>
+            )}
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
