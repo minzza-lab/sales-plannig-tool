@@ -1491,6 +1491,29 @@ const WaterParkSales: React.FC = () => {
               Object.keys(groupedItems).forEach(cat => {
                 groupedItems[cat].sort((a: any, b: any) => Number(b.amount) - Number(a.amount));
               });
+              const prevGroupedItems = hasPrevData ? prevYearReport.tableData.reduce((acc: any, row: any) => {
+                const groupName = getCategoryGroup(row.name, prevYearReport.type, row.category);
+                if (!acc[groupName]) acc[groupName] = [];
+                acc[groupName].push(row);
+                return acc;
+              }, {}) : {};
+              Object.keys(prevGroupedItems).forEach(cat => {
+                prevGroupedItems[cat].sort((a: any, b: any) => Number(b.amount) - Number(a.amount));
+              });
+              const comparisonCategoryData = Array.from(new Set([
+                ...categoryData.map((category: any) => category.name),
+                ...prevCategoryData.map((category: any) => category.name),
+              ])).map((name) => {
+                const currentCategory = categoryData.find((category: any) => category.name === name);
+                const previousCategory = prevCategoryData.find((category: any) => category.name === name);
+                return {
+                  name,
+                  amount: currentCategory?.amount || 0,
+                  quantity: currentCategory?.quantity || 0,
+                  prevAmount: previousCategory?.amount || 0,
+                  prevQuantity: previousCategory?.quantity || 0,
+                };
+              }).sort((a, b) => Math.max(b.amount, b.prevAmount) - Math.max(a.amount, a.prevAmount));
 
               return (
               <div className="report-panel">
@@ -1600,7 +1623,10 @@ const WaterParkSales: React.FC = () => {
                 </div>
 
                 <div className="table-box">
-                  <h3>상세 데이터 내역 (대분류 구조 포함)</h3>
+                  <div className="source-compare-title">
+                    <div><span>ITEM-BY-ITEM YOY</span><h3>올해 · 전년 원본 품목 상세 비교</h3></div>
+                    <div><b>{format(selectedDate, 'yyyy년 M월 d일')}</b><span>vs</span><b>{format(subMonths(selectedDate, 12), 'yyyy년 M월 d일')}</b></div>
+                  </div>
                   <div className="table-split-layout">
                     {/* 대분류 도넛 그래프 영역 */}
                     <div className="category-donut-wrapper">
@@ -1628,12 +1654,21 @@ const WaterParkSales: React.FC = () => {
                           style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
                         />
                       </div>
-                      {categoryData.map((cat: any, index: number) => {
-                        // 검색어 필터링 적용
-                        const items = (groupedItems[cat.name] || []).filter((r: any) => 
-                          r.name.toLowerCase().includes(detailSearchTerm.toLowerCase()) || 
+                      {comparisonCategoryData.map((cat: any, index: number) => {
+                        const currentItems = groupedItems[cat.name] || [];
+                        const previousItems = prevGroupedItems[cat.name] || [];
+                        const itemNames = Array.from(new Set([
+                          ...currentItems.map((row: any) => String(row.name || '').trim()),
+                          ...previousItems.map((row: any) => String(row.name || '').trim()),
+                        ]));
+                        const items = itemNames.map((name) => ({
+                          name,
+                          current: currentItems.find((row: any) => String(row.name || '').trim() === name),
+                          previous: previousItems.find((row: any) => String(row.name || '').trim() === name),
+                        })).filter((item) =>
+                          item.name.toLowerCase().includes(detailSearchTerm.toLowerCase()) ||
                           cat.name.toLowerCase().includes(detailSearchTerm.toLowerCase())
-                        );
+                        ).sort((a, b) => Math.max(Number(b.current?.amount) || 0, Number(b.previous?.amount) || 0) - Math.max(Number(a.current?.amount) || 0, Number(a.previous?.amount) || 0));
                         
                         // 검색결과가 없으면 이 그룹은 렌더링 안 함
                         if (items.length === 0) return null;
@@ -1650,7 +1685,10 @@ const WaterParkSales: React.FC = () => {
                           >
                             <div>
                               {cat.name}
-                              <span className="cat-group-sum">총 {cat.quantity.toLocaleString()}건 ({formatCurrency(cat.amount)})</span>
+                              <span className="cat-group-sum source-category-totals">
+                                <b>올해 {cat.quantity.toLocaleString()}건 · {formatCurrency(cat.amount)}</b>
+                                <em>전년 {cat.prevQuantity.toLocaleString()}건 · {formatCurrency(cat.prevAmount)}</em>
+                              </span>
                             </div>
                             <span style={{ fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>
                               {isExpanded ? '▲ 접기' : '▼ 펼치기'}
@@ -1659,30 +1697,41 @@ const WaterParkSales: React.FC = () => {
                           
                           {isExpanded && (
                           <div className="cat-group-items animate-fade-in">
-                            {items.map((row: any, i: number) => {
-                              const qty = Number(row.quantity);
-                              const amount = Number(row.amount);
-                              const pct = activeReport.summary.totalQty > 0 ? (qty / activeReport.summary.totalQty * 100) : 0;
-                              const unitPrice = qty > 0 ? amount / qty : 0;
+                            {items.map((item: any) => {
+                              const currentQty = Number(item.current?.quantity) || 0;
+                              const currentAmount = Number(item.current?.amount) || 0;
+                              const previousQty = Number(item.previous?.quantity) || 0;
+                              const previousAmount = Number(item.previous?.amount) || 0;
+                              const currentUnitPrice = currentQty > 0 ? currentAmount / currentQty : 0;
+                              const previousUnitPrice = previousQty > 0 ? previousAmount / previousQty : 0;
+                              const amountGrowth = previousAmount > 0 ? ((currentAmount - previousAmount) / previousAmount) * 100 : null;
                               return (
-                                <div key={i} className="detailed-table-row">
-                                  <div className="d-table-name">{row.name}</div>
-                                  <div className="d-table-stats-grid">
-                                    <div className="stat-col">
-                                      <span className="stat-label">점유율</span>
-                                      <span className="stat-val" style={{ color: '#3b82f6' }}>{pct.toFixed(1)}%</span>
+                                <div key={item.name} className="source-item-compare-row">
+                                  <div className="source-item-name">
+                                    <span>{item.name}</span>
+                                    <em className={amountGrowth !== null && amountGrowth >= 0 ? 'up' : 'down'}>
+                                      {amountGrowth === null ? (item.current ? '신규/비교 없음' : '올해 미판매') : `${amountGrowth >= 0 ? '▲' : '▼'} ${Math.abs(amountGrowth).toFixed(1)}%`}
+                                    </em>
+                                  </div>
+                                  <div className="source-year-columns">
+                                    <div className="current">
+                                      <strong>올해</strong>
+                                      <span><small>수량</small><b>{currentQty.toLocaleString()}건</b></span>
+                                      <span><small>매출</small><b>{formatCurrency(currentAmount)}</b></span>
+                                      <span><small>객단가</small><b>{formatCurrency(Math.round(currentUnitPrice))}</b></span>
                                     </div>
-                                    <div className="stat-col">
-                                      <span className="stat-label">건수</span>
-                                      <span className="stat-val">{qty.toLocaleString()}건</span>
-                                    </div>
-                                    <div className="stat-col">
-                                      <span className="stat-label">객단가</span>
-                                      <span className="stat-val">{formatCurrency(unitPrice)}</span>
+                                    <div className="previous">
+                                      <strong>전년</strong>
+                                      <span><small>수량</small><b>{previousQty.toLocaleString()}건</b></span>
+                                      <span><small>매출</small><b>{formatCurrency(previousAmount)}</b></span>
+                                      <span><small>객단가</small><b>{formatCurrency(Math.round(previousUnitPrice))}</b></span>
                                     </div>
                                   </div>
-                                  <div className="d-bar-track">
-                                    <div className="d-bar-fill" style={{ width: `${Math.max(pct, 0.5)}%` }}></div>
+                                  <div className="source-item-delta">
+                                    <span>매출 차이</span>
+                                    <b className={currentAmount - previousAmount >= 0 ? 'up' : 'down'}>
+                                      {currentAmount - previousAmount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(currentAmount - previousAmount))}
+                                    </b>
                                   </div>
                                 </div>
                               );
