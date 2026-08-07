@@ -1052,3 +1052,193 @@ th { background: #f8fafc; font-weight: 700; color: var(--text-secondary); }
     grid-column: auto;
   }
 }
+
+/* Clear comparison cards and a scroll-free Monday-to-Sunday board. */
+.period-comparison-section {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #dbe5f0;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+}
+
+.period-comparison-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.period-comparison-heading > div > span {
+  color: #2563eb;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+.period-comparison-heading h3 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 17px;
+  letter-spacing: -.025em;
+}
+
+.period-comparison-heading > em {
+  padding: 6px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.period-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.period-metric-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.period-metric-head {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.period-metric-head > span { color: #475569; font-size: 11px; font-weight: 850; }
+.period-metric-head > em {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.period-metric-head > em.up { background: #fee2e2; color: #dc2626; }
+.period-metric-head > em.down { background: #dbeafe; color: #2563eb; }
+
+.period-current-value {
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+.period-current-value small { display: block; margin-bottom: 4px; color: #64748b; font-size: 9px; font-weight: 750; }
+.period-current-value .auto-fit-text { color: #0f172a; font-weight: 950; letter-spacing: -.045em; }
+
+.period-previous-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 10px;
+  color: #64748b;
+}
+.period-previous-value span { font-size: 9px; font-weight: 750; }
+.period-previous-value b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.cum-val-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dash-badge { justify-self: start; width: auto; max-width: 100%; min-width: 0; }
+
+.weekly-board-scroll,
+.cal-grid.weekly-board-grid {
+  overflow: visible;
+}
+
+.cal-grid.weekly-board-grid,
+.weekly-board-grid .cal-days-header,
+.weekly-board-grid .cal-row {
+  width: 100%;
+  min-width: 0;
+}
+
+.weekly-board-grid .cal-days-header,
+.weekly-board-grid .cal-row {
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+}
+
+.weekly-board-grid .weekly-sales-card {
+  min-width: 0;
+  min-height: 390px;
+  padding: 10px;
+}
+
+.weekly-board-grid .cal-cell-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  min-height: 91px;
+}
+
+.weekly-board-grid .cal-date {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 18px;
+}
+.weekly-board-grid .cal-date > small { color: #64748b; font-size: 10px; font-weight: 900; }
+.weekly-board-grid .cal-date.red-day > small { color: #ef4444; }
+.weekly-board-grid .cal-date.blue-day > small { color: #2563eb; }
+
+.weekly-weather-stack { display: grid; gap: 3px; min-width: 0; }
+.weekly-weather-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 25px 14px 25px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 5px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #334155;
+  line-height: 1;
+}
+.weekly-weather-row.previous { border-color: #e2e8f0; background: #f8fafc; color: #64748b; }
+.weekly-weather-row > select { inset: 0; z-index: 1; }
+.weekly-weather-row > span { color: #2563eb; font-size: 8px; font-weight: 900; }
+.weekly-weather-row.previous > span { color: #64748b; }
+.weekly-weather-row > svg { width: 13px; height: 13px; }
+.weekly-weather-row > b { font-size: 9px; font-weight: 900; }
+.weekly-weather-row > em { overflow: hidden; font-size: 8px; font-style: normal; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1180px) {
+  .weekly-board-grid .cal-days-header { display: none !important; }
+  .weekly-board-grid .cal-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .weekly-board-grid .weekly-sales-card { min-height: 350px; }
+  .weekly-board-grid .cal-cell-header { grid-template-columns: minmax(0, 1fr) minmax(145px, .8fr); min-height: 58px; }
+}
+
+@media (max-width: 720px) {
+  .period-comparison-heading { align-items: flex-start; flex-direction: column; }
+  .period-comparison-grid { grid-template-columns: 1fr; }
+  .period-metric-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); column-gap: 12px; }
+  .period-metric-head { grid-column: 1 / -1; }
+  .period-current-value { border: 0; padding: 0; }
+  .period-previous-value { align-items: flex-start; flex-direction: column; justify-content: center; padding: 0 0 0 12px; border-left: 1px solid #eef2f7; }
+  .weekly-board-grid .cal-row { grid-template-columns: 1fr !important; }
+  .weekly-board-grid .weekly-sales-card { min-height: 335px; }
+}
+
+@media (max-width: 460px) {
+  .weekly-board-grid .cal-cell-header { grid-template-columns: 1fr; }
+  .weekly-board-actions { grid-template-columns: 1fr; }
+}

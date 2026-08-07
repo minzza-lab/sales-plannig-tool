@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft,
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, Thermometer
 } from 'lucide-react';
-import { format, subMonths, isSameDay, addDays } from 'date-fns';
+import { format, subMonths, isSameDay, addDays, startOfWeek } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import './WaterParkSales.css';
 import CrawlerSyncButton from './CrawlerSyncButton';
@@ -293,9 +293,10 @@ const WaterParkSales: React.FC = () => {
             newMap[dateStr] = { temp: dataNow.daily.temperature_2m_max[index], rain: dataNow.daily.precipitation_sum[index], code: dataNow.daily.weather_code[index] };
           });
         }
-        const prevYearDate = subMonths(currentMonth, 12);
-        const startStr = format(addDays(prevYearDate, -6), 'yyyy-MM-dd');
-        const endStr = format(prevYearDate, 'yyyy-MM-dd');
+        const currentWeekStart = startOfWeek(currentMonth, { weekStartsOn: 1 });
+        const prevYearDate = subMonths(currentWeekStart, 12);
+        const startStr = format(prevYearDate, 'yyyy-MM-dd');
+        const endStr = format(addDays(prevYearDate, 6), 'yyyy-MM-dd');
         const resPrev = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${LAT}&longitude=${LNG}&start_date=${startStr}&end_date=${endStr}&daily=weather_code,temperature_2m_max,precipitation_sum&timezone=Asia%2FSeoul`);
         const dataPrev = await resPrev.json();
         if (dataPrev.daily) {
@@ -321,6 +322,19 @@ const WaterParkSales: React.FC = () => {
     if (code >= 85 && code <= 86) return <CloudSnow size={size} color="#60a5fa" />;
     if (code >= 95) return <CloudLightning size={size} color="#8b5cf6" />;
     return <Sun size={size} color="#f59e0b" />;
+  };
+
+  const getWeatherLabel = (code: number) => {
+    if (code === 0) return '맑음';
+    if (code >= 1 && code <= 2) return '구름';
+    if (code === 3) return '흐림';
+    if (code >= 45 && code <= 48) return '안개';
+    if (code >= 51 && code <= 67) return '비';
+    if (code >= 71 && code <= 77) return '눈';
+    if (code >= 80 && code <= 82) return '소나기';
+    if (code >= 85 && code <= 86) return '눈';
+    if (code >= 95) return '뇌우';
+    return '맑음';
   };
 
   const getTitleByType = (type: string) => {
@@ -457,8 +471,8 @@ const WaterParkSales: React.FC = () => {
   };
 
   const renderCalendar = () => {
-    const endDate = currentMonth;
-    const startDate = addDays(endDate, -6);
+    const startDate = startOfWeek(currentMonth, { weekStartsOn: 1 });
+    const endDate = addDays(startDate, 6);
     const visibleDates = Array.from({ length: 7 }, (_, index) => addDays(startDate, index));
     const currentWeekSnapshots = visibleDates.map((date) => getDaySalesSnapshot(
       reports.filter((report) => report.report_date === format(date, 'yyyy-MM-dd')),
@@ -492,6 +506,89 @@ const WaterParkSales: React.FC = () => {
       ? ((weekTotals.totalAmount - previousWeekTotals.totalAmount) / previousWeekTotals.totalAmount) * 100
       : null;
 
+    const renderPeriodComparison = ({
+      kicker,
+      title,
+      currentLabel,
+      previousLabel,
+      currentAmount,
+      previousAmount,
+      currentPeople,
+      previousPeople,
+    }: {
+      kicker: string;
+      title: string;
+      currentLabel: string;
+      previousLabel: string;
+      currentAmount: number;
+      previousAmount: number;
+      currentPeople: number;
+      previousPeople: number;
+    }) => {
+      const currentUnitPrice = currentPeople > 0 ? Math.round(currentAmount / currentPeople) : 0;
+      const previousUnitPrice = previousPeople > 0 ? Math.round(previousAmount / previousPeople) : 0;
+      const metrics = [
+        {
+          label: summaryViewMode === 'ADMISSION' ? '입장 매출' : '전체 매출',
+          current: formatCurrency(currentAmount),
+          previous: formatCurrency(previousAmount),
+          currentValue: currentAmount,
+          previousValue: previousAmount,
+        },
+        {
+          label: '입장객 (명)',
+          current: `${currentPeople.toLocaleString()}명`,
+          previous: `${previousPeople.toLocaleString()}명`,
+          currentValue: currentPeople,
+          previousValue: previousPeople,
+        },
+        {
+          label: '1인당 객단가',
+          current: formatCurrency(currentUnitPrice),
+          previous: formatCurrency(previousUnitPrice),
+          currentValue: currentUnitPrice,
+          previousValue: previousUnitPrice,
+        },
+      ];
+
+      return (
+        <section className="period-comparison-section">
+          <div className="period-comparison-heading">
+            <div>
+              <span>{kicker}</span>
+              <h3>{title}</h3>
+            </div>
+            <em>{summaryViewMode === 'ADMISSION' ? '입장객 발권 기준' : '전체 매출 기준'}</em>
+          </div>
+          <div className="period-comparison-grid">
+            {metrics.map((metric) => {
+              const growth = metric.previousValue > 0
+                ? ((metric.currentValue - metric.previousValue) / metric.previousValue) * 100
+                : null;
+              return (
+                <article className="period-metric-card" key={metric.label}>
+                  <div className="period-metric-head">
+                    <span>{metric.label}</span>
+                    <em className={growth !== null && growth >= 0 ? 'up' : 'down'}>
+                      {growth === null ? '비교 없음' : `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)}%`}
+                    </em>
+                  </div>
+                  <div className="period-current-value">
+                    <small>{currentLabel} · 올해</small>
+                    <AutoFitText as="div" min={16} max={28}>{metric.current}</AutoFitText>
+                  </div>
+                  <div className="period-previous-value">
+                    <span>{previousLabel} · 전년</span>
+                    <b>{metric.previous}</b>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      );
+    };
+
     const rows = [];
     let days = [];
     let day = startDate;
@@ -523,14 +620,15 @@ const WaterParkSales: React.FC = () => {
           >
             <div className="cal-cell-header">
               <span className={`cal-date ${isRedDay ? 'red-day' : ''} ${isSaturday && !isHoliday ? 'blue-day' : ''}`}>
+                <small>{format(day, 'EEE', { locale: ko })}</small>
                 {format(day, "M/d")}
                 {isHoliday && <span className="holiday-badge">{holidayName}</span>}
               </span>
-              <div className="cal-weathers" style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+              <div className="weekly-weather-stack">
                 {wInfo && (() => {
                   const currentCode = manualWeathers[dateStr] ?? wInfo.code;
                   return (
-                    <div className="cal-weather" style={{ position: 'relative' }} title={`[올해] 최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
+                    <div className="weekly-weather-row current" title={`[올해] 최고기온 ${wInfo.temp}°C, 강수량 ${wInfo.rain}mm`}>
                       <select 
                         value={manualWeathers[dateStr] ?? -1} 
                         onChange={(e) => {
@@ -547,16 +645,17 @@ const WaterParkSales: React.FC = () => {
                         <option value={61}>🌧️ 비</option>
                         <option value={71}>❄️ 눈</option>
                       </select>
-                      <span style={{ fontSize: '9px', marginRight: '2px', color: '#3b82f6' }}>올해</span>
+                      <span>올해</span>
                       {getWeatherIcon(currentCode)}
-                      <span>{wInfo.temp}°</span>
+                      <b>{Math.round(wInfo.temp)}°</b>
+                      <em>{getWeatherLabel(currentCode)}</em>
                     </div>
                   );
                 })()}
                 {prevWInfo && (() => {
                   const prevCurrentCode = manualWeathers[prevYearStr] ?? prevWInfo.code;
                   return (
-                    <div className="cal-weather" style={{ opacity: 0.75, position: 'relative' }} title={`[작년] 최고기온 ${prevWInfo.temp}°C, 강수량 ${prevWInfo.rain}mm`}>
+                    <div className="weekly-weather-row previous" title={`[전년] 최고기온 ${prevWInfo.temp}°C, 강수량 ${prevWInfo.rain}mm`}>
                       <select 
                         value={manualWeathers[prevYearStr] ?? -1} 
                         onChange={(e) => {
@@ -573,9 +672,10 @@ const WaterParkSales: React.FC = () => {
                         <option value={61}>🌧️ 비</option>
                         <option value={71}>❄️ 눈</option>
                       </select>
-                      <span style={{ fontSize: '9px', marginRight: '2px' }}>작년</span>
+                      <span>전년</span>
                       {getWeatherIcon(prevCurrentCode)}
-                      <span>{prevWInfo.temp}°</span>
+                      <b>{Math.round(prevWInfo.temp)}°</b>
+                      <em>{getWeatherLabel(prevCurrentCode)}</em>
                     </div>
                   );
                 })()}
@@ -591,13 +691,13 @@ const WaterParkSales: React.FC = () => {
                 {currentSnapshot.hasBreakdown ? (
                   <div className="weekly-category-list">
                     {([
-                      { key: 'admission', code: 'TICKET', label: '입장권', metric: currentSnapshot.admission },
+                      { key: 'admission', code: 'GUEST', label: '입장객', metric: currentSnapshot.admission },
                       { key: 'food', code: 'F&B', label: '식음', metric: currentSnapshot.food },
                       { key: 'rental', code: 'RENTAL', label: '물품대여', metric: currentSnapshot.rental },
                     ] as const).map((category) => (
                       <div className={`weekly-category-row ${category.key}`} key={category.key}>
                         <div><span>{category.code}</span><strong>{category.label}</strong></div>
-                        <b>{category.metric.quantity.toLocaleString()}건</b>
+                        <b>{category.metric.quantity.toLocaleString()}{category.key === 'admission' ? '명' : '건'}</b>
                         <em title={formatCurrency(category.metric.amount)}>{compactWon(category.metric.amount)}원</em>
                       </div>
                     ))}
@@ -605,7 +705,7 @@ const WaterParkSales: React.FC = () => {
                 ) : (
                   <div className="weekly-legacy-data">
                     <span>과거 통합 데이터</span>
-                    <strong>입장 {currentSnapshot.admission.quantity.toLocaleString()}건</strong>
+                    <strong>입장객 {currentSnapshot.admission.quantity.toLocaleString()}명</strong>
                   </div>
                 )}
                 {previousSnapshot.hasData ? (() => {
@@ -622,7 +722,7 @@ const WaterParkSales: React.FC = () => {
                         매출 {salesGrowth === null ? '-' : `${salesGrowth >= 0 ? '▲' : '▼'} ${Math.abs(salesGrowth).toFixed(1)}%`}
                       </b>
                       <b className={admissionGrowth !== null && admissionGrowth >= 0 ? 'up' : 'down'}>
-                        입장권 {admissionGrowth === null ? '-' : `${admissionGrowth >= 0 ? '▲' : '▼'} ${Math.abs(admissionGrowth).toFixed(1)}%`}
+                        입장객 {admissionGrowth === null ? '-' : `${admissionGrowth >= 0 ? '▲' : '▼'} ${Math.abs(admissionGrowth).toFixed(1)}%`}
                       </b>
                     </div>
                   );
@@ -657,7 +757,7 @@ const WaterParkSales: React.FC = () => {
               onClick={() => setSummaryViewMode('ADMISSION')} 
               style={{ padding: '8px 20px', fontSize: '13px', borderRadius: '20px', transition: 'all 0.2s', border: 'none', cursor: 'pointer', background: summaryViewMode === 'ADMISSION' ? '#3b82f6' : 'transparent', color: 'white', fontWeight: 700 }}
             >
-              🎟️ 입장권 기준 집계
+              👥 입장객 기준 집계
             </button>
             <button 
               className={`tab-button ${summaryViewMode === 'TOTAL' ? 'active' : ''}`} 
@@ -668,100 +768,27 @@ const WaterParkSales: React.FC = () => {
             </button>
           </div>
 
-          {/* 연간 누적 */}
-          <h3>🏆 연간 전체 누적 실적 비교 ({summaryViewMode === 'ADMISSION' ? '입장권 발권 기준' : '전체 매출 기준'}, {format(currentMonth, 'yyyy')}년)</h3>
-          <div className="dash-compare-container" style={{ marginBottom: '24px' }}>
-            {/* 전년도 연간 */}
-            <div className="dash-column prev">
-              <h4>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
-              <div className="cum-cards">
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(prevYearAmt)}</AutoFitText>
-                </div>
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{prevYearPpl.toLocaleString()} 명</AutoFitText>
-                </div>
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{prevYearPpl > 0 ? formatCurrency(Math.round(prevYearAmt/prevYearPpl)) : '0원'}</AutoFitText>
-                </div>
-              </div>
-            </div>
+          {renderPeriodComparison({
+            kicker: 'YEAR TO DATE',
+            title: '연간 전체 누적 실적 비교',
+            currentLabel: `${format(currentMonth, 'yyyy년')} 누적`,
+            previousLabel: `${format(subMonths(currentMonth, 12), 'yyyy년')} 누적`,
+            currentAmount: currentYearAmt,
+            previousAmount: prevYearAmt,
+            currentPeople: currentYearPpl,
+            previousPeople: prevYearPpl,
+          })}
 
-            {/* 당해 연도 연간 */}
-            <div className="dash-column current">
-              <h4>{format(currentMonth, 'yyyy년')} 전체 누적 (올해)</h4>
-              <div className="cum-cards">
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <div className="cum-val-row">
-                    <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(currentYearAmt)}</AutoFitText>
-                    {prevYearAmt > 0 && <AutoFitText className={`dash-badge ${currentYearAmt >= prevYearAmt ? 'up' : 'down'}`} min={9} max={12}>{currentYearAmt >= prevYearAmt ? '▲' : '▼'} {Math.abs((currentYearAmt-prevYearAmt)/prevYearAmt*100).toFixed(1)}%</AutoFitText>}
-                  </div>
-                </div>
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <div className="cum-val-row">
-                    <AutoFitText className="cum-value" min={13} max={24}>{currentYearPpl.toLocaleString()} 명</AutoFitText>
-                    {prevYearPpl > 0 && <AutoFitText className={`dash-badge ${currentYearPpl >= prevYearPpl ? 'up' : 'down'}`} min={9} max={12}>{currentYearPpl >= prevYearPpl ? '▲' : '▼'} {Math.abs((currentYearPpl-prevYearPpl)/prevYearPpl*100).toFixed(1)}%</AutoFitText>}
-                  </div>
-                </div>
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{currentYearPpl > 0 ? formatCurrency(Math.round(currentYearAmt/currentYearPpl)) : '0원'}</AutoFitText>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <h3>📊 월간 영업 누적 실적 비교 ({summaryViewMode === 'ADMISSION' ? '입장권 발권 기준' : '전체 매출 기준'}, {format(currentMonth, 'MM')}월)</h3>
-          <div className="dash-compare-container">
-            {/* 전년 동월 */}
-            <div className="dash-column prev">
-              <h4>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
-              <div className="cum-cards">
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(prevAmt)}</AutoFitText>
-                </div>
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{prevPpl.toLocaleString()} 명</AutoFitText>
-                </div>
-                <div className="cum-card">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{prevPpl > 0 ? formatCurrency(Math.round(prevAmt/prevPpl)) : '0원'}</AutoFitText>
-                </div>
-              </div>
-            </div>
-
-            {/* 당해 연도 */}
-            <div className="dash-column current">
-              <h4>{format(currentMonth, 'yyyy년 MM월')} (올해)</h4>
-              <div className="cum-cards">
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
-                  <div className="cum-val-row">
-                    <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(currentAmt)}</AutoFitText>
-                    {prevAmt > 0 && <AutoFitText className={`dash-badge ${currentAmt >= prevAmt ? 'up' : 'down'}`} min={9} max={12}>{currentAmt >= prevAmt ? '▲' : '▼'} {Math.abs((currentAmt-prevAmt)/prevAmt*100).toFixed(1)}%</AutoFitText>}
-                  </div>
-                </div>
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
-                  <div className="cum-val-row">
-                    <AutoFitText className="cum-value" min={13} max={24}>{currentPpl.toLocaleString()} 명</AutoFitText>
-                    {prevPpl > 0 && <AutoFitText className={`dash-badge ${currentPpl >= prevPpl ? 'up' : 'down'}`} min={9} max={12}>{currentPpl >= prevPpl ? '▲' : '▼'} {Math.abs((currentPpl-prevPpl)/prevPpl*100).toFixed(1)}%</AutoFitText>}
-                  </div>
-                </div>
-                <div className="cum-card highlight">
-                  <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '발권 평균 객단가' : '종합 1인당 객단가'}</span>
-                  <AutoFitText className="cum-value" min={13} max={24}>{currentPpl > 0 ? formatCurrency(Math.round(currentAmt/currentPpl)) : '0원'}</AutoFitText>
-                </div>
-              </div>
-            </div>
-          </div>
+          {renderPeriodComparison({
+            kicker: 'MONTH TO DATE',
+            title: '월간 영업 누적 실적 비교',
+            currentLabel: format(currentMonth, 'yyyy년 M월'),
+            previousLabel: format(subMonths(currentMonth, 12), 'yyyy년 M월'),
+            currentAmount: currentAmt,
+            previousAmount: prevAmt,
+            currentPeople: currentPpl,
+            previousPeople: prevPpl,
+          })}
 
           <div className="custom-range-selector" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', marginTop: '12px' }}>
             <h3 style={{ margin: 0 }}>🔍 특정 기간 누적 실적 검색</h3>
@@ -800,11 +827,11 @@ const WaterParkSales: React.FC = () => {
                   <h4>{stats.prevStartStr} ~ {stats.prevEndStr} (전년 동기간, {stats.diffDays}일간)</h4>
                   <div className="cum-cards">
                     <div className="cum-card">
-                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장객 매출액' : '종합 총 매출액'}</span>
                       <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(stats.prevAmt)}</AutoFitText>
                     </div>
                     <div className="cum-card">
-                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
+                      <span className="cum-label">총 입장객 (명)</span>
                       <AutoFitText className="cum-value" min={13} max={24}>{stats.prevPpl.toLocaleString()} 명</AutoFitText>
                     </div>
                     <div className="cum-card">
@@ -819,14 +846,14 @@ const WaterParkSales: React.FC = () => {
                   <h4>{customStartDate} ~ {customEndDate} (지정 기간, {stats.diffDays}일간)</h4>
                   <div className="cum-cards">
                     <div className="cum-card highlight">
-                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장 발권 매출액' : '종합 총 매출액'}</span>
+                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '입장객 매출액' : '종합 총 매출액'}</span>
                       <div className="cum-val-row">
                         <AutoFitText className="cum-value" min={13} max={24}>{formatCurrency(stats.currentAmt)}</AutoFitText>
                         {stats.prevAmt > 0 && <AutoFitText className={`dash-badge ${stats.currentAmt >= stats.prevAmt ? 'up' : 'down'}`} min={9} max={12}>{stats.currentAmt >= stats.prevAmt ? '▲' : '▼'} {Math.abs((stats.currentAmt-stats.prevAmt)/stats.prevAmt*100).toFixed(1)}%</AutoFitText>}
                       </div>
                     </div>
                     <div className="cum-card highlight">
-                      <span className="cum-label">{summaryViewMode === 'ADMISSION' ? '총 입장 발권수' : '총 입장객 수'}</span>
+                      <span className="cum-label">총 입장객 (명)</span>
                       <div className="cum-val-row">
                         <AutoFitText className="cum-value" min={13} max={24}>{stats.currentPpl.toLocaleString()} 명</AutoFitText>
                         {stats.prevPpl > 0 && <AutoFitText className={`dash-badge ${stats.currentPpl >= stats.prevPpl ? 'up' : 'down'}`} min={9} max={12}>{stats.currentPpl >= stats.prevPpl ? '▲' : '▼'} {Math.abs((stats.currentPpl-stats.prevPpl)/stats.prevPpl*100).toFixed(1)}%</AutoFitText>}
@@ -845,9 +872,9 @@ const WaterParkSales: React.FC = () => {
 
         <div className="weekly-board-header">
           <div className="weekly-board-title">
-            <span>ROLLING 7 DAYS</span>
+            <span>MONDAY — SUNDAY</span>
             <h2>{format(startDate, 'yyyy년 M월 d일')} — {format(endDate, 'M월 d일')}</h2>
-            <p>최근 7일의 입장권·식음·물품대여 실적과 전년 동기 증감을 비교합니다.</p>
+            <p>월요일부터 일요일까지 입장객·식음·물품대여 실적과 전년 동기를 비교합니다.</p>
           </div>
           <div className="weekly-board-actions">
             <button onClick={() => setCurrentMonth(addDays(currentMonth, -7))} aria-label="이전 7일"><ChevronLeft size={18} /> 이전 7일</button>
@@ -865,8 +892,8 @@ const WaterParkSales: React.FC = () => {
             </em>
           </div>
           <div className="weekly-kpi-card admission">
-            <span>입장권</span>
-            <strong>{weekTotals.admission.quantity.toLocaleString()}건</strong>
+            <span>입장객 (발권 기준)</span>
+            <strong>{weekTotals.admission.quantity.toLocaleString()}명</strong>
             <em>{formatCurrency(weekTotals.admission.amount)}</em>
           </div>
           <div className="weekly-kpi-card food">
@@ -1046,14 +1073,14 @@ const WaterParkSales: React.FC = () => {
                         <div style={{ width: `${totalRev > 0 ? (fbRev/totalRev*100) : 0}%`, background: '#fcd34d' }} title={`상품매출: ${formatCurrency(fbRev)}`}></div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600 }}>
-                        <span style={{ color: '#93c5fd' }}>입장권 {totalRev > 0 ? (ticketRev/totalRev*100).toFixed(0) : 0}%</span>
+                        <span style={{ color: '#93c5fd' }}>입장객 매출 {totalRev > 0 ? (ticketRev/totalRev*100).toFixed(0) : 0}%</span>
                         <span style={{ color: '#fde68a' }}>상품 {totalRev > 0 ? (fbRev/totalRev*100).toFixed(0) : 0}%</span>
                       </div>
                     </div>
 
                     {/* Row 2: Breakdown */}
                     <div className="integrated-card outline">
-                      <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#93c5fd' }}>🎟️ 입장권(발권) 매출</div>
+                      <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '8px', color: '#93c5fd' }}>👥 입장객 매출 (발권 기준)</div>
                       <div style={{ fontSize: '20px', fontWeight: 700 }}>{formatCurrency(ticketRev)}</div>
                       {prevTicketRev > 0 && <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.8 }}>
                         전년 동월 동일 대비 {ticketRev >= prevTicketRev ? '▲' : '▼'} {Math.abs((ticketRev-prevTicketRev)/prevTicketRev*100).toFixed(1)}%
