@@ -32,6 +32,17 @@ type SyncStatusRow = {
 
 const syncRequestMarker = '[CRAWLER_SYNC]'
 const WATERPARK_SYNC_DAYS = 5
+const WATERPARK_TERMINAL_CATEGORIES = [
+  { key: 'admission', code: 'TICKET', label: '입장권' },
+  { key: 'food', code: 'F&B', label: '식음' },
+  { key: 'rental', code: 'RENTAL', label: '물품대여' },
+] as const
+
+type WaterparkCategoryTotals = {
+  admission: { quantity: number; amount: number }
+  food: { quantity: number; amount: number }
+  rental: { quantity: number; amount: number }
+}
 
 type WaterparkModalState = {
   open: boolean
@@ -40,7 +51,7 @@ type WaterparkModalState = {
   message: string
   completedDays: number
   activeDate: string | null
-  entries: Array<{ date: string; quantity: number; amount: number }>
+  entries: Array<{ date: string; categories: WaterparkCategoryTotals }>
 }
 
 const idleState: SyncState = {
@@ -188,6 +199,7 @@ export default function CrawlerSyncButton({
             syncedDate?: string
             totalQty?: number
             totalAmount?: number
+            categories?: WaterparkCategoryTotals
           }
           if (!response.ok) throw new Error(result.error || `${date} 매출을 수집하지 못했습니다.`)
 
@@ -202,8 +214,11 @@ export default function CrawlerSyncButton({
               ...current.entries,
               {
                 date: result.syncedDate || date,
-                quantity: Number(result.totalQty) || 0,
-                amount: Number(result.totalAmount) || 0,
+                categories: result.categories || {
+                  admission: { quantity: 0, amount: 0 },
+                  food: { quantity: 0, amount: 0 },
+                  rental: { quantity: 0, amount: 0 },
+                },
               },
             ],
           }))
@@ -364,10 +379,21 @@ export default function CrawlerSyncButton({
                 <div className="waterpark-sync-terminal-boot">[OK] encrypted connection established</div>
                 {waterparkModal.entries.map((entry) => (
                   <div className="waterpark-sync-terminal-entry" key={entry.date}>
-                    <span>[SYNCED]</span>
-                    <strong>{formatSyncDate(entry.date)}</strong>
-                    <b>{entry.quantity.toLocaleString('ko-KR')}건</b>
-                    <em>{entry.amount.toLocaleString('ko-KR')}원</em>
+                    <div className="waterpark-sync-terminal-date">
+                      <span>[SYNCED]</span>
+                      <strong>{formatSyncDate(entry.date)}</strong>
+                    </div>
+                    {WATERPARK_TERMINAL_CATEGORIES.map((category) => {
+                      const totals = entry.categories[category.key]
+                      return (
+                        <div className={`waterpark-sync-terminal-category ${category.key}`} key={category.key}>
+                          <span>[{category.code}]</span>
+                          <strong>{category.label}</strong>
+                          <b>{totals.quantity.toLocaleString('ko-KR')}건</b>
+                          <em>{totals.amount.toLocaleString('ko-KR')}원</em>
+                        </div>
+                      )
+                    })}
                   </div>
                 ))}
                 {waterparkModal.phase === 'running' && (

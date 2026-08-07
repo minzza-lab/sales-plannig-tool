@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Waterpark-Sync-Protection': 'safe-v4',
+      'X-Waterpark-Sync-Protection': 'safe-v5',
     },
   });
 }
@@ -134,6 +134,27 @@ async function collectDate(date: DateInfo) {
       updated_at: new Date().toISOString(),
       source: 'Cloudflare server sync',
     },
+  };
+}
+
+function getCategoryBreakdown(report: Awaited<ReturnType<typeof collectDate>>) {
+  const rows = report.data.table_data;
+  const summarize = (predicate: (row: (typeof rows)[number]) => boolean) => rows
+    .filter(predicate)
+    .reduce((total, row) => ({
+      quantity: total.quantity + (Number(row.quantity) || 0),
+      amount: total.amount + (Number(row.amount) || 0),
+    }), { quantity: 0, amount: 0 });
+  const normalizedCategory = (row: (typeof rows)[number]) => row.category.replace(/\s/g, '');
+  const foodCategories = new Set(['푸드게이트', '나로', '아폴로', '트레일러1', '트레일러2', '트레일러3']);
+
+  return {
+    admission: summarize((row) => (
+      (normalizedCategory(row) === '매표소' || normalizedCategory(row) === '입장권')
+      && !row.name.includes('추가요금')
+    )),
+    food: summarize((row) => foodCategories.has(normalizedCategory(row))),
+    rental: summarize((row) => normalizedCategory(row) === '물품대여'),
   };
 }
 
@@ -286,6 +307,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       : allowedDates[0];
     if (!date) return jsonResponse({ error: `최근 ${RECENT_DAYS}일 이내의 날짜만 동기화할 수 있습니다.` }, 400);
     const report = await collectDate(date);
+    const categories = getCategoryBreakdown(report);
 
     const saveResponse = await fetchWithTimeout(`${supabaseUrl}/rest/v1/daily_reports?on_conflict=report_date,report_type`, {
       method: 'POST',
@@ -311,6 +333,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       syncedDate: date.dbDate,
       totalQty: report.data.summary.totalQty,
       totalAmount: report.data.summary.totalAmount,
+      categories,
       message: `${date.dbDate} 매출 동기화가 완료되었습니다.`,
       finishedAt: new Date().toISOString(),
     });

@@ -245,23 +245,41 @@
 }
 
 .waterpark-sync-terminal-entry {
-  display: grid;
-  grid-template-columns: 58px 1fr auto auto;
-  gap: 10px;
-  align-items: center;
   margin-top: 9px;
-  padding: 9px 10px;
+  padding: 9px 10px 10px;
   border-left: 2px solid #2dd4bf;
   background: linear-gradient(90deg, rgba(20, 184, 166, .12), transparent);
   color: #c8fff4;
-  font-size: 11px;
   animation: waterpark-terminal-line .38s ease-out both;
 }
 
-.waterpark-sync-terminal-entry span { color: #34d399; font-size: 8px; font-weight: 900; }
-.waterpark-sync-terminal-entry strong { color: #e6fffb; font-weight: 800; }
-.waterpark-sync-terminal-entry b { color: #67e8f9; font-weight: 700; }
-.waterpark-sync-terminal-entry em { color: #5eead4; font-style: normal; font-weight: 800; text-align: right; }
+.waterpark-sync-terminal-date {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed rgba(45, 212, 191, .15);
+}
+
+.waterpark-sync-terminal-date span { color: #34d399; font-size: 8px; font-weight: 900; }
+.waterpark-sync-terminal-date strong { color: #e6fffb; font-size: 11px; font-weight: 800; }
+
+.waterpark-sync-terminal-category {
+  display: grid;
+  grid-template-columns: 58px 70px 1fr 1.45fr;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  color: #c8fff4;
+  font-size: 10px;
+}
+
+.waterpark-sync-terminal-category span { color: #7dd3fc; font-size: 8px; font-weight: 900; }
+.waterpark-sync-terminal-category strong { color: #d7fff7; font-weight: 800; }
+.waterpark-sync-terminal-category b { color: #67e8f9; font-weight: 700; text-align: right; }
+.waterpark-sync-terminal-category em { color: #5eead4; font-style: normal; font-weight: 800; text-align: right; }
+.waterpark-sync-terminal-category.food span { color: #fbbf24; }
+.waterpark-sync-terminal-category.rental span { color: #c4b5fd; }
 
 .waterpark-sync-terminal-scanning {
   display: flex;
@@ -287,8 +305,8 @@
 @media (max-width: 560px) {
   .waterpark-sync-modal { padding: 23px 20px; border-radius: 18px; }
   .waterpark-sync-modal-heading h2 { font-size: 20px; }
-  .waterpark-sync-terminal-entry { grid-template-columns: 54px 1fr auto; gap: 7px; }
-  .waterpark-sync-terminal-entry em { grid-column: 2 / 4; }
+  .waterpark-sync-terminal-category { grid-template-columns: 54px 60px 1fr; gap: 6px; }
+  .waterpark-sync-terminal-category em { grid-column: 2 / 4; }
 }
 
 @media (prefers-reduced-motion: reduce) {
