@@ -1517,6 +1517,55 @@ const WaterParkSales: React.FC = () => {
 
               return (
               <div className="report-panel">
+                <section className="source-report-compact">
+                  <div className="source-report-compact-head">
+                    <div>
+                      <span>SELECTED REPORT</span>
+                      <h3>{activeReport.title}</h3>
+                    </div>
+                    <div className="source-report-dates">
+                      <span><small>올해</small>{format(selectedDate, 'yyyy.MM.dd')}</span>
+                      <i>VS</i>
+                      <span><small>전년</small>{format(subMonths(selectedDate, 12), 'yyyy.MM.dd')}</span>
+                    </div>
+                  </div>
+                  <div className="source-report-compact-grid">
+                    <article>
+                      <div className="source-report-metric-label">
+                        <DollarSign size={17} />
+                        <span>{activeReport.summary.label || '총 매출'}</span>
+                      </div>
+                      <div className="source-report-current">
+                        <small>올해</small>
+                        <AutoFitText as="div" min={18} max={27}>{formatCurrency(activeReport.summary.totalAmount)}</AutoFitText>
+                      </div>
+                      <div className="source-report-previous">
+                        <small>전년</small>
+                        <b>{hasPrevData ? formatCurrency(prevYearReport.summary.totalAmount) : '데이터 없음'}</b>
+                      </div>
+                      <em className={growthAmt >= 0 ? 'up' : 'down'}>
+                        {hasPrevData ? `${growthAmt >= 0 ? '▲' : '▼'} ${Math.abs(Number(growthAmtPct))}%` : '비교 없음'}
+                      </em>
+                    </article>
+                    <article>
+                      <div className="source-report-metric-label">
+                        <Users size={17} />
+                        <span>{activeReport.summary.qtyLabel || '총 수량'}</span>
+                      </div>
+                      <div className="source-report-current">
+                        <small>올해</small>
+                        <AutoFitText as="div" min={18} max={27}>{activeReport.summary.totalQty.toLocaleString()}건</AutoFitText>
+                      </div>
+                      <div className="source-report-previous">
+                        <small>전년</small>
+                        <b>{hasPrevData ? `${prevYearReport.summary.totalQty.toLocaleString()}건` : '데이터 없음'}</b>
+                      </div>
+                      <em className={growthQty >= 0 ? 'up' : 'down'}>
+                        {hasPrevData ? `${growthQty >= 0 ? '▲' : '▼'} ${Math.abs(Number(growthQtyPct))}%` : '비교 없음'}
+                      </em>
+                    </article>
+                  </div>
+                </section>
                 
                 {hasPrevData ? (
                   <div className="dash-compare-container detail-theme">
