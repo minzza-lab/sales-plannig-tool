@@ -13,6 +13,7 @@ const FieldSketchWriter = lazy(() => import('./components/FieldSketchWriter'))
 const ManualTips = lazy(() => import('./components/ManualTips'))
 const AutomationRequest = lazy(() => import('./components/AutomationRequest'))
 const WaterParkSales = lazy(() => import('./components/WaterParkSales'))
+const NicepaySettlement = lazy(() => import('./components/NicepaySettlement'))
 const Login = lazy(() => import('./components/Auth/Login'))
 const Approvals = lazy(() => import('./components/Approvals'))
 const ProductProposals = lazy(() => import('./components/ProductProposals'))
@@ -68,6 +69,7 @@ function App() {
               <Route path="/" element={<MainLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
+                <Route path="tools/nicepay-settlement" element={<NicepaySettlement />} />
                 <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
                 <Route path="tools/url-shortener" element={<URLShortener />} />
                 <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />
