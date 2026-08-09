@@ -35,11 +35,41 @@ type ReconciliationRow = {
   mid5Amount: number;
   niceAmount: number;
   difference: number;
+  matchedAmount: number;
+  matchedCount: number;
+  expectedCount: number;
+  unmatchedMids: CalendarMid[];
   status: "정상" | "확인필요";
 };
 
 type CalendarMid = "1m" | "4m" | "5m";
 type CalendarAmounts = Record<CalendarMid, Record<string, number>>;
+
+type BankMeta = {
+  title: string;
+  accountNumber: string;
+  accountType: string;
+  balance: number;
+  availableBalance: number;
+  period: string;
+};
+
+type DepositMatch = {
+  row: RawRow;
+  date: string;
+  amount: number;
+  matchedMid?: CalendarMid;
+};
+
+type DepositProgress = {
+  open: boolean;
+  title: string;
+  description: string;
+  phase: "reading" | "scanning" | "matching" | "sheets" | "saving" | "done";
+  progress: number;
+  currentSheet: number;
+  totalSheets: number;
+};
 
 type ClassifiedRow = RawRow & {
   __date: string;
@@ -76,6 +106,8 @@ const DEFAULT_MAPPINGS: MappingRule[] = [
 
 const createItems = () =>
   Array.from({ length: 6 }, () => ({ target: "", price: 0 }));
+const pause = (milliseconds: number) =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 const formatWon = (value: number) => `${Math.round(value).toLocaleString()}원`;
 const normalizeHeader = (value: unknown) =>
   String(value ?? "")
@@ -121,7 +153,7 @@ const normalizeDate = (value: unknown) => {
   }
   const text = String(value ?? "").trim();
   const match = text.match(
-    /(20\d{2})[^0-9]?(0?[1-9]|1[0-2])[^0-9]?(0?[1-9]|[12]\d|3[01])/,
+    /(20\d{2})[^0-9]?(1[0-2]|0?[1-9])[^0-9]?([12]\d|3[01]|0?[1-9])(?!\d)/,
   );
   if (!match) return "";
   return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
@@ -138,15 +170,7 @@ const classifyProduct = (productName: string, mappings: MappingRule[]) => {
   );
 };
 
-const readWorkbook = async (file: File): Promise<RawRow[]> => {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: "",
-    raw: true,
-  });
+const findHeaderIndex = (matrix: unknown[][]) => {
   const headerKeywords = [
     "mid",
     "정산일",
@@ -171,11 +195,15 @@ const readWorkbook = async (file: File): Promise<RawRow[]> => {
       bestScore = score;
     }
   });
-  const headers = matrix[bestIndex].map((value, index) =>
+  return bestIndex;
+};
+
+const matrixToRows = (matrix: unknown[][], headerIndex: number) => {
+  const headers = matrix[headerIndex].map((value, index) =>
     String(value || `열${index + 1}`).trim(),
   );
   return matrix
-    .slice(bestIndex + 1)
+    .slice(headerIndex + 1)
     .filter((row) => row.some((value) => value !== "" && value != null))
     .map((row) => {
       const record: RawRow = {};
@@ -184,6 +212,146 @@ const readWorkbook = async (file: File): Promise<RawRow[]> => {
       });
       return record;
     });
+};
+
+const readWorkbookMatrix = async (file: File) => {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: "",
+    raw: true,
+  });
+};
+
+const readWorkbook = async (file: File): Promise<RawRow[]> => {
+  const matrix = await readWorkbookMatrix(file);
+  return matrixToRows(matrix, findHeaderIndex(matrix));
+};
+
+const matrixValueAfterLabel = (matrix: unknown[][], label: string) => {
+  const target = normalizeHeader(label);
+  for (const row of matrix.slice(0, 10)) {
+    const index = row.findIndex((value) => normalizeHeader(value) === target);
+    if (index >= 0) {
+      for (let cursor = index + 1; cursor < row.length; cursor += 1) {
+        if (row[cursor] !== "" && row[cursor] != null) return row[cursor];
+      }
+    }
+  }
+  return "";
+};
+
+const readBankWorkbook = async (file: File) => {
+  const matrix = await readWorkbookMatrix(file);
+  const headerIndex = findHeaderIndex(matrix);
+  return {
+    rows: matrixToRows(matrix, headerIndex),
+    meta: {
+      title: String(matrix[0]?.find((value) => String(value).trim()) || "예금계좌조회"),
+      accountNumber: String(matrixValueAfterLabel(matrix, "계좌번호")),
+      accountType: String(matrixValueAfterLabel(matrix, "예금종류")),
+      balance: parseMoney(matrixValueAfterLabel(matrix, "현재잔액")),
+      availableBalance: parseMoney(matrixValueAfterLabel(matrix, "인출가능금액")),
+      period: String(matrixValueAfterLabel(matrix, "조회기간")),
+    } satisfies BankMeta,
+  };
+};
+
+const getDepositDate = (row: RawRow) =>
+  normalizeDate(
+    getValue(row, ["입금일", "거래일자", "거래일", "일자", "거래일시"]),
+  );
+
+const getDepositAmount = (row: RawRow) =>
+  parseMoney(getValue(row, ["입금액", "입금금액", "거래금액", "금액"]));
+
+const isNiceDeposit = (row: RawRow) =>
+  /나이스정보통신/i.test(
+    String(getValue(row, ["적요", "내용", "거래내용", "입금자명", "보낸분"])),
+  );
+
+const buildDepositMatches = (
+  rows: RawRow[],
+  amounts: CalendarAmounts,
+  month: string,
+) => {
+  const niceRows = rows
+    .filter(isNiceDeposit)
+    .map((row) => ({ row, date: getDepositDate(row), amount: getDepositAmount(row) }))
+    .filter((item) => item.date.startsWith(month) && item.amount > 0);
+  const dates = Array.from(
+    new Set([
+      ...niceRows.map((item) => item.date),
+      ...(["1m", "4m", "5m"] as CalendarMid[]).flatMap((mid) =>
+        Object.keys(amounts[mid]).filter((date) => date.startsWith(month)),
+      ),
+    ]),
+  ).sort();
+
+  const matchesByDate: Record<string, DepositMatch[]> = {};
+  const reconciliation = dates.map((date): ReconciliationRow => {
+    const matches: DepositMatch[] = niceRows
+      .filter((item) => item.date === date)
+      .map((item) => ({ ...item }));
+    const expected = (["1m", "4m", "5m"] as CalendarMid[])
+      .map((mid) => ({ mid, amount: parseMoney(amounts[mid][date]) }))
+      .filter((item) => item.amount > 0);
+    const unmatchedMids: CalendarMid[] = [];
+    expected.forEach(({ mid, amount }) => {
+      const target = matches.find(
+        (item) => item.matchedMid === undefined && item.amount === amount,
+      );
+      if (target) target.matchedMid = mid;
+      else unmatchedMids.push(mid);
+    });
+    matchesByDate[date] = matches;
+    const bankAmount = matches.reduce((sum, item) => sum + item.amount, 0);
+    const mid1Amount = parseMoney(amounts["1m"][date]);
+    const mid4Amount = parseMoney(amounts["4m"][date]);
+    const mid5Amount = parseMoney(amounts["5m"][date]);
+    const niceAmount = mid1Amount + mid4Amount + mid5Amount;
+    const matchedAmount = matches
+      .filter((item) => item.matchedMid)
+      .reduce((sum, item) => sum + item.amount, 0);
+    return {
+      date,
+      bankAmount,
+      mid1Amount,
+      mid4Amount,
+      mid5Amount,
+      niceAmount,
+      difference: bankAmount - niceAmount,
+      matchedAmount,
+      matchedCount: matches.filter((item) => item.matchedMid).length,
+      expectedCount: expected.length,
+      unmatchedMids,
+      status: unmatchedMids.length === 0 ? "정상" : "확인필요",
+    };
+  });
+  return { reconciliation, matchesByDate, niceRows };
+};
+
+const normalizeCalendarAmounts = (
+  parsed: Partial<Record<CalendarMid, Record<string, unknown>>>,
+  month: string,
+): CalendarAmounts => {
+  const result: CalendarAmounts = { "1m": {}, "4m": {}, "5m": {} };
+  (["1m", "4m", "5m"] as CalendarMid[]).forEach((mid) => {
+    Object.entries(parsed[mid] || {}).forEach(([rawDate, rawAmount]) => {
+      const compact = rawDate.trim();
+      let date = normalizeDate(compact);
+      if (!date && /^\d{1,2}$/.test(compact))
+        date = `${month}-${compact.padStart(2, "0")}`;
+      if (!date && /^\d{1,2}[-/.]\d{1,2}$/.test(compact)) {
+        const [monthPart, dayPart] = compact.split(/[-/.]/);
+        date = `${month.slice(0, 4)}-${monthPart.padStart(2, "0")}-${dayPart.padStart(2, "0")}`;
+      }
+      if (date.startsWith(month)) result[mid][date] = parseMoney(rawAmount);
+    });
+  });
+  return result;
 };
 
 const downloadWorkbook = async (
@@ -231,6 +399,202 @@ const styleWorksheet = (
       cell.alignment = { vertical: "middle" };
     });
   });
+};
+
+const REFERENCE_BORDER = {
+  top: { style: "thin" as const, color: { argb: "FF000000" } },
+  left: { style: "thin" as const, color: { argb: "FF000000" } },
+  bottom: { style: "thin" as const, color: { argb: "FF000000" } },
+  right: { style: "thin" as const, color: { argb: "FF000000" } },
+};
+
+const setupReferenceSheet = (
+  sheet: import("exceljs").Worksheet,
+  meta: BankMeta,
+) => {
+  sheet.views = [{ style: "pageBreakPreview", zoomScale: 85, zoomScaleNormal: 100 }];
+  sheet.properties.defaultRowHeight = 50.1;
+  Array.from({ length: 9 }, () => 14.875).forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
+  sheet.mergeCells("A1:D1");
+  sheet.getCell("A1").value = meta.title || "예금계좌조회";
+  sheet.getCell("A1").font = { name: "Arial", size: 11, bold: true };
+  sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+  [1, 2, 3, 4].forEach((rowNumber) => {
+    sheet.getRow(rowNumber).height = 16.5;
+  });
+
+  sheet.mergeCells("B3:C3");
+  sheet.mergeCells("E3:F3");
+  sheet.mergeCells("H3:I3");
+  sheet.mergeCells("B4:C4");
+  sheet.mergeCells("E4:F4");
+  sheet.getCell("A3").value = "계좌번호";
+  sheet.getCell("B3").value = meta.accountNumber;
+  sheet.getCell("D3").value = "예금종류";
+  sheet.getCell("E3").value = meta.accountType;
+  sheet.getCell("G3").value = "조회기간";
+  sheet.getCell("H3").value = meta.period;
+  sheet.getCell("A4").value = "현재잔액";
+  sheet.getCell("B4").value = meta.balance;
+  sheet.getCell("D4").value = "인출가능금액";
+  sheet.getCell("E4").value = meta.availableBalance;
+  [3, 4].forEach((rowNumber) => {
+    const row = sheet.getRow(rowNumber);
+    row.eachCell({ includeEmpty: true }, (cell, column) => {
+      if (column > 9) return;
+      cell.border = REFERENCE_BORDER;
+      cell.alignment = { vertical: "middle" };
+    });
+  });
+  ["A3", "D3", "G3", "A4", "D4"].forEach((address) => {
+    const cell = sheet.getCell(address);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFBFBF" } };
+    cell.font = { name: "Arial", size: 10, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+  ["B4", "E4"].forEach((address) => {
+    sheet.getCell(address).numFmt = "#,##0";
+    sheet.getCell(address).alignment = { horizontal: "right", vertical: "middle" };
+  });
+};
+
+const addBankTable = (
+  sheet: import("exceljs").Worksheet,
+  rows: DepositMatch[],
+  headers: string[],
+  expectedTotal: number,
+  options: { highlightMatched?: boolean; sumAll?: boolean } = {},
+) => {
+  const { highlightMatched = true, sumAll = false } = options;
+  sheet.getRow(5).height = 50.1;
+  const headerRow = sheet.getRow(6);
+  headerRow.values = headers;
+  headerRow.height = 50.1;
+  headerRow.eachCell({ includeEmpty: true }, (cell, column) => {
+    if (column > 8) return;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFBFBF" } };
+    cell.font = { name: "맑은 고딕", size: 11, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = REFERENCE_BORDER;
+  });
+
+  rows.forEach((item, index) => {
+    const rowNumber = 7 + index;
+    const excelRow = sheet.getRow(rowNumber);
+    excelRow.values = headers.map((header) => item.row[header] as never);
+    excelRow.height = 50.1;
+    excelRow.eachCell({ includeEmpty: true }, (cell, column) => {
+      if (column > 8) return;
+      cell.font = { name: "맑은 고딕", size: 11 };
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: column === 4 || column === 5 || column === 6 ? "right" : "left",
+      };
+      cell.border = REFERENCE_BORDER;
+    });
+    [4, 5, 6].forEach((column) => {
+      excelRow.getCell(column).numFmt = "#,##0";
+    });
+    if (highlightMatched && item.matchedMid) {
+      excelRow.getCell(4).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFFF00" },
+      };
+    }
+  });
+
+  const totalRowNumber = Math.max(12, 7 + rows.length);
+  for (let rowNumber = 7 + rows.length; rowNumber < totalRowNumber; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    row.height = 50.1;
+    for (let column = 1; column <= 8; column += 1)
+      row.getCell(column).border = REFERENCE_BORDER;
+  }
+  const totalRow = sheet.getRow(totalRowNumber);
+  totalRow.height = 50.1;
+  for (let column = 1; column <= 8; column += 1)
+    totalRow.getCell(column).border = REFERENCE_BORDER;
+  const matchedCells = rows
+    .map((item, index) => (sumAll || item.matchedMid ? `D${7 + index}` : ""))
+    .filter(Boolean);
+  const totalFormula = sumAll && rows.length
+    ? `SUM(D7:D${6 + rows.length})`
+    : matchedCells.length
+      ? `SUM(${matchedCells.join(",")})`
+      : "0";
+  totalRow.getCell(3).value = "합계";
+  totalRow.getCell(4).value = {
+    formula: totalFormula,
+    result: expectedTotal,
+  };
+  [3, 4].forEach((column) => {
+    const cell = totalRow.getCell(column);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+    cell.font = { name: "맑은 고딕", size: 11, bold: true };
+    cell.alignment = { horizontal: column === 3 ? "center" : "right", vertical: "middle" };
+  });
+  totalRow.getCell(4).numFmt = "#,##0";
+  sheet.pageSetup = {
+    paperSize: 9,
+    orientation: "portrait",
+    scale: 60,
+    margins: {
+      left: 0.7086614173228347,
+      right: 0.7086614173228347,
+      top: 0.7480314960629921,
+      bottom: 0.7480314960629921,
+      header: 0.31496062992125984,
+      footer: 0.31496062992125984,
+    },
+  };
+};
+
+const addLedgerTable = (
+  sheet: import("exceljs").Worksheet,
+  rows: DepositMatch[],
+  headers: string[],
+) => {
+  sheet.views = [{ zoomScale: 70, zoomScaleNormal: 70 }];
+  sheet.properties.defaultRowHeight = 16.5;
+  [11.125, 8.43, 15.125, 11.375, 6.375, 14.25, 8, 14.75, 8.43].forEach(
+    (width, index) => {
+      sheet.getColumn(index + 1).width = width;
+    },
+  );
+  for (let rowNumber = 1; rowNumber <= 6 + rows.length; rowNumber += 1)
+    sheet.getRow(rowNumber).height = 16.5;
+
+  const headerRow = sheet.getRow(6);
+  headerRow.values = headers;
+  headerRow.eachCell({ includeEmpty: true }, (cell, column) => {
+    if (column > 8) return;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFBFBF" } };
+    cell.font = { name: "맑은 고딕", size: 11, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = REFERENCE_BORDER;
+  });
+  rows.forEach((item, index) => {
+    const row = sheet.getRow(7 + index);
+    row.values = headers.map((header) => item.row[header] as never);
+    row.eachCell({ includeEmpty: true }, (cell, column) => {
+      if (column > 8) return;
+      cell.font = { name: "맑은 고딕", size: 11 };
+      cell.alignment = { vertical: "middle" };
+      cell.border = REFERENCE_BORDER;
+    });
+    [4, 5, 6].forEach((column) => {
+      row.getCell(column).numFmt = "###,##0";
+      row.getCell(column).alignment = { horizontal: "right", vertical: "middle" };
+    });
+  });
+  sheet.pageSetup = {
+    paperSize: 9,
+    orientation: "portrait",
+    margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+  };
 };
 
 const UploadBox = ({
@@ -300,6 +664,15 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
   const [newResult, setNewResult] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState("");
+  const [depositProgress, setDepositProgress] = useState<DepositProgress>({
+    open: false,
+    title: "입금 내역 자동분류",
+    description: "파일을 준비하고 있습니다.",
+    phase: "reading",
+    progress: 0,
+    currentSheet: 0,
+    totalSheets: 0,
+  });
 
   const [bankFile, setBankFile] = useState<File>();
   const [depositMonth, setDepositMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -307,6 +680,15 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
   const [, setCalendarAmounts] = useState<CalendarAmounts>({ "1m": {}, "4m": {}, "5m": {} });
   const [reconciliation, setReconciliation] = useState<ReconciliationRow[]>([]);
   const [bankSource, setBankSource] = useState<RawRow[]>([]);
+  const [bankMeta, setBankMeta] = useState<BankMeta>({
+    title: "예금계좌조회",
+    accountNumber: "",
+    accountType: "",
+    balance: 0,
+    availableBalance: 0,
+    period: "",
+  });
+  const [depositMatches, setDepositMatches] = useState<Record<string, DepositMatch[]>>({});
 
   const [settlementFile, setSettlementFile] = useState<File>();
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([]);
@@ -354,6 +736,20 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     });
   }, [categories]);
 
+  const handleBankFileSelected = async (file: File) => {
+    setBankFile(file);
+    setReconciliation([]);
+    setDepositMatches({});
+    try {
+      const { meta } = await readBankWorkbook(file);
+      const detectedDate = normalizeDate(meta.period);
+      if (detectedDate) setDepositMonth(detectedDate.slice(0, 7));
+      setMessage(detectedDate ? `${detectedDate.slice(0, 7)} 조회 파일로 확인했습니다.` : "은행 파일을 선택했습니다. 검증 대상 월을 확인해 주세요.");
+    } catch {
+      setMessage("은행 파일을 미리 확인하지 못했습니다. 실행 시 다시 읽습니다.");
+    }
+  };
+
   const filterNiceRows = (rows: RawRow[]) =>
     rows.filter((row) => {
       const mid = String(getValue(row, ["MID"])).trim();
@@ -366,57 +762,72 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
       return setMessage("빠른계좌조회 엑셀과 1m·4m·5m 정산달력 이미지 3장을 모두 선택해 주세요.");
     setIsProcessing(true);
     setMessage("");
+    setDepositProgress({
+      open: true,
+      title: "입금 내역을 분류하고 있습니다",
+      description: "은행 원자료의 거래일자와 입금액을 읽는 중입니다.",
+      phase: "reading",
+      progress: 8,
+      currentSheet: 0,
+      totalSheets: 0,
+    });
     try {
-      const bankRows = await readWorkbook(bankFile);
+      const { rows: bankRows, meta } = await readBankWorkbook(bankFile);
+      setDepositProgress((previous) => ({
+        ...previous,
+        description: `${bankRows.length.toLocaleString()}개 은행 거래를 읽었습니다. 정산달력 이미지를 준비합니다.`,
+        progress: 22,
+      }));
       const imageParts = await Promise.all(requiredMids.map(async (mid) => ({ mid, data: await fileToBase64(calendarImages[mid]!) })));
-      const prompt = `${depositMonth} 나이스페이 정산달력 스크린샷 3장에서 날짜별 입금금액을 정확히 추출해 주세요. 각 이미지 앞의 MID 라벨을 반드시 지키고, 입금액이 표시되지 않은 날짜는 제외하세요. 응답은 설명 없이 JSON만 반환하세요. 형식: {"1m":{"2026-07-01":12345},"4m":{},"5m":{}}`;
+      const prompt = `${depositMonth} 나이스페이 정산달력 스크린샷 3장에서 날짜별 입금금액을 정확히 추출해 주세요. 각 이미지 앞의 MID 라벨을 반드시 지키세요. 달력 칸의 날짜와 오른쪽 아래 검정색 입금 확정 금액을 읽고, 초록색 예정 금액은 사용하지 마세요. 공휴일·주말처럼 금액이 없는 날짜는 제외하되 0이 명시된 날짜는 0으로 포함하세요. 천 단위 쉼표를 제거한 정수로 반환하고 모든 날짜는 YYYY-MM-DD 형식이어야 합니다. 응답은 설명 없이 JSON만 반환하세요. 형식: {"1m":{"2026-07-01":12345},"4m":{},"5m":{}}`;
       const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [{ text: prompt }];
       imageParts.forEach(({ mid, data }) => {
         parts.push({ text: `다음 이미지는 ${mid} 정산달력입니다.` });
         parts.push({ inlineData: { data, mimeType: calendarImages[mid]!.type || "image/png" } });
       });
+      setDepositProgress((previous) => ({
+        ...previous,
+        phase: "scanning",
+        description: "1m · 4m · 5m 정산달력의 날짜별 확정 금액을 판독하고 있습니다.",
+        progress: 38,
+      }));
       const response = await callGeminiWithFallback(parts, ["gemini-2.5-flash", "gemini-2.5-pro"], { responseMimeType: "application/json", temperature: 0 });
-      const parsed = JSON.parse(response.replace(/```json|```/g, "").trim()) as Partial<CalendarAmounts>;
-      const extracted: CalendarAmounts = { "1m": parsed["1m"] || {}, "4m": parsed["4m"] || {}, "5m": parsed["5m"] || {} };
-      const bankDaily: Record<string, number> = {};
-      bankRows.forEach((row) => {
-        const memo = String(
-          getValue(row, ["적요", "내용", "거래내용", "입금자명", "보낸분"]),
-        );
-        if (!/나이스정보통신/i.test(memo)) return;
-        const date = normalizeDate(
-          getValue(row, ["입금일", "거래일자", "거래일", "일자", "거래일시"]),
-        );
-        const amount = parseMoney(
-          getValue(row, ["입금액", "입금금액", "거래금액", "금액"]),
-        );
-        if (date.startsWith(depositMonth) && amount > 0)
-          bankDaily[date] = (bankDaily[date] || 0) + amount;
-      });
-      const dates = Object.keys(bankDaily).sort();
-      const result = dates.map((date) => {
-        const mid1Amount = parseMoney(extracted["1m"][date]);
-        const mid4Amount = parseMoney(extracted["4m"][date]);
-        const mid5Amount = parseMoney(extracted["5m"][date]);
-        const niceAmount = mid1Amount + mid4Amount + mid5Amount;
-        const difference = bankDaily[date] - niceAmount;
-        return {
-          date,
-          bankAmount: bankDaily[date], mid1Amount, mid4Amount, mid5Amount, niceAmount,
-          difference,
-          status: difference >= 0 ? ("정상" as const) : ("확인필요" as const),
-        };
-      });
+      const parsed = JSON.parse(response.replace(/```json|```/g, "").trim()) as Partial<Record<CalendarMid, Record<string, unknown>>>;
+      const extracted = normalizeCalendarAmounts(parsed, depositMonth);
+      if ((["1m", "4m", "5m"] as CalendarMid[]).some((mid) => Object.keys(extracted[mid]).length === 0))
+        throw new Error("정산달력 중 날짜별 금액을 읽지 못한 이미지가 있습니다. 이미지 전체가 보이도록 다시 올려 주세요.");
+      setDepositProgress((previous) => ({
+        ...previous,
+        phase: "matching",
+        description: "날짜와 금액을 기준으로 은행 입금 행을 1대1 대조하고 있습니다.",
+        progress: 72,
+      }));
+      const result = buildDepositMatches(bankRows, extracted, depositMonth);
+      if (result.niceRows.length === 0)
+        throw new Error(`${depositMonth} 적요가 '나이스정보통신'인 입금 내역이 없습니다.`);
       setBankSource(bankRows);
+      setBankMeta(meta);
       setCalendarAmounts(extracted);
-      setReconciliation(result);
-      setMessage(`${depositMonth} 나이스정보통신 입금일 ${result.length}개를 분리했습니다. 주말 등 입금이 없는 날짜는 시트를 만들지 않습니다.`);
+      setDepositMatches(result.matchesByDate);
+      setReconciliation(result.reconciliation);
+      const unmatched = result.reconciliation.filter((row) => row.status === "확인필요").length;
+      setDepositProgress((previous) => ({
+        ...previous,
+        phase: "done",
+        description: `${result.reconciliation.length}일 · ${result.niceRows.length.toLocaleString()}건 분류가 완료되었습니다.`,
+        progress: 100,
+        currentSheet: result.reconciliation.length,
+        totalSheets: result.reconciliation.length,
+      }));
+      setMessage(`${depositMonth} 나이스정보통신 입금 ${result.niceRows.length.toLocaleString()}건을 ${result.reconciliation.length}개 날짜로 분리했습니다.${unmatched ? ` 금액 확인이 필요한 날짜가 ${unmatched}개 있습니다.` : " 이미지 금액이 모두 정확히 매칭됐습니다."}`);
+      await pause(850);
     } catch (error) {
       setMessage(
         `파일 처리 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`,
       );
     } finally {
       setIsProcessing(false);
+      setDepositProgress((previous) => ({ ...previous, open: false }));
     }
   };
 
@@ -547,73 +958,88 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     }
   };
 
-  const exportReconciliation = () =>
-    downloadWorkbook(
-      `입금내역_${new Date().toISOString().slice(0, 10)}.xlsx`,
-      (workbook) => {
-        const summary = workbook.addWorksheet("입금대사");
-        summary.addRow([
-          "입금일",
-          "나이스정보통신 총입금",
-          "1m",
-          "4m",
-          "5m",
-          "1m+4m+5m",
-          "기타 MID",
-          "검증",
-        ]);
-        reconciliation.forEach((row) =>
-          summary.addRow([
-            row.date,
-            row.bankAmount,
-            row.mid1Amount,
-            row.mid4Amount,
-            row.mid5Amount,
-            row.niceAmount,
-            row.difference,
-            row.status,
-          ]),
-        );
-        [2, 3, 4, 5, 6, 7].forEach((column) => {
-          summary.getColumn(column).numFmt = "#,##0;[Red](#,##0);-";
-        });
-        styleWorksheet(summary, [14, 21, 15, 15, 15, 18, 18, 12]);
-        summary.eachRow((row, index) => {
-          if (index > 1 && row.getCell(8).value === "확인필요")
-            row.getCell(8).font = { bold: true, color: { argb: "FFDC2626" } };
-        });
-        const sourceSheet = workbook.addWorksheet("은행입금원본");
-        const bankHeaders = Array.from(
-          new Set(bankSource.flatMap(Object.keys)),
-        );
-        sourceSheet.addRow(bankHeaders);
-        bankSource.forEach((row) =>
-          sourceSheet.addRow(bankHeaders.map((header) => row[header] as never)),
-        );
-        styleWorksheet(
-          sourceSheet,
-          bankHeaders.map(() => 18),
-        );
-        reconciliation.forEach((result) => {
-          const dateRows = bankSource.filter((row) => {
-            const memo = String(getValue(row, ["적요", "내용", "거래내용", "입금자명", "보낸분"]));
-            const date = normalizeDate(getValue(row, ["입금일", "거래일자", "거래일", "일자", "거래일시"]));
-            return date === result.date && /나이스정보통신/i.test(memo);
-          });
-          const dateSheet = workbook.addWorksheet(result.date.slice(5));
-          dateSheet.addRow(["입금일", "총입금", "1m", "4m", "5m", "선택 MID 합계", "기타 MID"]);
-          dateSheet.addRow([result.date, result.bankAmount, result.mid1Amount, result.mid4Amount, result.mid5Amount, result.niceAmount, result.difference]);
-          dateSheet.addRow([]);
-          const headers = Array.from(new Set(dateRows.flatMap(Object.keys)));
-          dateSheet.addRow(headers);
-          dateRows.forEach((row) => dateSheet.addRow(headers.map((header) => row[header] as never)));
-          [2, 3, 4, 5, 6, 7].forEach((column) => { dateSheet.getColumn(column).numFmt = "#,##0;[Red](#,##0);-"; });
-          dateSheet.getRow(1).eachCell((cell) => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } }; cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; });
-          dateSheet.getRow(4).eachCell((cell) => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } }; cell.font = { bold: true }; });
-          dateSheet.columns.forEach((column) => { column.width = 18; });
-        });
-      },
-    );
+  const exportReconciliation = async () => {
+    setIsProcessing(true);
+    const totalSheets = reconciliation.length + 2;
+    setDepositProgress({
+      open: true,
+      title: "기존 양식으로 엑셀을 만들고 있습니다",
+      description: "기준 시트의 셀 크기·폰트·테두리를 적용하고 있습니다.",
+      phase: "sheets",
+      progress: 5,
+      currentSheet: 0,
+      totalSheets,
+    });
+    try {
+      await downloadWorkbook(
+        `${Number(depositMonth.slice(5))}월_입금내역_자동완성_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.xlsx`,
+        async (workbook) => {
+        const bankHeaders = bankSource[0]
+          ? Object.keys(bankSource[0]).slice(0, 8)
+          : ["거래일자", "구분", "적요", "입금액", "출금액", "잔액", "거래시간", "거래점"];
+
+        const baseSheet = workbook.addWorksheet("기준");
+        setupReferenceSheet(baseSheet, bankMeta);
+        addBankTable(baseSheet, [], bankHeaders, 0);
+        setDepositProgress((previous) => ({
+          ...previous,
+          description: "기준 시트를 완성했습니다. 날짜별 시트를 생성합니다.",
+          progress: 10,
+          currentSheet: 1,
+        }));
+        await pause(60);
+
+        for (let index = 0; index < reconciliation.length; index += 1) {
+          const result = reconciliation[index];
+          const dateSheet = workbook.addWorksheet(result.date.slice(5).replace("-", ""));
+          setupReferenceSheet(dateSheet, bankMeta);
+          addBankTable(
+            dateSheet,
+            depositMatches[result.date] || [],
+            bankHeaders,
+            result.matchedAmount,
+          );
+          setDepositProgress((previous) => ({
+            ...previous,
+            description: `${result.date} 시트에 입금 내역과 노란색 매칭을 적용했습니다.`,
+            progress: 10 + Math.round(((index + 1) / totalSheets) * 72),
+            currentSheet: index + 2,
+          }));
+          await pause(24);
+        }
+
+        const ledgerSheet = workbook.addWorksheet(`${Number(depositMonth.slice(5))}월 원장`);
+        setupReferenceSheet(ledgerSheet, bankMeta);
+        const ledgerRows = bankSource
+          .filter(isNiceDeposit)
+          .map((row) => ({ row, date: getDepositDate(row), amount: getDepositAmount(row) }))
+          .filter((item) => item.date.startsWith(depositMonth) && item.amount > 0);
+        addLedgerTable(ledgerSheet, ledgerRows, bankHeaders);
+        setDepositProgress((previous) => ({
+          ...previous,
+          phase: "saving",
+          description: `${Number(depositMonth.slice(5))}월 원장까지 완성했습니다. 파일을 저장하고 있습니다.`,
+          progress: 92,
+          currentSheet: totalSheets,
+        }));
+        await pause(80);
+        },
+      );
+      setDepositProgress((previous) => ({
+        ...previous,
+        phase: "done",
+        description: `${totalSheets}개 시트가 기존 양식으로 완성되었습니다.`,
+        progress: 100,
+        currentSheet: totalSheets,
+      }));
+      await pause(900);
+    } catch (error) {
+      setMessage(`엑셀 생성 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    } finally {
+      setIsProcessing(false);
+      setDepositProgress((previous) => ({ ...previous, open: false }));
+    }
+  };
 
   const exportClassification = () =>
     downloadWorkbook(
@@ -839,16 +1265,26 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     }));
 
   const updateDepositAmount = (date: string, mid: CalendarMid, amount: number) => {
-    setCalendarAmounts((previous) => ({ ...previous, [mid]: { ...previous[mid], [date]: amount } }));
-    setReconciliation((rows) => rows.map((row) => {
-      if (row.date !== date) return row;
-      const next = { ...row, ...(mid === "1m" ? { mid1Amount: amount } : mid === "4m" ? { mid4Amount: amount } : { mid5Amount: amount }) };
-      next.niceAmount = next.mid1Amount + next.mid4Amount + next.mid5Amount;
-      next.difference = next.bankAmount - next.niceAmount;
-      next.status = next.difference >= 0 ? "정상" : "확인필요";
+    setCalendarAmounts((previous) => {
+      const next = {
+        ...previous,
+        [mid]: { ...previous[mid], [date]: amount },
+      };
+      const result = buildDepositMatches(bankSource, next, depositMonth);
+      setDepositMatches(result.matchesByDate);
+      setReconciliation(result.reconciliation);
       return next;
-    }));
+    });
   };
+
+  const depositPhaseIndex = {
+    reading: 0,
+    scanning: 1,
+    matching: 2,
+    sheets: 3,
+    saving: 3,
+    done: 4,
+  }[depositProgress.phase];
 
   return (
     <div className="nicepay-container">
@@ -1121,17 +1557,17 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
             </div>
             <label className="nicepay-month-field">
               <span>검증 대상 월</span>
-              <input type="month" value={depositMonth} onChange={(event) => setDepositMonth(event.target.value)} />
-              <small>선택한 한 달만 처리합니다.</small>
+              <input type="month" value={depositMonth} onChange={(event) => { setDepositMonth(event.target.value); setReconciliation([]); setDepositMatches({}); }} />
+              <small>은행 파일의 조회기간을 읽어 자동 설정합니다.</small>
             </label>
             <div className="nicepay-upload-grid deposit-grid">
               <UploadBox
                 title="빠른계좌조회 입금 총내역"
                 description="적요·입금일·입금액이 포함된 엑셀"
                 file={bankFile}
-                onFile={setBankFile}
+                onFile={handleBankFileSelected}
               />
-              {(["1m", "4m", "5m"] as CalendarMid[]).map((mid) => <UploadBox key={mid} title={`${mid} 정산달력`} description={`${mid} 날짜별 입금내역 스크린샷`} accept="image/png,image/jpeg,image/webp" file={calendarImages[mid]} onFile={(file) => setCalendarImages((previous) => ({ ...previous, [mid]: file }))} />)}
+              {(["1m", "4m", "5m"] as CalendarMid[]).map((mid) => <UploadBox key={mid} title={`${mid} 정산달력`} description={`${mid} 날짜별 입금내역 스크린샷`} accept="image/png,image/jpeg,image/webp" file={calendarImages[mid]} onFile={(file) => { setCalendarImages((previous) => ({ ...previous, [mid]: file })); setReconciliation([]); setDepositMatches({}); }} />)}
             </div>
             <div className="nicepay-action-row">
               <button
@@ -1152,10 +1588,10 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
               <div className="nicepay-result-table">
                 <div className="nicepay-result-summary">
                   <span>
-                    생성 예정 시트 <b>{reconciliation.length}개</b>
+                    생성 예정 시트 <b>{reconciliation.length + 2}개</b>
                   </span>
                   <span>
-                    선택 MID <b>1m · 4m · 5m</b>
+                    금액 매칭 <b>{reconciliation.reduce((sum, row) => sum + row.matchedCount, 0)} / {reconciliation.reduce((sum, row) => sum + row.expectedCount, 0)}건</b>
                   </span>
                   <span className="danger">
                     확인 필요 <b>{reconciliation.filter((row) => row.status === "확인필요").length}일</b>
@@ -1192,8 +1628,8 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
                               <CheckCircle2 size={13} /> 정상
                             </span>
                           ) : (
-                            <span className="status fail">
-                              <XCircle size={13} /> 확인
+                            <span className="status fail" title={`미매칭: ${row.unmatchedMids.join(", ")}`}>
+                              <XCircle size={13} /> {row.unmatchedMids.join("·")} 확인
                             </span>
                           )}
                         </td>
@@ -1321,6 +1757,41 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
           </section>
         )}
       </main>
+
+      {isDepositMode && depositProgress.open && (
+        <div className="nicepay-progress-overlay" role="dialog" aria-modal="true" aria-live="polite">
+          <section className={`nicepay-progress-modal ${depositProgress.phase === "done" ? "complete" : ""}`}>
+            <div className="nicepay-progress-visual" aria-hidden="true">
+              <div className="nicepay-progress-orbit orbit-one" />
+              <div className="nicepay-progress-orbit orbit-two" />
+              <div className="nicepay-progress-core">
+                {depositProgress.phase === "done" ? <CheckCircle2 size={38} /> : <FileSpreadsheet size={34} />}
+              </div>
+            </div>
+            <span className="nicepay-progress-eyebrow">DEPOSIT AUTOMATION</span>
+            <h2>{depositProgress.title}</h2>
+            <p>{depositProgress.description}</p>
+            <div className="nicepay-progress-track" aria-label={`진행률 ${depositProgress.progress}%`}>
+              <i style={{ width: `${depositProgress.progress}%` }} />
+            </div>
+            <div className="nicepay-progress-meta">
+              <b>{depositProgress.progress}%</b>
+              {depositProgress.totalSheets > 0 && (
+                <span>{depositProgress.currentSheet} / {depositProgress.totalSheets} 시트</span>
+              )}
+            </div>
+            <div className="nicepay-progress-steps">
+              {["은행 파일 읽기", "달력 이미지 판독", "날짜·금액 매칭", "날짜별 시트 생성"].map((label, index) => (
+                <div key={label} className={index < depositPhaseIndex ? "done" : index === depositPhaseIndex ? "active" : ""}>
+                  <span>{index < depositPhaseIndex || depositProgress.phase === "done" ? <CheckCircle2 size={15} /> : index + 1}</span>
+                  <em>{label}</em>
+                </div>
+              ))}
+            </div>
+            <small>창을 닫지 않아도 완료 후 자동으로 사라집니다.</small>
+          </section>
+        </div>
+      )}
 
       {message && (
         <div className="nicepay-toast">
