@@ -151,7 +151,6 @@ function getCategoryBreakdown(report: Awaited<ReturnType<typeof collectDate>>) {
   return {
     admission: summarize((row) => (
       (normalizedCategory(row) === '매표소' || normalizedCategory(row) === '입장권')
-      && !row.name.includes('추가요금')
     )),
     food: summarize((row) => foodCategories.has(normalizedCategory(row))),
     rental: summarize((row) => normalizedCategory(row) === '물품대여'),

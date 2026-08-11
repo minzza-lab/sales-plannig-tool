@@ -60,7 +60,7 @@ const normalizeSalesCategory = (value: unknown) => String(value || '').replace(/
 const isAdmissionTicketItem = (item: any) => (
   ['매표소', '입장권'].includes(normalizeSalesCategory(item.category))
   || ['매표소', '입장권'].includes(normalizeSalesCategory(item.name))
-) && !String(item.name || '').includes('추가요금');
+);
 
 const summarizeRows = (rows: any[], predicate: (row: any) => boolean): SalesMetric => rows
   .filter(predicate)
