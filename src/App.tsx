@@ -24,6 +24,7 @@ const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
 const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
 const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
 const QRVerifier = lazy(() => import('./components/QRVerifier'))
+const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
 
 const AppLoader = () => (
@@ -87,6 +88,7 @@ function App() {
                 <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
                 <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
                 <Route path="tools/qr-verifier" element={<QRVerifier />} />
+                <Route path="tools/room-state" element={<RoomStateDashboard />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>

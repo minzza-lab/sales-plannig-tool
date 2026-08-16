@@ -88,6 +88,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                   </NavLink>
                 </li>
                 <li className="menu-highlight">
+                  <NavLink to="/tools/room-state" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🏨</span> 객실 투숙 현황
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
                   <NavLink to="/tools/nicepay-settlement" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">💳</span> 나이스페이 정산 자동화
                   </NavLink>

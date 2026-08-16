@@ -38,6 +38,7 @@ const categories: ToolCategory[] = [
     description: '현장 판매 데이터를 비교하고 운영 현황을 빠르게 파악합니다.',
     tools: [
       { id: 'waterpark-sales', title: '워터파크 매출 관리', description: '일별 실적과 날씨, 전년 데이터를 함께 분석합니다.', icon: '🌊', path: '/tools/waterpark-sales' },
+      { id: 'room-state', title: '객실 투숙 현황', description: '날짜별 객실 구성과 단체 입·퇴실 일정을 확인합니다.', icon: '🏨', path: '/tools/room-state' },
       { id: 'nicepay-settlement', title: '나이스페이 정산 자동화', description: '날짜별 품목 분류와 안분·수수료·부가세 엑셀을 처리합니다.', icon: '💳', path: '/tools/nicepay-settlement' },
       { id: 'deposit-reconciliation', title: '입금 내역 검증', description: '회사 입금액과 나이스정보통신 정산액을 날짜별로 대조합니다.', icon: '🔐', path: '/tools/deposit-reconciliation' },
       { id: 'season-pass-tracker', title: '시즌권 주문 추적', description: '목표 대비 판매 실적과 권종별 주문을 관리합니다.', icon: '🎟️', path: '/tools/season-pass-tracker' },
