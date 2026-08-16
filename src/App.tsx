@@ -25,6 +25,7 @@ const ProductProposalGenerator = lazy(() => import('./components/ProductProposal
 const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
 const QRVerifier = lazy(() => import('./components/QRVerifier'))
 const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
+const SportsSalesDashboard = lazy(() => import('./components/SportsSalesDashboard'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
 
 const AppLoader = () => (
@@ -89,6 +90,7 @@ function App() {
                 <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
                 <Route path="tools/qr-verifier" element={<QRVerifier />} />
                 <Route path="tools/room-state" element={<RoomStateDashboard />} />
+                <Route path="tools/sports-sales" element={<SportsSalesDashboard />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>

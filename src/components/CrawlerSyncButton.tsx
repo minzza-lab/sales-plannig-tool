@@ -108,6 +108,7 @@ export default function CrawlerSyncButton({
   onComplete: () => void | Promise<void>
 }) {
   const [state, setState] = useState<SyncState>(idleState)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [isStarting, setIsStarting] = useState(false)
   const [waterparkModal, setWaterparkModal] = useState<WaterparkModalState>({
@@ -121,6 +122,27 @@ export default function CrawlerSyncButton({
   })
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
+
+  const fetchLastSyncedAt = useCallback(async () => {
+    if (target !== 'waterpark') return
+    const { data, error: latestError } = await supabase
+      .from('daily_reports')
+      .select('data')
+      .eq('report_type', 'REALTIME_SALES')
+      .order('report_date', { ascending: false })
+      .limit(31)
+    if (latestError) return
+
+    const latest = (data || [])
+      .map((row) => typeof row.data?.updated_at === 'string' ? row.data.updated_at : null)
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0]
+    setLastSyncedAt(latest || null)
+  }, [target])
+
+  useEffect(() => {
+    void fetchLastSyncedAt()
+  }, [fetchLastSyncedAt])
 
   const fetchStatus = useCallback(async () => {
     let query = supabase
@@ -226,6 +248,7 @@ export default function CrawlerSyncButton({
 
         await onCompleteRef.current()
         const finishedAt = new Date().toISOString()
+        setLastSyncedAt(finishedAt)
         setState({
           id: null,
           status: 'completed',
@@ -310,13 +333,23 @@ export default function CrawlerSyncButton({
       : state.status === 'running'
         ? '데이터 동기화 중'
         : label
+  const lastSyncedText = lastSyncedAt
+    ? new Intl.DateTimeFormat('ko-KR', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Seoul',
+    }).format(new Date(lastSyncedAt))
+    : '동기화 기록 없음'
 
   return (
     <div className={`crawler-sync ${state.status}`}>
-      <button type="button" onClick={() => void start()} disabled={isStarting || isBusy}>
-        {isStarting || isBusy ? <LoaderCircle size={17} className="crawler-spin" /> : <DatabaseZap size={17} />}
-        {buttonLabel}
-      </button>
+      <div className="crawler-sync-action-row">
+        {target === 'waterpark' && <small className="crawler-last-synced">최근 동기화<br /><b>{lastSyncedText}</b></small>}
+        <button type="button" onClick={() => void start()} disabled={isStarting || isBusy}>
+          {isStarting || isBusy ? <LoaderCircle size={17} className="crawler-spin" /> : <DatabaseZap size={17} />}
+          {buttonLabel}
+        </button>
+      </div>
       {isStarting && (
         <small className="crawler-sync-pending">
           {target === 'waterpark' ? '홈페이지 서버가 최신 매출을 직접 수집하고 있습니다.' : '전용 수집 PC에 요청을 보내고 있습니다.'}
