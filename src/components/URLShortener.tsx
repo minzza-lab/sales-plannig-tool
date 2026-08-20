@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import './URLShortener.css';
+import { supabase } from '../lib/supabase';
+
+type ShortenResponse = {
+  shorturl?: string;
+  error?: string;
+};
 
 const URLShortener: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'simple' | 'custom'>('simple');
@@ -9,42 +15,6 @@ const URLShortener: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
-
-  const shortenUrlWithJSONP = (targetUrl: string, alias: string): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      const callbackName = `isgd_cb_${Math.round(Math.random() * 1000000)}`;
-      const script = document.createElement('script');
-      
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('서버 응답 시간이 초과되었습니다.'));
-      }, 5000);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        if (script.parentNode) script.parentNode.removeChild(script);
-        delete (window as any)[callbackName];
-      };
-
-      (window as any)[callbackName] = (data: any) => {
-        cleanup();
-        resolve(data);
-      };
-
-      script.onerror = () => {
-        cleanup();
-        reject(new Error('네트워크 연결에 실패했습니다.'));
-      };
-
-      let apiUrl = `https://is.gd/create.php?format=json&callback=${callbackName}&url=${encodeURIComponent(targetUrl)}`;
-      if (activeTab === 'custom' && alias.trim()) {
-        apiUrl += `&shorturl=${encodeURIComponent(alias.trim())}`;
-      }
-
-      script.src = apiUrl;
-      document.body.appendChild(script);
-    });
-  };
 
   const shortenUrl = async () => {
     let targetUrl = longUrl.trim();
@@ -78,21 +48,29 @@ const URLShortener: React.FC = () => {
     setCopied(false);
 
     try {
-      const data = await shortenUrlWithJSONP(targetUrl, customAlias);
-
-      if (data.shorturl) {
-        setShortUrl(data.shorturl);
-      } else if (data.errormessage) {
-        if (data.errorcode === 2) {
-          setError('이미 다른 사람이 사용 중인 이름입니다.');
-        } else {
-          setError(`오류: ${data.errormessage}`);
-        }
-      } else {
-        throw new Error('알 수 없는 응답 형식입니다.');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error('로그인 정보가 만료되었습니다. 다시 로그인해주세요.');
       }
-    } catch (err: any) {
-      setError(err.message || '단축 중 오류가 발생했습니다.');
+
+      const response = await fetch('/api/url-shortener', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: targetUrl,
+          alias: activeTab === 'custom' ? customAlias.trim() : '',
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as ShortenResponse;
+      if (!response.ok) throw new Error(data.error || '단축 주소를 생성하지 못했습니다.');
+      if (!data.shorturl) throw new Error('단축 서비스에서 주소를 받지 못했습니다.');
+      setShortUrl(data.shorturl);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '단축 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
