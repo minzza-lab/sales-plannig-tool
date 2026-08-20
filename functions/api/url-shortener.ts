@@ -33,7 +33,11 @@ const corsHeaders = {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-URL-Shortener-Version': 'safe-v2',
+    },
   });
 }
 
