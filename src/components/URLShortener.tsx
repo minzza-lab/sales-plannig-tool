@@ -121,7 +121,7 @@ const URLShortener: React.FC = () => {
           <div className="input-field animate-fade-in">
             <label>지정할 이름 (최소 5자)</label>
             <div className="alias-input-wrapper">
-              <span className="domain-prefix">tinyurl.com/</span>
+              <span className="domain-prefix">spoo.me/</span>
               <input
                 type="text"
                 placeholder="wellihilli"
@@ -160,7 +160,7 @@ const URLShortener: React.FC = () => {
         {activeTab === 'simple' ? (
           <p>• 별도의 입력 없이 시스템이 자동으로 가장 짧은 무작위 주소를 만들어줍니다.</p>
         ) : (
-          <p>• <strong>wellihilli</strong>라고 입력하면 <strong>tinyurl.com/wellihilli</strong> 주소가 생깁니다.</p>
+          <p>• <strong>wellihilli</strong>라고 입력하면 <strong>spoo.me/wellihilli</strong> 주소가 생깁니다.</p>
         )}
         <p>• 생성된 주소는 전 세계 어디서든 영구적으로 접속 가능합니다.</p>
       </div>

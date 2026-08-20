@@ -15,7 +15,13 @@ type ShortenRequest = {
   alias?: unknown;
 };
 
-const TINYURL_API_URL = 'https://tinyurl.com/api-create.php';
+type SpooResponse = {
+  short_url?: string;
+  error?: string;
+  code?: string;
+};
+
+const SPOO_API_URL = 'https://spoo.me/api/v1/shorten';
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const corsHeaders = {
@@ -30,7 +36,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-URL-Shortener-Version': 'tinyurl-v3',
+      'X-URL-Shortener-Version': 'spoo-direct-v4',
     },
   });
 }
@@ -57,11 +63,6 @@ function normalizeUrl(value: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function extractShortUrl(responseText: string): string | null {
-  const trimmed = responseText.trim();
-  return /^https:\/\/tinyurl\.com\/[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -101,21 +102,27 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return jsonResponse({ error: '맞춤 이름은 5~30자의 영문, 숫자, 언더바만 사용할 수 있습니다.' }, 400);
     }
 
-    const apiUrl = new URL(TINYURL_API_URL);
-    apiUrl.searchParams.set('url', targetUrl);
-    if (alias) apiUrl.searchParams.set('alias', alias);
-
-    const response = await fetchWithTimeout(apiUrl.toString(), {
+    const response = await fetchWithTimeout(SPOO_API_URL, {
+      method: 'POST',
       headers: {
-        Accept: 'text/plain',
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (compatible; WellihilliURLShortener/1.0)',
       },
+      body: JSON.stringify({
+        long_url: targetUrl,
+        ...(alias ? { alias } : {}),
+      }),
     });
-    const responseText = await response.text();
-    const shortUrl = extractShortUrl(responseText);
-    if (response.ok && shortUrl) return jsonResponse({ shorturl: shortUrl });
-    if (alias && (response.status === 409 || response.status === 422)) {
+    const result = await response.json().catch(() => ({})) as SpooResponse;
+    if (response.ok && result.short_url && /^https:\/\/spoo\.me\/[A-Za-z0-9_-]+$/.test(result.short_url)) {
+      return jsonResponse({ shorturl: result.short_url });
+    }
+    if (alias && response.status === 409) {
       return jsonResponse({ error: '이미 다른 사람이 사용 중인 이름입니다.' }, 409);
+    }
+    if (response.status === 429) {
+      return jsonResponse({ error: '단축 요청이 잠시 많습니다. 1분 후 다시 시도해주세요.' }, 429);
     }
     return jsonResponse({ error: '외부 단축 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.' }, 502);
   } catch (error) {
