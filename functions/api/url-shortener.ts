@@ -61,6 +61,27 @@ function normalizeUrl(value: unknown): string | null {
   }
 }
 
+function extractShortUrl(responseText: string): string | null {
+  const trimmed = responseText.trim();
+  if (/^https:\/\/is\.gd\/[A-Za-z0-9_-]+$/.test(trimmed)) return trimmed;
+
+  try {
+    const parsed = JSON.parse(trimmed) as IsGdResponse;
+    return typeof parsed.shorturl === 'string' ? parsed.shorturl : null;
+  } catch {
+    const match = trimmed.match(/"shorturl"\s*:\s*"(https:\/\/is\.gd\/[A-Za-z0-9_-]+)"/);
+    return match?.[1] || null;
+  }
+}
+
+function extractIsGdError(responseText: string): IsGdResponse | null {
+  try {
+    return JSON.parse(responseText) as IsGdResponse;
+  } catch {
+    return null;
+  }
+}
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const supabaseUrl = context.env.SUPABASE_URL || context.env.VITE_SUPABASE_URL;
   const anonKey = context.env.SUPABASE_ANON_KEY || context.env.VITE_SUPABASE_ANON_KEY;
@@ -73,6 +94,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return jsonResponse({ error: '로그인이 필요합니다.' }, 401);
   }
 
+  let body: ShortenRequest;
+  try {
+    body = await context.request.json() as ShortenRequest;
+  } catch {
+    return jsonResponse({ error: '요청 내용이 올바르지 않습니다.' }, 400);
+  }
+
   try {
     const userResponse = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: anonKey, Authorization: authorization },
@@ -81,7 +109,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return jsonResponse({ error: '로그인 정보가 만료되었습니다. 다시 로그인해주세요.' }, 401);
     }
 
-    const body = await context.request.json() as ShortenRequest;
     const targetUrl = normalizeUrl(body.url);
     const alias = typeof body.alias === 'string' ? body.alias.trim() : '';
 
@@ -107,21 +134,37 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       throw new Error(`단축 서비스 응답 오류: ${response.status}`);
     }
 
-    const result = await response.json() as IsGdResponse;
-    if (result.shorturl) return jsonResponse({ shorturl: result.shorturl });
-    if (result.errorcode === 2) {
+    const responseText = await response.text();
+    const shortUrl = extractShortUrl(responseText);
+    if (shortUrl) return jsonResponse({ shorturl: shortUrl });
+
+    const result = extractIsGdError(responseText);
+    if (result?.errorcode === 2) {
       return jsonResponse({ error: '이미 다른 사람이 사용 중인 이름입니다.' }, 409);
     }
-    return jsonResponse({ error: result.errormessage || '단축 주소를 생성하지 못했습니다.' }, 502);
+    if (result?.errormessage) return jsonResponse({ error: result.errormessage }, 502);
+
+    // 일부 네트워크에서는 JSON 응답이 변형되므로 단순 텍스트 형식으로 한 번 더 요청합니다.
+    apiUrl.searchParams.set('format', 'simple');
+    const fallbackResponse = await fetchWithTimeout(apiUrl.toString(), {
+      headers: {
+        Accept: 'text/plain',
+        'User-Agent': 'Mozilla/5.0 (compatible; WellihilliURLShortener/1.0)',
+      },
+    });
+    const fallbackText = await fallbackResponse.text();
+    const fallbackShortUrl = extractShortUrl(fallbackText);
+    if (fallbackResponse.ok && fallbackShortUrl) {
+      return jsonResponse({ shorturl: fallbackShortUrl });
+    }
+    return jsonResponse({ error: '외부 단축 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.' }, 502);
   } catch (error) {
     const message = error instanceof DOMException && error.name === 'AbortError'
       ? '단축 서비스의 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
-      : error instanceof SyntaxError
-        ? '요청 내용이 올바르지 않습니다.'
-        : error instanceof Error
+      : error instanceof Error
           ? error.message
           : 'URL 단축 중 오류가 발생했습니다.';
-    return jsonResponse({ error: message }, error instanceof SyntaxError ? 400 : 502);
+    return jsonResponse({ error: message }, 502);
   }
 };
 
