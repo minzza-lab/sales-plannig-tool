@@ -15,13 +15,7 @@ type ShortenRequest = {
   alias?: unknown;
 };
 
-type IsGdResponse = {
-  shorturl?: string;
-  errorcode?: number;
-  errormessage?: string;
-};
-
-const IS_GD_API_URL = 'https://is.gd/create.php';
+const TINYURL_API_URL = 'https://tinyurl.com/api-create.php';
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const corsHeaders = {
@@ -36,7 +30,7 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-URL-Shortener-Version': 'safe-v2',
+      'X-URL-Shortener-Version': 'tinyurl-v3',
     },
   });
 }
@@ -67,23 +61,7 @@ function normalizeUrl(value: unknown): string | null {
 
 function extractShortUrl(responseText: string): string | null {
   const trimmed = responseText.trim();
-  if (/^https:\/\/is\.gd\/[A-Za-z0-9_-]+$/.test(trimmed)) return trimmed;
-
-  try {
-    const parsed = JSON.parse(trimmed) as IsGdResponse;
-    return typeof parsed.shorturl === 'string' ? parsed.shorturl : null;
-  } catch {
-    const match = trimmed.match(/"shorturl"\s*:\s*"(https:\/\/is\.gd\/[A-Za-z0-9_-]+)"/);
-    return match?.[1] || null;
-  }
-}
-
-function extractIsGdError(responseText: string): IsGdResponse | null {
-  try {
-    return JSON.parse(responseText) as IsGdResponse;
-  } catch {
-    return null;
-  }
+  return /^https:\/\/tinyurl\.com\/[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -123,43 +101,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return jsonResponse({ error: '맞춤 이름은 5~30자의 영문, 숫자, 언더바만 사용할 수 있습니다.' }, 400);
     }
 
-    const apiUrl = new URL(IS_GD_API_URL);
-    apiUrl.searchParams.set('format', 'json');
+    const apiUrl = new URL(TINYURL_API_URL);
     apiUrl.searchParams.set('url', targetUrl);
-    if (alias) apiUrl.searchParams.set('shorturl', alias);
+    if (alias) apiUrl.searchParams.set('alias', alias);
 
     const response = await fetchWithTimeout(apiUrl.toString(), {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Wellihilli-Sales-Planning-Tool/1.0',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`단축 서비스 응답 오류: ${response.status}`);
-    }
-
-    const responseText = await response.text();
-    const shortUrl = extractShortUrl(responseText);
-    if (shortUrl) return jsonResponse({ shorturl: shortUrl });
-
-    const result = extractIsGdError(responseText);
-    if (result?.errorcode === 2) {
-      return jsonResponse({ error: '이미 다른 사람이 사용 중인 이름입니다.' }, 409);
-    }
-    if (result?.errormessage) return jsonResponse({ error: result.errormessage }, 502);
-
-    // 일부 네트워크에서는 JSON 응답이 변형되므로 단순 텍스트 형식으로 한 번 더 요청합니다.
-    apiUrl.searchParams.set('format', 'simple');
-    const fallbackResponse = await fetchWithTimeout(apiUrl.toString(), {
       headers: {
         Accept: 'text/plain',
         'User-Agent': 'Mozilla/5.0 (compatible; WellihilliURLShortener/1.0)',
       },
     });
-    const fallbackText = await fallbackResponse.text();
-    const fallbackShortUrl = extractShortUrl(fallbackText);
-    if (fallbackResponse.ok && fallbackShortUrl) {
-      return jsonResponse({ shorturl: fallbackShortUrl });
+    const responseText = await response.text();
+    const shortUrl = extractShortUrl(responseText);
+    if (response.ok && shortUrl) return jsonResponse({ shorturl: shortUrl });
+    if (alias && (response.status === 409 || response.status === 422)) {
+      return jsonResponse({ error: '이미 다른 사람이 사용 중인 이름입니다.' }, 409);
     }
     return jsonResponse({ error: '외부 단축 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.' }, 502);
   } catch (error) {
