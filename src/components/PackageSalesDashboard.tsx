@@ -47,16 +47,18 @@ type ProductGroup = { name: string; count: number; revenue: number; variants: Re
 type ProductCategory = { major: string; middle: string; minor: string };
 
 const CATEGORY_CONFIG_DATE = '2000-01-01';
-const CATEGORY_MAJOR_OPTIONS = ['워터파크', '객실', '스키·보드', '레저·액티비티', '식음·힐링', '입장권·기타', '미분류'];
-const CATEGORY_MIDDLE_SUGGESTIONS = ['입장권', '패키지', '객실 패키지', '룸온리', '리프트', '렌탈', '대여', '액티비티', '식음', '프로모션', '기타'];
+const CATEGORY_MAJOR_OPTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '워터파크 티켓', 'B2B', '프로모션', '기타'];
+const CATEGORY_MIDDLE_SUGGESTIONS = ['객실유형', '구성상품', '이용시간', '렌탈·보관 유형', '권종', '시즌', '제휴사', '프로모션 유형', '기타'];
+const CATEGORY_MINOR_SUGGESTIONS = ['1박', '2박', '조식 포함', '워터파크 포함', '올인원', '4시간', '8시간', '야간', '장비렌탈', '의류렌탈', '장비보관', '1인락카', '2인락카', '대인', '소인', '골드시즌', '하이시즌', '미들시즌', 'BC카드', 'AK플라자', '홈쇼핑', '얼리버드', '공홈특가'];
 
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
-  { label: '워터파크', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌'] },
-  { label: '스키·보드', terms: ['스키', '보드', '리프트', '눈썰매', '설상', '장비렌탈', '의류렌탈'] },
-  { label: '객실', terms: ['룸온리', '객실', '콘도', '숙박', '2박', '1박'] },
-  { label: '레저·액티비티', terms: ['곤돌라', '루지', '고카트', '플라잉', '썰매', '레포츠', '액션'] },
-  { label: '식음·힐링', terms: ['조식', '냠냠', '힐링', '식사'] },
-  { label: '입장권·기타', terms: ['입장권', '대인', '소인', '특가', '추가권'] },
+  { label: 'B2B', terms: ['비씨', 'bc카드', 'ak플라자', '홈쇼핑', '지니tv', '36사단', '제휴'] },
+  { label: '룸온리', terms: ['룸온리'] },
+  { label: '객실PKG', terms: ['객실', '콘도', '숙박', '2박', '1박'] },
+  { label: '렌탈·장비보관소', terms: ['장비보관', '장비렌탈', '의류렌탈', '락카', '보관소'] },
+  { label: '리프트 티켓', terms: ['리프트'] },
+  { label: '프로모션', terms: ['pkg', '특가', '공홈', '얼리버드', '원타임'] },
+  { label: '워터파크 티켓', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌', '입장권', '대인', '소인'] },
 ];
 
 function classifyPackageKeyword(order: PackageOrder) {
@@ -66,16 +68,26 @@ function classifyPackageKeyword(order: PackageOrder) {
 
 function suggestedCategory(order: PackageOrder): ProductCategory {
   const major = classifyPackageKeyword(order);
+  const text = `${order.normalizedPackageName} ${order.rawPackageName}`.toLowerCase();
   const middleByMajor: Record<string, string> = {
-    워터파크: order.normalizedPackageName.includes('입장권') || order.normalizedPackageName.includes('대인') || order.normalizedPackageName.includes('소인') ? '입장권' : '패키지',
-    객실: order.normalizedPackageName.includes('룸온리') ? '룸온리' : '객실 패키지',
-    '스키·보드': order.normalizedPackageName.includes('렌탈') ? '렌탈' : '리프트',
-    '레저·액티비티': '액티비티',
-    '식음·힐링': '식음',
-    '입장권·기타': '기타 패키지',
+    룸온리: '객실유형',
+    객실PKG: '구성상품',
+    '리프트 티켓': '이용시간',
+    '렌탈·장비보관소': '렌탈·보관 유형',
+    '워터파크 티켓': '권종',
+    B2B: '제휴사',
+    프로모션: '프로모션 유형',
     '기타 패키지': '기타',
   };
-  return { major: major === '기타 패키지' ? '입장권·기타' : major, middle: middleByMajor[major] || '기타', minor: '' };
+  const minor = major === '룸온리' ? (text.includes('2박') ? '2박' : '1박')
+    : major === '객실PKG' ? (text.includes('조식') ? '조식 포함' : text.includes('워터') ? '워터파크 포함' : text.includes('올인원') ? '올인원' : '')
+    : major === '리프트 티켓' ? (text.includes('4h') ? '4시간' : text.includes('8h') ? '8시간' : text.includes('야') ? '야간' : '')
+    : major === '렌탈·장비보관소' ? (text.includes('보관') ? text.includes('2인') ? '2인락카' : text.includes('1인') ? '1인락카' : '장비보관' : text.includes('의류') ? '의류렌탈' : '장비렌탈')
+    : major === '워터파크 티켓' ? (text.includes('대인') ? '대인' : text.includes('소인') ? '소인' : text.includes('골드') ? '골드시즌' : text.includes('하이') ? '하이시즌' : text.includes('미들') ? '미들시즌' : '')
+    : major === 'B2B' ? (text.includes('비씨') || text.includes('bc') ? 'BC카드' : text.includes('ak') ? 'AK플라자' : text.includes('홈쇼핑') ? '홈쇼핑' : '')
+    : major === '프로모션' ? (text.includes('얼리버드') ? '얼리버드' : text.includes('공홈') ? '공홈특가' : '')
+    : '';
+  return { major: major === '기타 패키지' ? '기타' : major, middle: middleByMajor[major] || '기타', minor };
 }
 
 function seasonForDate(date: string) {
@@ -521,7 +533,10 @@ const PackageSalesDashboard: React.FC = () => {
   const uniqueProductFamilies = Array.from(new Set(data.map(d => productFamilyName(d.normalizedPackageName)))).sort();
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
-  const categoryForOrder = (order: PackageOrder) => productCategories[productFamilyName(order.normalizedPackageName)] || suggestedCategory(order);
+  const categoryForOrder = (order: PackageOrder) => {
+    const stored = productCategories[productFamilyName(order.normalizedPackageName)];
+    return stored && CATEGORY_MAJOR_OPTIONS.includes(stored.major) ? stored : suggestedCategory(order);
+  };
   const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.minor].filter(Boolean).join(' · ');
 
   const keywordSummaries = Object.values(data.reduce((acc, order) => {
@@ -611,19 +626,23 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
         </div>
         <datalist id="package-middle-category-list">{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
+        <datalist id="package-minor-category-list">{CATEGORY_MINOR_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류</th><th>중분류</th><th>소분류</th></tr></thead>
             <tbody>{uniqueProductFamilies.map((family) => {
               const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
-              const category = productCategories[family] || (seed ? suggestedCategory(seed) : { major: '미분류', middle: '', minor: '' });
+              const savedCategory = productCategories[family];
+              const category = savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
+                ? savedCategory
+                : (seed ? suggestedCategory(seed) : { major: '기타', middle: '기타', minor: '' });
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
               return (
                 <tr key={family}>
                   <td><strong>{family}</strong></td>
                   <td><select value={category.major} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
                   <td><input value={category.middle} list="package-middle-category-list" placeholder="예: 패키지" onChange={(event) => update({ middle: event.target.value })} /></td>
-                  <td><input value={category.minor} placeholder="예: 골드시즌" onChange={(event) => update({ minor: event.target.value })} /></td>
+                  <td><input value={category.minor} list="package-minor-category-list" placeholder="예: 골드시즌" onChange={(event) => update({ minor: event.target.value })} /></td>
                 </tr>
               );
             })}</tbody>
