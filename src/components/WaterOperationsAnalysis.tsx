@@ -50,6 +50,26 @@ export default function WaterOperationsAnalysis() {
     }
     return [...grouped].map(([name, value]) => ({ name, ...value }))
   }, [active])
+  const ticketDetails = useMemo(() => {
+    const groups = new Map<string, Map<string, { sales: number; cancel: number; net: number; quantity: number }>>()
+    for (const item of active?.ticket || []) {
+      const groupName = classifyTicket(item.name, item.amount)
+      const group = groups.get(groupName) || new Map<string, { sales: number; cancel: number; net: number; quantity: number }>()
+      const current = group.get(item.name) || { sales: 0, cancel: 0, net: 0, quantity: 0 }
+      current.net += Number(item.amount) || 0
+      current.quantity += Number(item.quantity) || 0
+      if (item.status === '취소') current.cancel += Math.abs(Number(item.amount) || 0)
+      else current.sales += Number(item.amount) || 0
+      group.set(item.name, current)
+      groups.set(groupName, group)
+    }
+    return ticketGroups.map((group) => ({
+      ...group,
+      items: [...(groups.get(group.name)?.entries() || [])]
+        .map(([name, value]) => ({ name, ...value }))
+        .sort((left, right) => Math.abs(right.net) - Math.abs(left.net)),
+    }))
+  }, [active, ticketGroups])
   const rentals = useMemo(() => {
     const grouped = new Map<string, RawItem[]>()
     for (const item of active?.rental || []) grouped.set(item.name, [...(grouped.get(item.name) || []), item])
@@ -68,6 +88,10 @@ export default function WaterOperationsAnalysis() {
       <div className="water-ops-heading"><div><Ticket size={19}/><div><span>TICKET MIX</span><h2>{selected} 권종 분석</h2></div></div><small>동기화 후부터 판매·취소 상세가 누적됩니다.</small></div>
       {active?.ticket.length ? <>
         <div className="ticket-grid">{ticketGroups.map((item) => <article key={item.name}><small>{item.name}</small><strong>{item.net.toLocaleString()}원</strong><span>판매 {item.sales.toLocaleString()} · 취소 {item.cancel.toLocaleString()}</span><em>{item.quantity.toLocaleString()}건</em></article>)}</div>
+        <div className="ticket-detail-section">
+          <div className="ticket-detail-heading"><div><b>권종별 세부 구성</b><span>세부 권종명 기준으로 판매·취소·순매출과 비중을 확인합니다.</span></div><small>비중은 해당 대분류 내 순수량 기준</small></div>
+          <div className="ticket-detail-grid">{ticketDetails.map((group) => <article key={group.name}><header><div><small>{group.name}</small><b>{group.net.toLocaleString()}원</b></div><em>전체 권종매출 {net(active.ticket) ? (Math.abs(group.net) / Math.abs(net(active.ticket)) * 100).toFixed(1) : '0.0'}%</em></header><div className="ticket-detail-table"><div className="ticket-detail-row labels"><span>세부 권종</span><span>판매/취소</span><span>순매출</span><span>수량 비중</span></div>{group.items.map((item) => { const share = group.quantity ? Math.abs(item.quantity) / Math.abs(group.quantity) * 100 : 0; return <div className="ticket-detail-row" key={item.name}><b title={item.name}>{item.name}</b><span>{item.sales.toLocaleString()} / {item.cancel.toLocaleString()}</span><strong>{item.net.toLocaleString()}원</strong><span><i><em style={{ width: `${Math.min(100, share)}%` }}/></i>{share.toFixed(1)}%</span></div> })}</div></article>)}</div>
+        </div>
         <div className="reconcile"><span>전체 매출 <b>{active.total.toLocaleString()}원</b></span><i>=</i><span>권종 순매출 <b>{net(active.ticket).toLocaleString()}원</b></span><i>+</i><span>기타 매출 <b>{(active.total - net(active.ticket)).toLocaleString()}원</b></span><strong>일치</strong></div>
       </> : <Empty text="이 날짜는 권종 상세 수집 전 데이터입니다. 최신 매출 동기화 후 표시됩니다." />}
     </section>
