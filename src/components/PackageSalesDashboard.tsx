@@ -42,6 +42,9 @@ type SeasonSummary = {
   keywords: Record<string, number>;
 };
 
+type ProductVariant = { name: string; count: number; revenue: number };
+type ProductGroup = { name: string; count: number; revenue: number; variants: Record<string, ProductVariant> };
+
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
   { label: '워터파크', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌'] },
   { label: '스키·보드', terms: ['스키', '보드', '리프트', '눈썰매', '설상', '장비렌탈', '의류렌탈'] },
@@ -91,6 +94,11 @@ const normalizePackageName = (name: string) => {
   return normalized.trim();
 };
 
+// 동일 패키지의 인원 구성만 다른 상품은 대표 상품으로 묶고, 인원별 구성은 상세에서 확인한다.
+const productFamilyName = (name: string) => name
+  .replace(/\s*\(?\d+\s*인\)?(?:\s*(?:기준|구성))?\s*$/, '')
+  .trim() || name;
+
 const PackageSalesDashboard: React.FC = () => {
   const [data, setData] = useState<PackageOrder[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -101,6 +109,7 @@ const PackageSalesDashboard: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showMonthlyList, setShowMonthlyList] = useState(false);
+  const [selectedProductDetail, setSelectedProductDetail] = useState<{ name: string; variants: ProductVariant[]; revenue: number } | null>(null);
 
 
 
@@ -498,6 +507,39 @@ const PackageSalesDashboard: React.FC = () => {
 
   const topKeyword = (summary: SeasonSummary) => Object.entries(summary.keywords).sort(([, a], [, b]) => b - a)[0]?.[0] || '-';
 
+  const openProductDetail = (group: ProductGroup) => {
+    setSelectedProductDetail({
+      name: group.name,
+      revenue: group.revenue,
+      variants: Object.values(group.variants).sort((a, b) => b.revenue - a.revenue),
+    });
+  };
+
+  const renderProductVariantDetail = () => {
+    if (!selectedProductDetail) return null;
+    return (
+      <div className="pkg-table-container" style={{ background: 'rgba(192, 132, 252, 0.08)', borderRadius: '12px', border: '1px solid rgba(192, 132, 252, 0.28)', overflow: 'hidden', marginBottom: '24px' }}>
+        <h3 style={{ padding: '16px 20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>🔎 {selectedProductDetail.name} · 인원 구성 상세</span>
+          <button onClick={() => setSelectedProductDetail(null)} style={{ background: 'transparent', border: 'none', color: '#c4b5fd', cursor: 'pointer', fontWeight: 700 }}>닫기</button>
+        </h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+            <thead><tr style={{ background: 'rgba(15, 23, 42, 0.72)', textAlign: 'left' }}><th style={{ padding: '12px 16px' }}>인원 구성</th><th style={{ padding: '12px 16px', textAlign: 'right' }}>주문건수</th><th style={{ padding: '12px 16px', textAlign: 'right' }}>결제매출</th><th style={{ padding: '12px 16px', textAlign: 'right' }}>상품 내 비중</th></tr></thead>
+            <tbody>{selectedProductDetail.variants.map((variant) => (
+              <tr key={variant.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <td style={{ padding: '12px 16px', color: '#f8fafc', fontWeight: 700 }}>{variant.name}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>{variant.count.toLocaleString()}건</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', color: '#d8b4fe', fontWeight: 800 }}>{variant.revenue.toLocaleString()}원</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>{selectedProductDetail.revenue ? (variant.revenue / selectedProductDetail.revenue * 100).toFixed(1) : '0.0'}%</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const renderSalesHistoryAnalysis = () => (
     <section className="pkg-history-analysis">
       <div className="pkg-analysis-heading">
@@ -560,13 +602,16 @@ const PackageSalesDashboard: React.FC = () => {
 
     // Group by package
     const packageSales = dayData.reduce((acc, d) => {
-      const key = d.normalizedPackageName;
-      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, orderIds: [] as string[] };
+      const key = productFamilyName(d.normalizedPackageName);
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, variants: {} };
       acc[key].count += 1;
       acc[key].revenue += d.paymentAmount;
-      acc[key].orderIds.push(d.orderId);
+      const variantName = d.normalizedPackageName;
+      if (!acc[key].variants[variantName]) acc[key].variants[variantName] = { name: variantName, count: 0, revenue: 0 };
+      acc[key].variants[variantName].count += 1;
+      acc[key].variants[variantName].revenue += d.paymentAmount;
       return acc;
-    }, {} as Record<string, {name: string, count: number, revenue: number, orderIds: string[]}>);
+    }, {} as Record<string, ProductGroup>);
     const dayPackageChartData = Object.values(packageSales).sort((a, b) => b.revenue - a.revenue);
 
     return (
@@ -603,6 +648,7 @@ const PackageSalesDashboard: React.FC = () => {
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>주문건수</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제매출</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>건당 평균</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>구성</th>
                 </tr>
               </thead>
               <tbody>
@@ -612,12 +658,15 @@ const PackageSalesDashboard: React.FC = () => {
                     <td style={{ padding: '13px 16px', textAlign: 'right' }}>{item.count.toLocaleString()}건</td>
                     <td style={{ padding: '13px 16px', textAlign: 'right', color: '#6ee7b7', fontWeight: 800 }}>{item.revenue.toLocaleString()}원</td>
                     <td style={{ padding: '13px 16px', textAlign: 'right' }}>{Math.round(item.revenue / item.count).toLocaleString()}원</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}><button onClick={() => openProductDetail(item)} className="pkg-product-detail-btn">상세</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {renderProductVariantDetail()}
 
         <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
           <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>📋 개별 주문 목록</h3>
@@ -662,12 +711,16 @@ const PackageSalesDashboard: React.FC = () => {
     monthData.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
     const monthlyRevenue = monthData.reduce((total, order) => total + order.paymentAmount, 0);
     const monthlyProductSales = Object.values(monthData.reduce((acc, order) => {
-      const key = order.normalizedPackageName;
-      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0 };
+      const key = productFamilyName(order.normalizedPackageName);
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, variants: {} };
       acc[key].count += 1;
       acc[key].revenue += order.paymentAmount;
+      const variantName = order.normalizedPackageName;
+      if (!acc[key].variants[variantName]) acc[key].variants[variantName] = { name: variantName, count: 0, revenue: 0 };
+      acc[key].variants[variantName].count += 1;
+      acc[key].variants[variantName].revenue += order.paymentAmount;
       return acc;
-    }, {} as Record<string, { name: string; count: number; revenue: number }>)).sort((a, b) => b.revenue - a.revenue);
+    }, {} as Record<string, ProductGroup>)).sort((a, b) => b.revenue - a.revenue);
 
     return (
       <div className="pkg-detail-view animate-fade-in">
@@ -691,6 +744,7 @@ const PackageSalesDashboard: React.FC = () => {
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>주문건수</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제매출</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>매출 비중</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>구성</th>
                 </tr>
               </thead>
               <tbody>
@@ -700,12 +754,15 @@ const PackageSalesDashboard: React.FC = () => {
                     <td style={{ padding: '13px 16px', textAlign: 'right' }}>{item.count.toLocaleString()}건</td>
                     <td style={{ padding: '13px 16px', textAlign: 'right', color: '#6ee7b7', fontWeight: 800 }}>{item.revenue.toLocaleString()}원</td>
                     <td style={{ padding: '13px 16px', textAlign: 'right' }}>{monthlyRevenue ? (item.revenue / monthlyRevenue * 100).toFixed(1) : '0.0'}%</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}><button onClick={() => openProductDetail(item)} className="pkg-product-detail-btn">상세</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {renderProductVariantDetail()}
 
         <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
           <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

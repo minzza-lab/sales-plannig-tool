@@ -209,6 +209,20 @@
   font-size: 0.78rem;
 }
 
+.pkg-product-detail-btn {
+  border: 1px solid rgba(192, 132, 252, 0.5);
+  background: rgba(192, 132, 252, 0.12);
+  color: #e9d5ff;
+  border-radius: 7px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.pkg-product-detail-btn:hover {
+  background: rgba(192, 132, 252, 0.24);
+}
+
 .pkg-filters {
   display: flex;
   gap: 1.5rem;
