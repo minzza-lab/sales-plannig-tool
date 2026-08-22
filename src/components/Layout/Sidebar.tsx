@@ -83,6 +83,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
             {openGroups.sales && (
               <ul className="accordion-content">
                 <li className="menu-highlight">
+                  <NavLink to="/tools/water-operations" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">📍</span> 워터 운영 통합 현황
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
                   <NavLink to="/tools/waterpark-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🌊</span> 워터파크 매출 관리
                   </NavLink>

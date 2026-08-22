@@ -13,6 +13,7 @@ const FieldSketchWriter = lazy(() => import('./components/FieldSketchWriter'))
 const ManualTips = lazy(() => import('./components/ManualTips'))
 const AutomationRequest = lazy(() => import('./components/AutomationRequest'))
 const WaterParkSales = lazy(() => import('./components/WaterParkSales'))
+const WaterOperationsDashboard = lazy(() => import('./components/WaterOperationsDashboard'))
 const WaterOperationsAnalysis = lazy(() => import('./components/WaterOperationsAnalysis'))
 const NicepaySettlement = lazy(() => import('./components/NicepaySettlement'))
 const DepositReconciliation = lazy(() => import('./components/DepositReconciliation'))
@@ -73,6 +74,7 @@ function App() {
               <Route path="/" element={<MainLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
+                <Route path="tools/water-operations" element={<WaterOperationsDashboard />} />
                 <Route path="tools/water-operations-analysis" element={<WaterOperationsAnalysis />} />
                 <Route path="tools/nicepay-settlement" element={<NicepaySettlement />} />
                 <Route path="tools/deposit-reconciliation" element={<DepositReconciliation />} />
