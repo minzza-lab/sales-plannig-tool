@@ -7,6 +7,10 @@ import './WaterOperationsAnalysis.css'
 type RawItem = { name: string; status: string; quantity: number; amount: number }
 type Report = { date: string; total: number; ticket: RawItem[]; rental: RawItem[]; updatedAt: string }
 const FIXED_CAPACITY: Record<string, number> = { 카바나: 142, 썬베드: 274 }
+const RENTAL_ZONE_CAPACITY: Record<string, number> = {
+  스파카바나: 26, 패밀리카바나: 14, 비치카바나: 17, 파도카바나: 17, 만타A: 10, 만타B: 14, 만타C: 8, 부메랑카바나: 16, 실내카바나: 7, 아쿠아카바나: 13,
+  실내썬베드: 130, 익스트림썬베드: 36, 파도썬베드: 108,
+}
 
 const classifyTicket = (name: string, amount: number) => {
   if (/추가요금/.test(name)) return '추가요금'
@@ -17,7 +21,28 @@ const classifyTicket = (name: string, amount: number) => {
 const net = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 const used = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
 const rentalType = (name: string) => /카바나/i.test(name) ? '카바나' : /썬베드|선베드/i.test(name) ? '썬베드' : name
-const rentalDetailName = (name: string) => name.replace(/카바나|썬베드|선베드/gi, '').replace(/\(\s*종일\s*\)/gi, '').replace(/[()]/g, '').trim() || '기타'
+const cleanRentalName = (name: string) => name.replace(/회원\)?\s*/gi, '').replace(/\(\s*오후\s*\)/gi, '').replace(/\(\s*종일\s*\)/gi, '').replace(/\s+/g, ' ').trim()
+const rentalDetailName = (name: string, type: string) => {
+  const clean = cleanRentalName(name)
+  if (type === '카바나') {
+    if (/스파카바나/i.test(clean)) return '스파카바나'
+    if (/패밀리존2|패밀리카바나/i.test(clean)) return '패밀리카바나'
+    if (/beach|비치/i.test(clean)) return '비치카바나'
+    if (/파도/i.test(clean)) return '파도카바나'
+    if (/만타.*카바나\s*a/i.test(clean)) return '만타A'
+    if (/만타.*카바나\s*b/i.test(clean)) return '만타B'
+    if (/만타.*카바나\s*c/i.test(clean)) return '만타C'
+    if (/부메랑/i.test(clean)) return '부메랑카바나'
+    if (/실내/i.test(clean)) return '실내카바나'
+    if (/아쿠아/i.test(clean)) return '아쿠아카바나'
+  }
+  if (type === '썬베드') {
+    if (/실내/i.test(clean)) return '실내썬베드'
+    if (/익스트림/i.test(clean)) return '익스트림썬베드'
+    if (/파도/i.test(clean)) return '파도썬베드'
+  }
+  return clean.replace(/카바나|썬베드|선베드/gi, '').replace(/[()]/g, '').trim() || '기타'
+}
 
 export default function WaterOperationsAnalysis() {
   const [reports, setReports] = useState<Report[]>([])
@@ -84,7 +109,7 @@ export default function WaterOperationsAnalysis() {
       const fixedCapacity = FIXED_CAPACITY[name]
       const details = new Map<string, RawItem[]>()
       if (fixedCapacity) for (const item of items) {
-        const detail = rentalDetailName(item.name)
+        const detail = rentalDetailName(item.name, name)
         details.set(detail, [...(details.get(detail) || []), item])
       }
       return {
@@ -93,7 +118,7 @@ export default function WaterOperationsAnalysis() {
         revenue: net(items),
         capacity: fixedCapacity || dailyAdmissions,
         basis: fixedCapacity ? '보유 수량' : '당일 발권객',
-        details: [...details].map(([detail, rows]) => ({ name: detail, used: Math.max(0, used(rows)), revenue: net(rows) })).sort((left, right) => right.used - left.used),
+        details: [...details].map(([detail, rows]) => ({ name: detail, used: Math.max(0, used(rows)), revenue: net(rows), capacity: RENTAL_ZONE_CAPACITY[detail] || 0 })).sort((left, right) => right.used - left.used),
       }
     }).sort((left, right) => (FIXED_CAPACITY[right.name] ? 1 : 0) - (FIXED_CAPACITY[left.name] ? 1 : 0))
   }, [active])
@@ -120,7 +145,7 @@ export default function WaterOperationsAnalysis() {
       <div className="water-ops-heading"><div><Waves size={19}/><div><span>RENTAL UTILIZATION</span><h2>대여상품 월별 사용 현황</h2></div></div><small>카바나 142개 · 선베드 274개 / 그 외 품목은 당일 발권객 기준</small></div>
       <div className="rental-month-actions"><button onClick={() => setMonth(addMonths(month, -1))}><ChevronLeft size={16}/></button><b>{format(month, 'yyyy년 M월')}</b><button onClick={() => setMonth(addMonths(month, 1))}><ChevronRight size={16}/></button></div>
       <div className="rental-calendar">{['월','화','수','목','금','토','일'].map((day) => <b key={day}>{day}</b>)}{days.map((date) => { const key = format(date, 'yyyy-MM-dd'); const report = reports.find((item) => item.date === key); const count = Math.max(0, used(report?.rental || [])); return <button key={key} className={!isSameMonth(date, month) ? 'outside' : selected === key ? 'selected' : ''} onClick={() => report && setSelected(key)} disabled={!report}><span>{format(date, 'd')}</span>{report ? <><strong>{count.toLocaleString()}건</strong><small>대여 사용</small></> : <small>—</small>}</button> })}</div>
-      {active?.rental.length ? <div className="rental-products">{rentals.map((item) => { const occupancy = item.capacity ? item.used / item.capacity * 100 : 0; const hasDetails = item.details.length > 0; return <article key={item.name}><div><small>{item.name}</small><strong>{item.used.toLocaleString()}회 사용</strong><span>{item.revenue.toLocaleString()}원</span></div><div className="occupancy"><b>{occupancy.toFixed(1)}%</b><i><em style={{width: `${Math.min(100, occupancy)}%`}}/></i><small>{item.basis} {item.capacity.toLocaleString()}{item.basis === '보유 수량' ? '개 중' : '명 대비'} {item.used.toLocaleString()}회 사용</small></div>{hasDetails && <><button type="button" className="rental-detail-toggle" onClick={() => setExpandedRental((current) => current === item.name ? null : item.name)}>{expandedRental === item.name ? '상세 닫기' : '상세 보기'}</button>{expandedRental === item.name && <div className="rental-detail-list">{item.details.map((detail) => <div key={detail.name}><b>{detail.name}</b><span>{detail.used.toLocaleString()}회</span><em>{detail.revenue.toLocaleString()}원</em></div>)}</div>}</>}</article> })}</div> : <Empty text="선택 날짜의 대여상품 상세가 없습니다." />}
+      {active?.rental.length ? <div className="rental-products">{rentals.map((item) => { const occupancy = item.capacity ? item.used / item.capacity * 100 : 0; const hasDetails = item.details.length > 0; return <article key={item.name}><div><small>{item.name}</small><strong>{item.used.toLocaleString()}회 사용</strong><span>{item.revenue.toLocaleString()}원</span></div><div className="occupancy"><b>{occupancy.toFixed(1)}%</b><i><em style={{width: `${Math.min(100, occupancy)}%`}}/></i><small>{item.basis} {item.capacity.toLocaleString()}{item.basis === '보유 수량' ? '개 중' : '명 대비'} {item.used.toLocaleString()}회 사용</small></div>{hasDetails && <><button type="button" className="rental-detail-toggle" onClick={() => setExpandedRental((current) => current === item.name ? null : item.name)}>{expandedRental === item.name ? '상세 닫기' : '상세 보기'}</button>{expandedRental === item.name && <div className="rental-detail-list">{item.details.map((detail) => { const rate = detail.capacity ? detail.used / detail.capacity * 100 : 0; return <div key={detail.name}><b>{detail.name}</b><span>{detail.capacity ? `${detail.used.toLocaleString()} / ${detail.capacity.toLocaleString()}개` : `${detail.used.toLocaleString()}회`}</span><em>{detail.capacity ? `${rate.toFixed(1)}%` : '—'}</em></div> })}</div>}</>}</article> })}</div> : <Empty text="선택 날짜의 대여상품 상세가 없습니다." />}
     </section>
   </div>
 }
