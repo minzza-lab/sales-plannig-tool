@@ -39,7 +39,7 @@ type SyncLock = { id: number; token: string };
 const WADM_API = 'https://wadm.wellihillipark.com:8060/api';
 const SYNC_MARKER = '[PACKAGE_SERVER_SYNC]';
 const PAGE_SIZE = 50;
-const MAX_PAGES = 120;
+const MAX_PAGES = 60;
 const REQUEST_DELAY_MS = 120;
 const TIMEOUT_MS = 12_000;
 
@@ -244,7 +244,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!supabaseUrl || !anonKey) return jsonResponse({ error: '서버의 데이터베이스 연결 설정이 없습니다.' }, 500);
   if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: '로그인이 필요합니다.' }, 401);
   if (!adminId || !adminPwd) return jsonResponse({ error: '서버 직접 동기화 설정이 아직 완료되지 않았습니다. 관리자 계정 환경변수를 등록해주세요.' }, 503);
-  if (!Number.isFinite(rangeDays) || rangeDays < 1 || rangeDays > 92) return jsonResponse({ error: '한 번에 최대 90일 범위만 동기화할 수 있습니다.' }, 400);
+  if (!Number.isFinite(rangeDays) || rangeDays < 1 || rangeDays > 31) return jsonResponse({ error: '한 번에 최대 30일 범위만 동기화할 수 있습니다.' }, 400);
 
   const user = await verifyUser(supabaseUrl, anonKey, authorization);
   if (!user?.id) return jsonResponse({ error: '로그인 정보가 만료되었습니다. 다시 로그인해주세요.' }, 401);

@@ -162,7 +162,7 @@ const PackageSalesDashboard: React.FC = () => {
       const ranges: Array<{ from: string; to: string }> = [];
       for (let cursor = new Date(start); cursor <= end;) {
         const rangeEnd = new Date(cursor);
-        rangeEnd.setDate(rangeEnd.getDate() + 89);
+        rangeEnd.setDate(rangeEnd.getDate() + 29);
         if (rangeEnd > end) rangeEnd.setTime(end.getTime());
         const iso = (value: Date) => value.toISOString().slice(0, 10);
         ranges.push({ from: iso(cursor), to: iso(rangeEnd) });
