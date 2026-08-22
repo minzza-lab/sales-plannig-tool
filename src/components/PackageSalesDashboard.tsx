@@ -149,8 +149,7 @@ const PackageSalesDashboard: React.FC = () => {
   const [productCategories, setProductCategories] = useState<Record<string, ProductCategory>>({});
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
-  const [batchKeyword, setBatchKeyword] = useState('');
-  const [batchCategory, setBatchCategory] = useState<ProductCategory>({ major: '객실미포함', middle: '기타', minor: '' });
+  const [bundleCategories, setBundleCategories] = useState<Record<string, ProductCategory>>({});
   const [selectedClassificationDetail, setSelectedClassificationDetail] = useState<ClassificationDetail | null>(null);
 
 
@@ -627,9 +626,6 @@ const PackageSalesDashboard: React.FC = () => {
 
   const renderCategoryManager = () => {
     if (!isCategoryManagerOpen) return null;
-    const batchMatches = batchKeyword.trim()
-      ? uniqueProductFamilies.filter((family) => family.toLowerCase().includes(batchKeyword.trim().toLowerCase()))
-      : [];
     const recommendedBundles = Object.entries(uniqueProductFamilies.reduce((acc, family) => {
       const key = recommendedBundleKey(family);
       if (key.length < 2) return acc;
@@ -640,13 +636,12 @@ const PackageSalesDashboard: React.FC = () => {
       .filter(([, families]) => families.length >= 2)
       .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
       .slice(0, 30);
-    const applyBatchCategory = () => {
-      if (batchMatches.length === 0) return;
-      setProductCategories((previous) => ({
-        ...previous,
-        ...Object.fromEntries(batchMatches.map((family) => [family, { ...batchCategory }])),
-      }));
-      setSyncMessage(`“${batchKeyword}” 포함 대표 상품 ${batchMatches.length}개에 일괄 분류를 적용했습니다. 분류 저장을 눌러 확정해주세요.`);
+    const categoryForFamily = (family: string) => {
+      const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
+      const savedCategory = productCategories[family];
+      return savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
+        ? savedCategory
+        : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
     };
     return (
       <section className="pkg-category-manager">
@@ -660,38 +655,52 @@ const PackageSalesDashboard: React.FC = () => {
             <button onClick={() => void saveProductCategories()} className="pkg-category-save-btn" disabled={isSavingCategories}>{isSavingCategories ? '저장 중…' : '분류 저장'}</button>
           </div>
         </div>
-        <div className="pkg-batch-category-box">
-          <div className="pkg-batch-category-title"><strong>비슷한 상품명 일괄 분류</strong><span>대표 상품명에 포함된 단어로 묶어 적용합니다.</span></div>
-          <div className="pkg-batch-category-fields">
-            <input value={batchKeyword} placeholder="예: 올인원PKG, 골드시즌, 룸온리" onChange={(event) => setBatchKeyword(event.target.value)} />
-            <select value={batchCategory.major} onChange={(event) => setBatchCategory((category) => ({ ...category, major: event.target.value }))}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-            <select aria-label="중분류(상품 유형)" title="중분류(상품 유형)" value={batchCategory.middle} onChange={(event) => setBatchCategory((category) => ({ ...category, middle: event.target.value }))}>
-              {CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-            <input value={batchCategory.minor} placeholder="소분류(대표 상품명)" onChange={(event) => setBatchCategory((category) => ({ ...category, minor: event.target.value }))} />
-            <button onClick={applyBatchCategory} disabled={batchMatches.length === 0} className="pkg-batch-apply-btn">{batchMatches.length}개 일괄 적용</button>
-          </div>
-          {batchMatches.length > 0 && <p className="pkg-batch-match-list">적용 대상: {batchMatches.slice(0, 8).join(' · ')}{batchMatches.length > 8 ? ` 외 ${batchMatches.length - 8}개` : ''}</p>}
-        </div>
         {recommendedBundles.length > 0 && (
           <div className="pkg-recommended-bundles">
-            <div className="pkg-recommended-bundles-title"><strong>추천 묶음</strong><span>표시된 묶음을 누르면 위의 일괄 분류 대상에 바로 입력됩니다.</span></div>
-            <div className="pkg-recommended-bundle-grid">{recommendedBundles.map(([key, families]) => (
-              <button key={key} onClick={() => setBatchKeyword(key)} className="pkg-recommended-bundle-card">
-                <strong>{key}</strong><span>{families.length}개 대표 상품</span><small>{families.slice(0, 3).join(' · ')}{families.length > 3 ? ` 외 ${families.length - 3}개` : ''}</small>
-              </button>
-            ))}</div>
+            <div className="pkg-recommended-bundles-title"><strong>추천 묶음별 분류</strong><span>묶음을 펼쳐 대·중분류는 일괄 적용하고, 소분류 대표명은 상품별로 조정하세요.</span></div>
+            <div className="pkg-recommended-bundle-grid">{recommendedBundles.map(([key, families]) => {
+              const representative = categoryForFamily(families[0]);
+              const bundleCategory = bundleCategories[key] || { major: representative.major, middle: representative.middle, minor: '' };
+              const updateBundle = (patch: Partial<ProductCategory>) => setBundleCategories((previous) => ({ ...previous, [key]: { ...bundleCategory, ...patch } }));
+              const applyBundleCategory = () => {
+                setProductCategories((previous) => ({
+                  ...previous,
+                  ...Object.fromEntries(families.map((family) => {
+                    const current = previous[family] || categoryForFamily(family);
+                    return [family, { ...current, major: bundleCategory.major, middle: bundleCategory.middle, minor: bundleCategory.minor.trim() || current.minor }];
+                  })),
+                }));
+                setSyncMessage(`“${key}” 추천 묶음 ${families.length}개에 대·중분류를 적용했습니다. 소분류는 각 상품 행에서 개별 수정할 수 있습니다.`);
+              };
+              return (
+                <details key={key} className="pkg-recommended-bundle-card">
+                  <summary><span><strong>{key}</strong><small>{families.length}개 대표 상품</small></span><span className="pkg-accordion-hint">펼쳐서 설정</span></summary>
+                  <div className="pkg-bundle-controls">
+                    <label>대분류<select value={bundleCategory.major} onChange={(event) => updateBundle({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                    <label>중분류<select value={bundleCategory.middle} onChange={(event) => updateBundle({ middle: event.target.value })}>{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                    <label>소분류 일괄 변경 <em>(선택)</em><input value={bundleCategory.minor} placeholder="비우면 상품별 이름 유지" onChange={(event) => updateBundle({ minor: event.target.value })} /></label>
+                    <button onClick={applyBundleCategory} className="pkg-batch-apply-btn">{families.length}개 일괄 적용</button>
+                  </div>
+                  <div className="pkg-bundle-product-list">{families.map((family) => {
+                    const category = categoryForFamily(family);
+                    const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
+                    return <div key={family} className="pkg-bundle-product-row">
+                      <strong>{family}</strong>
+                      <select value={category.major} aria-label={`${family} 대분류`} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                      <select value={category.middle} aria-label={`${family} 중분류`} onChange={(event) => update({ middle: event.target.value })}>{!CATEGORY_MIDDLE_SUGGESTIONS.includes(category.middle) && <option value={category.middle}>{category.middle}</option>}{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                      <input value={category.minor} aria-label={`${family} 소분류`} onChange={(event) => update({ minor: event.target.value })} />
+                    </div>;
+                  })}</div>
+                </details>
+              );
+            })}</div>
           </div>
         )}
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
             <tbody>{uniqueProductFamilies.map((family) => {
-              const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
-              const savedCategory = productCategories[family];
-              const category = savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
-                ? savedCategory
-                : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
+              const category = categoryForFamily(family);
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
               return (
                 <tr key={family}>
