@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { callGeminiWithFallback } from '../utils/apiProxy';
 import './FieldSketchWriter.css';
 
+const FIELD_SKETCH_LOGO_SRC = '/brand/wellihilli-ci-white.png';
+
+const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error(`이미지를 불러오지 못했습니다: ${src}`));
+  image.src = src;
+});
+
 const FieldSketchWriter: React.FC = () => {
   const [episodeNumber, setEpisodeNumber] = useState<string>('');
   const [tone, setTone] = useState<string>('reporter');
@@ -77,7 +86,7 @@ const FieldSketchWriter: React.FC = () => {
     const baseImgData = selectedFiles[representativeIndex]?.base64 || selectedFiles[0].base64;
 
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       const canvas = document.createElement('canvas');
       const targetWidth = 1280;
       const targetHeight = 720;
@@ -144,12 +153,25 @@ const FieldSketchWriter: React.FC = () => {
       ctx.font = '160px sans-serif';
       ctx.fillText('👾', 70, bottomY + 20);
       
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.fillRect(targetWidth - 280, 40, 240, 70);
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('로고 (투명PNG 필요)', targetWidth - 160, 83);
+      try {
+        const logo = await loadImage(FIELD_SKETCH_LOGO_SRC);
+        const maxLogoWidth = 230;
+        const maxLogoHeight = 54;
+        const scale = Math.min(maxLogoWidth / logo.width, maxLogoHeight / logo.height);
+        const logoWidth = logo.width * scale;
+        const logoHeight = logo.height * scale;
+        const logoX = targetWidth - logoWidth - 44;
+        const logoY = 40;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 2;
+        ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
+        ctx.restore();
+      } catch (logoError) {
+        console.warn('현장스케치 로고를 불러오지 못해 로고 없이 생성합니다.', logoError);
+      }
 
       setThumbnailUrl(canvas.toDataURL('image/jpeg', 0.9));
     };
