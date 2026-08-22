@@ -37,6 +37,61 @@ interface PackageOrder {
   orderDate: string;
 }
 
+type KeywordSummary = {
+  keyword: string;
+  productNames: Set<string>;
+  orders: number;
+  revenue: number;
+  firstSaleDate: string;
+  lastSaleDate: string;
+};
+
+type SeasonSummary = {
+  id: string;
+  label: string;
+  usageStartDate: string;
+  usageEndDate: string;
+  firstSaleDate: string;
+  lastSaleDate: string;
+  orders: number;
+  revenue: number;
+  keywords: Record<string, number>;
+};
+
+const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
+  { label: '워터파크', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌'] },
+  { label: '스키·보드', terms: ['스키', '보드', '리프트', '눈썰매', '설상', '장비렌탈', '의류렌탈'] },
+  { label: '객실', terms: ['룸온리', '객실', '콘도', '숙박', '2박', '1박'] },
+  { label: '레저·액티비티', terms: ['곤돌라', '루지', '고카트', '플라잉', '썰매', '레포츠', '액션'] },
+  { label: '식음·힐링', terms: ['조식', '냠냠', '힐링', '식사'] },
+  { label: '입장권·기타', terms: ['입장권', '대인', '소인', '특가', '추가권'] },
+];
+
+function classifyPackageKeyword(order: PackageOrder) {
+  const text = `${order.normalizedPackageName} ${order.rawPackageName} ${order.components}`.toLowerCase();
+  return KEYWORD_RULES.find(({ terms }) => terms.some((term) => text.includes(term.toLowerCase())))?.label || '기타 패키지';
+}
+
+function seasonForDate(date: string) {
+  const matched = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) return null;
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  if (month === 12) return { id: `${year + 1}-winter`, label: `${year + 1} 겨울`, order: 0 };
+  if (month <= 2) return { id: `${year}-winter`, label: `${year} 겨울`, order: 0 };
+  if (month <= 5) return { id: `${year}-spring`, label: `${year} 봄`, order: 1 };
+  if (month <= 8) return { id: `${year}-summer`, label: `${year} 여름`, order: 2 };
+  return { id: `${year}-autumn`, label: `${year} 가을`, order: 3 };
+}
+
+function earlierDate(current: string, candidate: string) {
+  return !current || candidate < current ? candidate : current;
+}
+
+function laterDate(current: string, candidate: string) {
+  return !current || candidate > current ? candidate : current;
+}
+
 
 const normalizePackageName = (name: string) => {
   if (!name) return '알 수 없음';
@@ -419,6 +474,94 @@ const PackageSalesDashboard: React.FC = () => {
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
 
+  const keywordSummaries = Object.values(data.reduce((acc, order) => {
+    const keyword = classifyPackageKeyword(order);
+    const saleDate = extractCleanDate('', order.orderDate);
+    if (!acc[keyword]) acc[keyword] = { keyword, productNames: new Set<string>(), orders: 0, revenue: 0, firstSaleDate: '', lastSaleDate: '' };
+    const summary = acc[keyword];
+    summary.productNames.add(order.normalizedPackageName);
+    summary.orders += 1;
+    summary.revenue += order.paymentAmount;
+    if (saleDate) {
+      summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
+      summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
+    }
+    return acc;
+  }, {} as Record<string, KeywordSummary>)).sort((a, b) => b.revenue - a.revenue);
+
+  const seasonSummaries = Object.values(data.reduce((acc, order) => {
+    const usageDate = extractCleanDate(order.reservationDate, order.orderDate);
+    const saleDate = extractCleanDate('', order.orderDate);
+    const season = seasonForDate(usageDate);
+    if (!season) return acc;
+    if (!acc[season.id]) {
+      acc[season.id] = { id: season.id, label: season.label, usageStartDate: '', usageEndDate: '', firstSaleDate: '', lastSaleDate: '', orders: 0, revenue: 0, keywords: {} };
+    }
+    const summary = acc[season.id];
+    summary.usageStartDate = earlierDate(summary.usageStartDate, usageDate);
+    summary.usageEndDate = laterDate(summary.usageEndDate, usageDate);
+    if (saleDate) {
+      summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
+      summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
+    }
+    summary.orders += 1;
+    summary.revenue += order.paymentAmount;
+    const keyword = classifyPackageKeyword(order);
+    summary.keywords[keyword] = (summary.keywords[keyword] || 0) + order.paymentAmount;
+    return acc;
+  }, {} as Record<string, SeasonSummary>)).sort((a, b) => b.id.localeCompare(a.id));
+
+  const topKeyword = (summary: SeasonSummary) => Object.entries(summary.keywords).sort(([, a], [, b]) => b - a)[0]?.[0] || '-';
+
+  const renderSalesHistoryAnalysis = () => (
+    <section className="pkg-history-analysis">
+      <div className="pkg-analysis-heading">
+        <div>
+          <h2>상품 키워드·시즌 판매 분석</h2>
+          <p>결제일은 판매 시작 시점을, 예약일은 실제 시즌 운영 시점을 기준으로 집계합니다.</p>
+        </div>
+        <span className="pkg-analysis-badge">저장된 이력 기준</span>
+      </div>
+      <div className="pkg-analysis-grid">
+        <div className="pkg-analysis-panel">
+          <h3>상품 키워드별 판매 현황</h3>
+          <div className="pkg-analysis-table-wrap">
+            <table className="pkg-analysis-table">
+              <thead><tr><th>키워드</th><th>상품 수</th><th>판매건</th><th>매출</th><th>첫 판매일</th><th>최근 판매일</th></tr></thead>
+              <tbody>{keywordSummaries.map((summary) => (
+                <tr key={summary.keyword}>
+                  <td><strong>{summary.keyword}</strong></td>
+                  <td>{summary.productNames.size}종</td>
+                  <td>{summary.orders.toLocaleString()}건</td>
+                  <td>{formatCurrency(summary.revenue)}</td>
+                  <td>{summary.firstSaleDate || '-'}</td>
+                  <td>{summary.lastSaleDate || '-'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+        <div className="pkg-analysis-panel">
+          <h3>시즌별 판매 이력</h3>
+          <div className="pkg-analysis-table-wrap">
+            <table className="pkg-analysis-table">
+              <thead><tr><th>시즌</th><th>시즌 이용기간</th><th>판매 시작일</th><th>매출 / 판매건</th><th>주력 키워드</th></tr></thead>
+              <tbody>{seasonSummaries.map((summary) => (
+                <tr key={summary.id}>
+                  <td><strong>{summary.label}</strong></td>
+                  <td>{summary.usageStartDate || '-'} ~ {summary.usageEndDate || '-'}</td>
+                  <td>{summary.firstSaleDate || '-'}</td>
+                  <td><strong>{formatCurrency(summary.revenue)}</strong><br /><span>{summary.orders.toLocaleString()}건</span></td>
+                  <td>{topKeyword(summary)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderDetailView = () => {
     if (!selectedDate) return null;
     
@@ -625,6 +768,8 @@ const PackageSalesDashboard: React.FC = () => {
                   </select>
                 </div>
               </div>
+
+              {renderSalesHistoryAnalysis()}
 
               <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
                 <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
