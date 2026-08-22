@@ -45,11 +45,11 @@ type SeasonSummary = {
 type ProductVariant = { name: string; count: number; revenue: number };
 type ProductGroup = { name: string; count: number; revenue: number; variants: Record<string, ProductVariant> };
 type ProductCategory = { major: string; middle: string; minor: string };
+type ClassificationDetail = { label: string; orders: PackageOrder[] };
 
 const CATEGORY_CONFIG_DATE = '2000-01-01';
-const CATEGORY_MAJOR_OPTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '스키강습', '워터파크 티켓', 'B2B', '프로모션', '기타'];
-const CATEGORY_MIDDLE_SUGGESTIONS = ['객실유형', '구성상품', '이용시간', '렌탈·보관 유형', '강습유형', '권종', '시즌', '제휴사', '프로모션 유형', '기타'];
-const CATEGORY_MINOR_SUGGESTIONS = ['1박', '2박', '조식 포함', '워터파크 포함', '올인원', '4시간', '8시간', '야간', '개인강습', '그룹강습', '프라이빗 강습', '장비렌탈', '의류렌탈', '장비보관', '1인락카', '2인락카', '대인', '소인', '골드시즌', '하이시즌', '미들시즌', 'BC카드', 'AK플라자', '홈쇼핑', '얼리버드', '공홈특가'];
+const CATEGORY_MAJOR_OPTIONS = ['객실포함', '객실미포함'];
+const CATEGORY_MIDDLE_SUGGESTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '스키강습', '워터파크 티켓', 'B2B', '프로모션', '부대시설·레저', '기타'];
 
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
   { label: 'B2B', terms: ['비씨', 'bc카드', 'ak플라자', '홈쇼핑', '지니tv', '36사단', '제휴'] },
@@ -60,6 +60,7 @@ const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
   { label: '리프트 티켓', terms: ['리프트'] },
   { label: '프로모션', terms: ['pkg', '특가', '공홈', '얼리버드', '원타임'] },
   { label: '워터파크 티켓', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌', '입장권', '대인', '소인'] },
+  { label: '부대시설·레저', terms: ['곤돌라', '루지', '고카트', '플라잉', '눈썰매', '레포츠', '조식', '힐링', '냠냠'] },
 ];
 
 function classifyPackageKeyword(order: PackageOrder) {
@@ -68,29 +69,14 @@ function classifyPackageKeyword(order: PackageOrder) {
 }
 
 function suggestedCategory(order: PackageOrder): ProductCategory {
-  const major = classifyPackageKeyword(order);
+  const middle = classifyPackageKeyword(order);
   const text = `${order.normalizedPackageName} ${order.rawPackageName}`.toLowerCase();
-  const middleByMajor: Record<string, string> = {
-    룸온리: '객실유형',
-    객실PKG: '구성상품',
-    '리프트 티켓': '이용시간',
-    '렌탈·장비보관소': '렌탈·보관 유형',
-    스키강습: '강습유형',
-    '워터파크 티켓': '권종',
-    B2B: '제휴사',
-    프로모션: '프로모션 유형',
-    '기타 패키지': '기타',
+  const includesRoom = ['룸온리', '객실', '콘도', '숙박', '2박', '1박', 'room'].some((term) => text.includes(term));
+  return {
+    major: includesRoom ? '객실포함' : '객실미포함',
+    middle: middle === '기타 패키지' ? '기타' : middle,
+    minor: productFamilyName(order.normalizedPackageName),
   };
-  const minor = major === '룸온리' ? (text.includes('2박') ? '2박' : '1박')
-    : major === '객실PKG' ? (text.includes('조식') ? '조식 포함' : text.includes('워터') ? '워터파크 포함' : text.includes('올인원') ? '올인원' : '')
-    : major === '리프트 티켓' ? (text.includes('4h') ? '4시간' : text.includes('8h') ? '8시간' : text.includes('야') ? '야간' : '')
-    : major === '렌탈·장비보관소' ? (text.includes('보관') ? text.includes('2인') ? '2인락카' : text.includes('1인') ? '1인락카' : '장비보관' : text.includes('의류') ? '의류렌탈' : '장비렌탈')
-    : major === '스키강습' ? (text.includes('프라이빗') ? '프라이빗 강습' : text.includes('그룹') ? '그룹강습' : '개인강습')
-    : major === '워터파크 티켓' ? (text.includes('대인') ? '대인' : text.includes('소인') ? '소인' : text.includes('골드') ? '골드시즌' : text.includes('하이') ? '하이시즌' : text.includes('미들') ? '미들시즌' : '')
-    : major === 'B2B' ? (text.includes('비씨') || text.includes('bc') ? 'BC카드' : text.includes('ak') ? 'AK플라자' : text.includes('홈쇼핑') ? '홈쇼핑' : '')
-    : major === '프로모션' ? (text.includes('얼리버드') ? '얼리버드' : text.includes('공홈') ? '공홈특가' : '')
-    : '';
-  return { major: major === '기타 패키지' ? '기타' : major, middle: middleByMajor[major] || '기타', minor };
 }
 
 function seasonForDate(date: string) {
@@ -133,6 +119,12 @@ const productFamilyName = (name: string) => name
   .replace(/\s*\(?\d+\s*인\)?(?:\s*(?:기준|구성))?\s*$/, '')
   .trim() || name;
 
+const extractPeopleLabel = (name: string) => name.match(/(?:^|\s)(\d+)\s*인(?:\s|$|\))/)?.[1]
+  ? `${name.match(/(?:^|\s)(\d+)\s*인(?:\s|$|\))/)?.[1]}인`
+  : '인원 미표기';
+
+const extractScheduleLabel = (name: string) => name.match(/\(?\d{1,2}\/\d{1,2}(?:\s*~\s*(?:(?:\d{1,2}\/)?\d{1,2}))?\)?(?:\s*\([^)]*\))?/)?.[0] || '기간 미표기';
+
 const PackageSalesDashboard: React.FC = () => {
   const [data, setData] = useState<PackageOrder[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -148,7 +140,8 @@ const PackageSalesDashboard: React.FC = () => {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
   const [batchKeyword, setBatchKeyword] = useState('');
-  const [batchCategory, setBatchCategory] = useState<ProductCategory>({ major: '기타', middle: '기타', minor: '' });
+  const [batchCategory, setBatchCategory] = useState<ProductCategory>({ major: '객실미포함', middle: '기타', minor: '' });
+  const [selectedClassificationDetail, setSelectedClassificationDetail] = useState<ClassificationDetail | null>(null);
 
 
 
@@ -543,6 +536,12 @@ const PackageSalesDashboard: React.FC = () => {
     return stored && CATEGORY_MAJOR_OPTIONS.includes(stored.major) ? stored : suggestedCategory(order);
   };
   const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.minor].filter(Boolean).join(' · ');
+  const categoryOrderGroups = data.reduce((acc, order) => {
+    const label = categoryLabel(categoryForOrder(order));
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(order);
+    return acc;
+  }, {} as Record<string, PackageOrder[]>);
 
   const keywordSummaries = Object.values(data.reduce((acc, order) => {
     const keyword = categoryLabel(categoryForOrder(order));
@@ -634,7 +633,7 @@ const PackageSalesDashboard: React.FC = () => {
         <div className="pkg-category-manager-header">
           <div>
             <h2>상품 분류 관리</h2>
-            <p>자동 제안값을 확인하고, 필요한 상품만 대·중·소분류를 직접 확정하세요.</p>
+            <p>대분류는 객실 포함 여부, 중분류는 상품 유형, 소분류는 대표 상품명으로 확정하세요.</p>
           </div>
           <div className="pkg-category-manager-actions">
             <button onClick={() => setIsCategoryManagerOpen(false)} className="pkg-category-cancel-btn">닫기</button>
@@ -642,38 +641,71 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
         </div>
         <datalist id="package-middle-category-list">{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
-        <datalist id="package-minor-category-list">{CATEGORY_MINOR_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
         <div className="pkg-batch-category-box">
           <div className="pkg-batch-category-title"><strong>비슷한 상품명 일괄 분류</strong><span>대표 상품명에 포함된 단어로 묶어 적용합니다.</span></div>
           <div className="pkg-batch-category-fields">
             <input value={batchKeyword} placeholder="예: 올인원PKG, 골드시즌, 룸온리" onChange={(event) => setBatchKeyword(event.target.value)} />
             <select value={batchCategory.major} onChange={(event) => setBatchCategory((category) => ({ ...category, major: event.target.value }))}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
             <input value={batchCategory.middle} list="package-middle-category-list" placeholder="중분류" onChange={(event) => setBatchCategory((category) => ({ ...category, middle: event.target.value }))} />
-            <input value={batchCategory.minor} list="package-minor-category-list" placeholder="소분류" onChange={(event) => setBatchCategory((category) => ({ ...category, minor: event.target.value }))} />
+            <input value={batchCategory.minor} placeholder="소분류(대표 상품명)" onChange={(event) => setBatchCategory((category) => ({ ...category, minor: event.target.value }))} />
             <button onClick={applyBatchCategory} disabled={batchMatches.length === 0} className="pkg-batch-apply-btn">{batchMatches.length}개 일괄 적용</button>
           </div>
           {batchMatches.length > 0 && <p className="pkg-batch-match-list">적용 대상: {batchMatches.slice(0, 8).join(' · ')}{batchMatches.length > 8 ? ` 외 ${batchMatches.length - 8}개` : ''}</p>}
         </div>
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
-            <thead><tr><th>대표 상품명</th><th>대분류</th><th>중분류</th><th>소분류</th></tr></thead>
+            <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
             <tbody>{uniqueProductFamilies.map((family) => {
               const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
               const savedCategory = productCategories[family];
               const category = savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
                 ? savedCategory
-                : (seed ? suggestedCategory(seed) : { major: '기타', middle: '기타', minor: '' });
+                : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
               return (
                 <tr key={family}>
                   <td><strong>{family}</strong></td>
                   <td><select value={category.major} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
                   <td><input value={category.middle} list="package-middle-category-list" placeholder="예: 패키지" onChange={(event) => update({ middle: event.target.value })} /></td>
-                  <td><input value={category.minor} list="package-minor-category-list" placeholder="예: 골드시즌" onChange={(event) => update({ minor: event.target.value })} /></td>
+                  <td><input value={category.minor} placeholder="대표 상품명" onChange={(event) => update({ minor: event.target.value })} /></td>
                 </tr>
               );
             })}</tbody>
           </table>
+        </div>
+      </section>
+    );
+  };
+
+  const renderClassificationDetail = () => {
+    if (!selectedClassificationDetail) return null;
+    const summarize = (labelFor: (order: PackageOrder) => string) => Object.values(selectedClassificationDetail.orders.reduce((acc, order) => {
+      const label = labelFor(order);
+      if (!acc[label]) acc[label] = { label, count: 0, revenue: 0 };
+      acc[label].count += 1;
+      acc[label].revenue += order.paymentAmount;
+      return acc;
+    }, {} as Record<string, { label: string; count: number; revenue: number }>)).sort((a, b) => b.revenue - a.revenue);
+    const minorRows = summarize((order) => categoryForOrder(order).minor || productFamilyName(order.normalizedPackageName));
+    const peopleRows = summarize((order) => extractPeopleLabel(order.rawPackageName || order.normalizedPackageName));
+    const scheduleRows = summarize((order) => extractScheduleLabel(order.rawPackageName || order.normalizedPackageName));
+    const totalRevenue = selectedClassificationDetail.orders.reduce((sum, order) => sum + order.paymentAmount, 0);
+    const renderBreakdown = (title: string, rows: Array<{ label: string; count: number; revenue: number }>) => (
+      <div className="pkg-analysis-panel">
+        <h3>{title}</h3>
+        <div className="pkg-analysis-table-wrap"><table className="pkg-analysis-table"><thead><tr><th>구분</th><th>주문</th><th>매출</th><th>비중</th></tr></thead><tbody>{rows.map((row) => (
+          <tr key={row.label}><td><strong>{row.label}</strong></td><td>{row.count.toLocaleString()}건</td><td>{formatCurrency(row.revenue)}</td><td>{totalRevenue ? (row.revenue / totalRevenue * 100).toFixed(1) : '0.0'}%</td></tr>
+        ))}</tbody></table></div>
+      </div>
+    );
+    return (
+      <section className="pkg-classification-detail">
+        <div className="pkg-analysis-heading"><div><h2>분류 상세 분석 · {selectedClassificationDetail.label}</h2><p>통합 과정에서 숨긴 인원·상품명 기간 표기를 원본 주문 데이터에서 다시 분석합니다.</p></div><button onClick={() => setSelectedClassificationDetail(null)} className="pkg-category-cancel-btn">닫기</button></div>
+        <div className="pkg-classification-detail-summary">총 {selectedClassificationDetail.orders.length.toLocaleString()}건 · {formatCurrency(totalRevenue)}</div>
+        <div className="pkg-analysis-grid pkg-analysis-grid-three">
+          {renderBreakdown('소분류(대표 상품명)', minorRows)}
+          {renderBreakdown('인원 구성', peopleRows)}
+          {renderBreakdown('상품명에 포함된 기간', scheduleRows)}
         </div>
       </section>
     );
@@ -693,7 +725,7 @@ const PackageSalesDashboard: React.FC = () => {
           <h3>상품 분류별 판매 현황</h3>
           <div className="pkg-analysis-table-wrap">
             <table className="pkg-analysis-table">
-              <thead><tr><th>분류</th><th>상품 수</th><th>판매건</th><th>매출</th><th>첫 판매일</th><th>최근 판매일</th></tr></thead>
+              <thead><tr><th>분류</th><th>상품 수</th><th>판매건</th><th>매출</th><th>첫 판매일</th><th>최근 판매일</th><th>분석</th></tr></thead>
               <tbody>{keywordSummaries.map((summary) => (
                 <tr key={summary.keyword}>
                   <td><strong>{summary.keyword}</strong></td>
@@ -702,6 +734,7 @@ const PackageSalesDashboard: React.FC = () => {
                   <td>{formatCurrency(summary.revenue)}</td>
                   <td>{summary.firstSaleDate || '-'}</td>
                   <td>{summary.lastSaleDate || '-'}</td>
+                  <td><button onClick={() => setSelectedClassificationDetail({ label: summary.keyword, orders: categoryOrderGroups[summary.keyword] || [] })} className="pkg-product-detail-btn">상세</button></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -998,6 +1031,7 @@ const PackageSalesDashboard: React.FC = () => {
               </div>
 
               {renderSalesHistoryAnalysis()}
+              {renderClassificationDetail()}
 
               <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
                 <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제 주문일 기준, {format(currentMonth, 'yyyy')}년)</h3>

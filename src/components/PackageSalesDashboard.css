@@ -259,6 +259,28 @@
   gap: 1.25rem;
 }
 
+.pkg-analysis-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pkg-classification-detail {
+  margin: -0.8rem 0 2.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(192, 132, 252, 0.32);
+  border-radius: 16px;
+  background: rgba(76, 29, 149, 0.11);
+}
+
+.pkg-classification-detail-summary {
+  display: inline-block;
+  margin: -0.1rem 0 1rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(196, 181, 253, 0.12);
+  color: #ede9fe;
+  font-weight: 800;
+}
+
 .pkg-analysis-panel {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -624,6 +646,9 @@
     grid-template-columns: 1fr;
   }
   .pkg-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+  .pkg-analysis-grid-three {
     grid-template-columns: 1fr;
   }
   .pkg-analysis-heading {
