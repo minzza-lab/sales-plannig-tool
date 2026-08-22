@@ -200,7 +200,8 @@ async function collectOrders(token: string, days: number) {
 }
 
 async function saveOrders(supabaseUrl: string, anonKey: string, authorization: string, rows: WadmPackage[]) {
-  const orders = rows.map(makeOrder).filter((order) => order.order_id && (order.status.includes('결제완료') || order.status.includes('예약완료')));
+  // 완료 외 상태도 함께 갱신해야 입금대기·취소가 완료 주문으로 남는 일이 없다.
+  const orders = rows.map(makeOrder).filter((order) => order.order_id);
   for (let offset = 0; offset < orders.length; offset += 100) {
     const response = await fetchWithTimeout(`${supabaseUrl}/rest/v1/package_orders?on_conflict=order_id`, {
       method: 'POST',
@@ -209,7 +210,10 @@ async function saveOrders(supabaseUrl: string, anonKey: string, authorization: s
     });
     if (!response.ok) throw new Error(`패키지 주문 저장에 실패했습니다. (${response.status})`);
   }
-  return orders.length;
+  return {
+    upsertedCount: orders.length,
+    completedCount: orders.filter((order) => order.status.includes('결제완료') || order.status.includes('예약완료')).length,
+  };
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -235,8 +239,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!lock) return jsonResponse({ error: '패키지 동기화가 이미 진행 중입니다. 잠시 후 다시 확인해주세요.' }, 409);
     const token = await getAdminToken(adminId, adminPwd);
     const sourceRows = await collectOrders(token, days);
-    const savedCount = await saveOrders(supabaseUrl, anonKey, authorization, sourceRows);
-    result = { status: 'completed', days, sourceCount: sourceRows.length, savedCount, finishedAt: new Date().toISOString(), message: `최근 ${days}일 패키지 주문 ${savedCount.toLocaleString()}건을 동기화했습니다.` };
+    const saved = await saveOrders(supabaseUrl, anonKey, authorization, sourceRows);
+    result = {
+      status: 'completed',
+      days,
+      sourceCount: sourceRows.length,
+      savedCount: saved.upsertedCount,
+      completedCount: saved.completedCount,
+      finishedAt: new Date().toISOString(),
+      message: `최근 ${days}일 결제완료 패키지 주문 ${saved.completedCount.toLocaleString()}건을 동기화했습니다.`,
+    };
     state = 'completed';
     return jsonResponse(result);
   } catch (error) {
