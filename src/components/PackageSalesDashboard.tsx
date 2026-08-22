@@ -698,17 +698,17 @@ const PackageSalesDashboard: React.FC = () => {
     if (!isCategoryManagerOpen) return null;
     const unclassifiedProductFamilies = uniqueProductFamilies.filter((family) => !savedCategoryFamilies[family]);
     const displayedProductFamilies = showAllCategories ? uniqueProductFamilies : unclassifiedProductFamilies;
-    const recommendedBundles = Object.entries(displayedProductFamilies.reduce((acc, family) => {
+    const duplicateTextGroups = Object.entries(displayedProductFamilies.reduce((acc, family) => {
       const key = recommendedBundleKey(family);
       if (key.length < 2) return acc;
       if (!acc[key]) acc[key] = [];
       acc[key].push(family);
       return acc;
     }, {} as Record<string, string[]>))
-      .filter(([key, families]) => families.length >= 2 && (showAllCategories || !completedBundleKeys[key]))
+      .filter(([key, families]) => families.length >= 5 && (showAllCategories || !completedBundleKeys[key]))
       .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
       .slice(0, 30);
-    const bundledFamilies = new Set(recommendedBundles.flatMap(([, families]) => families));
+    const bundledFamilies = new Set(duplicateTextGroups.flatMap(([, families]) => families));
     const remainingProductFamilies = displayedProductFamilies.filter((family) => !bundledFamilies.has(family));
     return (
       <section className="pkg-category-manager">
@@ -724,10 +724,9 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
         </div>
         <div className="pkg-category-status">{showAllCategories ? `전체 ${uniqueProductFamilies.length}개 대표 상품의 분류 기준을 편집 중입니다.` : `새로 들어온 미분류 상품 ${unclassifiedProductFamilies.length}개만 표시합니다. 저장된 상품은 분석에 그대로 반영되며, 필요할 때 전체 분류 기준에서 수정할 수 있습니다.`}</div>
-        {recommendedBundles.length > 0 && (
-          <div className="pkg-recommended-bundles">
-            <div className="pkg-recommended-bundles-title"><strong>추천 묶음별 분류</strong><span>묶음을 펼쳐 대분류·계절·상품 유형은 일괄 적용하고, 상품명은 상품별로 조정하세요.</span></div>
-            <div className="pkg-recommended-bundle-grid">{recommendedBundles.map(([key, families]) => {
+        <div className="pkg-product-collection">
+          <div className="pkg-product-collection-title"><strong>상품명 수집 목록</strong><span>공통 텍스트가 5개 이상인 상품만 묶어 일괄 설정할 수 있습니다. 나머지는 아래에서 개별 설정하세요.</span></div>
+          {duplicateTextGroups.length > 0 && <div className="pkg-product-collection-grid">{duplicateTextGroups.map(([key, families]) => {
               const representative = categoryForFamily(families[0]);
               const bundleCategory = bundleCategories[key] || { major: representative.major, middle: representative.middle, sub: representative.sub, minor: '' };
               const updateBundle = (patch: Partial<ProductCategory>) => setBundleCategories((previous) => ({ ...previous, [key]: { ...bundleCategory, ...patch } }));
@@ -739,7 +738,7 @@ const PackageSalesDashboard: React.FC = () => {
                     return [family, { ...current, major: bundleCategory.major, middle: bundleCategory.middle, sub: bundleCategory.sub, minor: bundleCategory.minor.trim() || current.minor }];
                   })),
                 }));
-                setSyncMessage(`“${key}” 추천 묶음 ${families.length}개에 대분류·계절·상품 유형을 적용했습니다. 상품명은 각 상품 행에서 개별 수정할 수 있습니다.`);
+                setSyncMessage(`“${key}” 공통 텍스트 그룹 ${families.length}개에 대분류·계절·상품 유형을 적용했습니다. 상품명은 각 상품 행에서 개별 수정할 수 있습니다.`);
               };
               return (
                 <details key={key} className="pkg-recommended-bundle-card">
@@ -765,10 +764,8 @@ const PackageSalesDashboard: React.FC = () => {
                   })}</div>
                 </details>
               );
-            })}</div>
-          </div>
-        )}
-        {!showAllCategories && remainingProductFamilies.length > 0 && <button onClick={() => setShowRemainingProductList((show) => !show)} className="pkg-show-remaining-btn">{showRemainingProductList ? '나머지 개별 상품 목록 닫기' : `추천 묶음에 없는 상품 ${remainingProductFamilies.length}개 직접 분류하기`}</button>}
+          })}</div>}
+          {!showAllCategories && remainingProductFamilies.length > 0 && <button onClick={() => setShowRemainingProductList((show) => !show)} className="pkg-show-remaining-btn">{showRemainingProductList ? '개별 상품 목록 닫기' : `개별 설정할 상품 ${remainingProductFamilies.length}개 보기`}</button>}
         {(showAllCategories || showRemainingProductList) && <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(계절)</th><th>소분류(상품 유형)</th><th>상품명(노출명)</th></tr></thead>
@@ -787,6 +784,7 @@ const PackageSalesDashboard: React.FC = () => {
             })}</tbody>
           </table>
         </div>}
+        </div>
       </section>
     );
   };
