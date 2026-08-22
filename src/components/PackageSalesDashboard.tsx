@@ -97,7 +97,7 @@ const normalizePackageName = (name: string) => {
   if (!name) return '알 수 없음';
   let normalized = name.replace(/\(\d{1,2}\/\d{1,2}\)/g, ''); // Fix AK플라자 얼리버드
   // 상품명 끝의 운영일·요일 표기는 같은 상품으로 합친다. 예: "9/6~ 주중", "6/6~7/3 (금,토)"
-  normalized = normalized.replace(/\s*\d{1,2}\/\d{1,2}(?:\s*~\s*(?:\d{1,2}\/\d{1,2})?)?(?:\s*\([^)]*\))?(?:\s*(?:주중|주말|평일|공휴일|종일|오후|야간))?\s*$/, '');
+  normalized = normalized.replace(/\s*\(?\d{1,2}\/\d{1,2}(?:\s*~(?:\s*(?:(?:\d{1,2}\/)?\d{1,2}))?)?\)?(?:\s*\([^)]*\))?(?:\s*(?:주중|주말|평일|공휴일|종일|오후|야간))?\s*$/, '');
   // Remove starting dates like 5/22 ~ 6/5
   normalized = normalized.replace(/^\d{1,2}\/\d{1,2}(\s*~\s*\d{1,2}\/\d{1,2})?\s*/, '');
   normalized = normalized.replace(/^~\s*\d{1,2}\/\d{1,2}\s*/, ''); // Handle remaining '~ 5/20'
@@ -648,7 +648,7 @@ const PackageSalesDashboard: React.FC = () => {
                   <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                     <td style={{ padding: '12px 16px', fontSize: '0.9rem' }}>{order.orderId}</td>
                     <td style={{ padding: '12px 16px' }}>{order.channel}</td>
-                    <td style={{ padding: '12px 16px', color: '#f8fafc' }}>{order.rawPackageName}</td>
+                    <td style={{ padding: '12px 16px', color: '#f8fafc' }} title={order.rawPackageName}>{order.normalizedPackageName}</td>
                     <td style={{ padding: '12px 16px' }}>{order.reservationDate}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold' }}>{order.paymentAmount.toLocaleString()}원</td>
                     <td style={{ padding: '12px 16px' }}><span className="pkg-status-badge">{order.status}</span></td>
@@ -703,7 +703,7 @@ const PackageSalesDashboard: React.FC = () => {
                     <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#94a3b8' }}>{order.orderDate}</td>
                     <td style={{ padding: '12px 16px', fontSize: '0.9rem' }}>{order.orderId}</td>
                     <td style={{ padding: '12px 16px' }}>{order.channel}</td>
-                    <td style={{ padding: '12px 16px', color: '#f8fafc' }}>{order.rawPackageName}</td>
+                    <td style={{ padding: '12px 16px', color: '#f8fafc' }} title={order.rawPackageName}>{order.normalizedPackageName}</td>
                     <td style={{ padding: '12px 16px' }}>{order.reservationDate}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 'bold' }}>{order.paymentAmount.toLocaleString()}원</td>
                     <td style={{ padding: '12px 16px' }}><span className="pkg-status-badge">{order.status}</span></td>

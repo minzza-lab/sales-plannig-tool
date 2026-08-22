@@ -73,7 +73,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = TIME
 function normalizePackageName(name: string) {
   return name
     .replace(/\(\d{1,2}\/\d{1,2}\)/g, '')
-    .replace(/\s*\d{1,2}\/\d{1,2}(?:\s*~\s*(?:\d{1,2}\/\d{1,2})?)?(?:\s*\([^)]*\))?(?:\s*(?:주중|주말|평일|공휴일|종일|오후|야간))?\s*$/, '')
+    .replace(/\s*\(?\d{1,2}\/\d{1,2}(?:\s*~(?:\s*(?:(?:\d{1,2}\/)?\d{1,2}))?)?\)?(?:\s*\([^)]*\))?(?:\s*(?:주중|주말|평일|공휴일|종일|오후|야간))?\s*$/, '')
     .replace(/^\d{1,2}\/\d{1,2}(\s*~\s*\d{1,2}\/\d{1,2})?\s*/, '')
     .trim() || '알 수 없음';
 }
