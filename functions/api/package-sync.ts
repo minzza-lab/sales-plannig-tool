@@ -142,10 +142,20 @@ async function acquireLock(supabaseUrl: string, anonKey: string, authorization: 
   });
   if (!recent.ok) throw new Error('동기화 실행 상태를 확인하지 못했습니다.');
   const previous = await recent.json() as Array<{ synced_by_id?: string; synced_at?: string }>;
-  const previousState = previous[0]?.synced_by_id ? JSON.parse(previous[0].synced_by_id) as { status?: string } : null;
-  const previousAge = previous[0]?.synced_at ? Date.now() - new Date(previous[0].synced_at).getTime() : 0;
+  let previousState: { status?: string; startedAt?: string } | null = null;
+  try {
+    previousState = previous[0]?.synced_by_id
+      ? JSON.parse(previous[0].synced_by_id) as { status?: string; startedAt?: string }
+      : null;
+  } catch {
+    previousState = null;
+  }
+  // synced_at에는 DB 갱신 트리거가 연결될 수 있으므로, 실행 잠금 판단은
+  // 동기화 작업 자체가 기록한 startedAt을 우선 사용한다.
+  const lockStartedAt = previousState?.startedAt || previous[0]?.synced_at;
+  const previousAge = lockStartedAt ? Date.now() - new Date(lockStartedAt).getTime() : Number.POSITIVE_INFINITY;
   // 브라우저 종료 등으로 남은 오래된 잠금은 새 동기화가 자동으로 회복한다.
-  if (previousState?.status === 'running' && previousAge < 2 * 60 * 1000) return null;
+  if (previousState?.status === 'running' && Number.isFinite(previousAge) && previousAge >= 0 && previousAge < 2 * 60 * 1000) return null;
 
   const token = crypto.randomUUID();
   const response = await fetchWithTimeout(`${supabaseUrl}/rest/v1/sync_status`, {
