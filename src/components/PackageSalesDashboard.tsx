@@ -47,15 +47,16 @@ type ProductGroup = { name: string; count: number; revenue: number; variants: Re
 type ProductCategory = { major: string; middle: string; minor: string };
 
 const CATEGORY_CONFIG_DATE = '2000-01-01';
-const CATEGORY_MAJOR_OPTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '워터파크 티켓', 'B2B', '프로모션', '기타'];
-const CATEGORY_MIDDLE_SUGGESTIONS = ['객실유형', '구성상품', '이용시간', '렌탈·보관 유형', '권종', '시즌', '제휴사', '프로모션 유형', '기타'];
-const CATEGORY_MINOR_SUGGESTIONS = ['1박', '2박', '조식 포함', '워터파크 포함', '올인원', '4시간', '8시간', '야간', '장비렌탈', '의류렌탈', '장비보관', '1인락카', '2인락카', '대인', '소인', '골드시즌', '하이시즌', '미들시즌', 'BC카드', 'AK플라자', '홈쇼핑', '얼리버드', '공홈특가'];
+const CATEGORY_MAJOR_OPTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '스키강습', '워터파크 티켓', 'B2B', '프로모션', '기타'];
+const CATEGORY_MIDDLE_SUGGESTIONS = ['객실유형', '구성상품', '이용시간', '렌탈·보관 유형', '강습유형', '권종', '시즌', '제휴사', '프로모션 유형', '기타'];
+const CATEGORY_MINOR_SUGGESTIONS = ['1박', '2박', '조식 포함', '워터파크 포함', '올인원', '4시간', '8시간', '야간', '개인강습', '그룹강습', '프라이빗 강습', '장비렌탈', '의류렌탈', '장비보관', '1인락카', '2인락카', '대인', '소인', '골드시즌', '하이시즌', '미들시즌', 'BC카드', 'AK플라자', '홈쇼핑', '얼리버드', '공홈특가'];
 
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
   { label: 'B2B', terms: ['비씨', 'bc카드', 'ak플라자', '홈쇼핑', '지니tv', '36사단', '제휴'] },
   { label: '룸온리', terms: ['룸온리'] },
   { label: '객실PKG', terms: ['객실', '콘도', '숙박', '2박', '1박'] },
   { label: '렌탈·장비보관소', terms: ['장비보관', '장비렌탈', '의류렌탈', '락카', '보관소'] },
+  { label: '스키강습', terms: ['강습', '레슨'] },
   { label: '리프트 티켓', terms: ['리프트'] },
   { label: '프로모션', terms: ['pkg', '특가', '공홈', '얼리버드', '원타임'] },
   { label: '워터파크 티켓', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌', '입장권', '대인', '소인'] },
@@ -74,6 +75,7 @@ function suggestedCategory(order: PackageOrder): ProductCategory {
     객실PKG: '구성상품',
     '리프트 티켓': '이용시간',
     '렌탈·장비보관소': '렌탈·보관 유형',
+    스키강습: '강습유형',
     '워터파크 티켓': '권종',
     B2B: '제휴사',
     프로모션: '프로모션 유형',
@@ -83,6 +85,7 @@ function suggestedCategory(order: PackageOrder): ProductCategory {
     : major === '객실PKG' ? (text.includes('조식') ? '조식 포함' : text.includes('워터') ? '워터파크 포함' : text.includes('올인원') ? '올인원' : '')
     : major === '리프트 티켓' ? (text.includes('4h') ? '4시간' : text.includes('8h') ? '8시간' : text.includes('야') ? '야간' : '')
     : major === '렌탈·장비보관소' ? (text.includes('보관') ? text.includes('2인') ? '2인락카' : text.includes('1인') ? '1인락카' : '장비보관' : text.includes('의류') ? '의류렌탈' : '장비렌탈')
+    : major === '스키강습' ? (text.includes('프라이빗') ? '프라이빗 강습' : text.includes('그룹') ? '그룹강습' : '개인강습')
     : major === '워터파크 티켓' ? (text.includes('대인') ? '대인' : text.includes('소인') ? '소인' : text.includes('골드') ? '골드시즌' : text.includes('하이') ? '하이시즌' : text.includes('미들') ? '미들시즌' : '')
     : major === 'B2B' ? (text.includes('비씨') || text.includes('bc') ? 'BC카드' : text.includes('ak') ? 'AK플라자' : text.includes('홈쇼핑') ? '홈쇼핑' : '')
     : major === '프로모션' ? (text.includes('얼리버드') ? '얼리버드' : text.includes('공홈') ? '공홈특가' : '')
