@@ -16,11 +16,14 @@ const classifyTicket = (name: string, amount: number) => {
 }
 const net = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 const used = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+const rentalType = (name: string) => /카바나/i.test(name) ? '카바나' : /썬베드|선베드/i.test(name) ? '썬베드' : name
+const rentalDetailName = (name: string) => name.replace(/카바나|썬베드|선베드/gi, '').replace(/\(\s*종일\s*\)/gi, '').replace(/[()]/g, '').trim() || '기타'
 
 export default function WaterOperationsAnalysis() {
   const [reports, setReports] = useState<Report[]>([])
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [selected, setSelected] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [expandedRental, setExpandedRental] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -72,9 +75,27 @@ export default function WaterOperationsAnalysis() {
   }, [active, ticketGroups])
   const rentals = useMemo(() => {
     const grouped = new Map<string, RawItem[]>()
-    for (const item of active?.rental || []) grouped.set(item.name, [...(grouped.get(item.name) || []), item])
+    for (const item of active?.rental || []) {
+      const name = rentalType(item.name)
+      grouped.set(name, [...(grouped.get(name) || []), item])
+    }
     const dailyAdmissions = Math.max(0, used(active?.ticket || []))
-    return [...grouped].map(([name, items]) => ({ name, used: Math.max(0, used(items)), revenue: net(items), capacity: FIXED_CAPACITY[name] || dailyAdmissions, basis: FIXED_CAPACITY[name] ? '보유 수량' : '당일 발권객' }))
+    return [...grouped].map(([name, items]) => {
+      const fixedCapacity = FIXED_CAPACITY[name]
+      const details = new Map<string, RawItem[]>()
+      if (fixedCapacity) for (const item of items) {
+        const detail = rentalDetailName(item.name)
+        details.set(detail, [...(details.get(detail) || []), item])
+      }
+      return {
+        name,
+        used: Math.max(0, used(items)),
+        revenue: net(items),
+        capacity: fixedCapacity || dailyAdmissions,
+        basis: fixedCapacity ? '보유 수량' : '당일 발권객',
+        details: [...details].map(([detail, rows]) => ({ name: detail, used: Math.max(0, used(rows)), revenue: net(rows) })).sort((left, right) => right.used - left.used),
+      }
+    }).sort((left, right) => (FIXED_CAPACITY[right.name] ? 1 : 0) - (FIXED_CAPACITY[left.name] ? 1 : 0))
   }, [active])
   const days = Array.from({ length: 42 }, (_, index) => {
     const start = startOfMonth(month)
@@ -99,7 +120,7 @@ export default function WaterOperationsAnalysis() {
       <div className="water-ops-heading"><div><Waves size={19}/><div><span>RENTAL UTILIZATION</span><h2>대여상품 월별 사용 현황</h2></div></div><small>카바나 142개 · 선베드 274개 / 그 외 품목은 당일 발권객 기준</small></div>
       <div className="rental-month-actions"><button onClick={() => setMonth(addMonths(month, -1))}><ChevronLeft size={16}/></button><b>{format(month, 'yyyy년 M월')}</b><button onClick={() => setMonth(addMonths(month, 1))}><ChevronRight size={16}/></button></div>
       <div className="rental-calendar">{['월','화','수','목','금','토','일'].map((day) => <b key={day}>{day}</b>)}{days.map((date) => { const key = format(date, 'yyyy-MM-dd'); const report = reports.find((item) => item.date === key); const count = Math.max(0, used(report?.rental || [])); return <button key={key} className={!isSameMonth(date, month) ? 'outside' : selected === key ? 'selected' : ''} onClick={() => report && setSelected(key)} disabled={!report}><span>{format(date, 'd')}</span>{report ? <><strong>{count.toLocaleString()}건</strong><small>대여 사용</small></> : <small>—</small>}</button> })}</div>
-      {active?.rental.length ? <div className="rental-products">{rentals.map((item) => { const occupancy = item.capacity ? item.used / item.capacity * 100 : 0; return <article key={item.name}><div><small>{item.name}</small><strong>{item.used.toLocaleString()}회 사용</strong><span>{item.revenue.toLocaleString()}원</span></div><div className="occupancy"><b>{occupancy.toFixed(1)}%</b><i><em style={{width: `${Math.min(100, occupancy)}%`}}/></i><small>{item.basis} {item.capacity.toLocaleString()}{item.basis === '보유 수량' ? '개 중' : '명 대비'} {item.used.toLocaleString()}회 사용</small></div></article> })}</div> : <Empty text="선택 날짜의 대여상품 상세가 없습니다." />}
+      {active?.rental.length ? <div className="rental-products">{rentals.map((item) => { const occupancy = item.capacity ? item.used / item.capacity * 100 : 0; const hasDetails = item.details.length > 0; return <article key={item.name}><div><small>{item.name}</small><strong>{item.used.toLocaleString()}회 사용</strong><span>{item.revenue.toLocaleString()}원</span></div><div className="occupancy"><b>{occupancy.toFixed(1)}%</b><i><em style={{width: `${Math.min(100, occupancy)}%`}}/></i><small>{item.basis} {item.capacity.toLocaleString()}{item.basis === '보유 수량' ? '개 중' : '명 대비'} {item.used.toLocaleString()}회 사용</small></div>{hasDetails && <><button type="button" className="rental-detail-toggle" onClick={() => setExpandedRental((current) => current === item.name ? null : item.name)}>{expandedRental === item.name ? '상세 닫기' : '상세 보기'}</button>{expandedRental === item.name && <div className="rental-detail-list">{item.details.map((detail) => <div key={detail.name}><b>{detail.name}</b><span>{detail.used.toLocaleString()}회</span><em>{detail.revenue.toLocaleString()}원</em></div>)}</div>}</>}</article> })}</div> : <Empty text="선택 날짜의 대여상품 상세가 없습니다." />}
     </section>
   </div>
 }

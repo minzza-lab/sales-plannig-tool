@@ -14,6 +14,7 @@ const net = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item
 const quantity = (items: RawItem[]) => items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
 const compactWon = (amount: number) => Math.abs(amount) >= 100_000_000 ? `${(amount / 100_000_000).toFixed(2)}억원` : Math.abs(amount) >= 10_000 ? `${Math.round(amount / 10_000).toLocaleString()}만원` : `${amount.toLocaleString()}원`
 const classifyTicket = (name: string, amount: number) => /추가요금/.test(name) ? '추가요금' : /comp|무료|초대/i.test(name) || amount === 0 ? '무료·COMP' : /할인/.test(name) ? '할인권' : '일반권'
+const rentalType = (name: string) => /카바나/i.test(name) ? '카바나' : /썬베드|선베드/i.test(name) ? '썬베드' : name
 
 export default function WaterOperationsDashboard() {
   const [reports, setReports] = useState<Report[]>([])
@@ -49,9 +50,12 @@ export default function WaterOperationsDashboard() {
   }, [active])
   const rentals = useMemo(() => {
     const groups = new Map<string, RawItem[]>()
-    for (const item of active?.rental || []) groups.set(item.name, [...(groups.get(item.name) || []), item])
+    for (const item of active?.rental || []) {
+      const name = rentalType(item.name)
+      groups.set(name, [...(groups.get(name) || []), item])
+    }
     const admissions = Math.max(0, quantity(active?.ticket || []))
-    return [...groups].map(([name, items]) => ({ name, used: Math.max(0, quantity(items)), amount: net(items), capacity: FIXED_CAPACITY[name] || admissions, fixed: Boolean(FIXED_CAPACITY[name]) }))
+    return [...groups].map(([name, items]) => ({ name, used: Math.max(0, quantity(items)), amount: net(items), capacity: FIXED_CAPACITY[name] || admissions, fixed: Boolean(FIXED_CAPACITY[name]) })).sort((left, right) => (FIXED_CAPACITY[right.name] ? 1 : 0) - (FIXED_CAPACITY[left.name] ? 1 : 0))
   }, [active])
   const cabana = rentals.find((item) => item.name === '카바나')
   const sunbed = rentals.find((item) => item.name === '썬베드')
