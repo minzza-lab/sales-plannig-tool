@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import './WaterOperationsAnalysis.css'
 
 type RawItem = { name: string; status: string; quantity: number; amount: number }
-type Report = { date: string; total: number; ticket: RawItem[]; rental: RawItem[] }
+type Report = { date: string; total: number; ticket: RawItem[]; rental: RawItem[]; updatedAt: string }
 const FIXED_CAPACITY: Record<string, number> = { 카바나: 142, 썬베드: 274 }
 
 const classifyTicket = (name: string, amount: number) => {
@@ -30,11 +30,13 @@ export default function WaterOperationsAnalysis() {
         total: Number(row.data?.summary?.totalAmount) || 0,
         ticket: Array.isArray(row.data?.ticket_analysis) ? row.data.ticket_analysis : [],
         rental: Array.isArray(row.data?.rental_analysis) ? row.data.rental_analysis : [],
+        updatedAt: row.data?.updated_at || '',
       })))
     })()
   }, [])
 
   const active = reports.find((report) => report.date === selected) || null
+  const lastSynced = reports.map((report) => report.updatedAt).filter(Boolean).sort().at(-1)
   const ticketGroups = useMemo(() => {
     const grouped = new Map<string, { sales: number; cancel: number; net: number; quantity: number }>()
     for (const item of active?.ticket || []) {
@@ -61,7 +63,7 @@ export default function WaterOperationsAnalysis() {
     return date
   })
   return <div className="water-ops-page">
-    <header className="water-ops-hero"><div><span>WATER OPERATIONS ANALYSIS</span><h1>워터 권종·대여 분석</h1><p>매출관리 원본과 같은 일별 데이터를 사용합니다. 권종 순매출과 전체 매출을 대조하고, 대여상품의 사용 현황을 관리합니다.</p></div></header>
+    <header className="water-ops-hero"><div><span>WATER OPERATIONS ANALYSIS</span><h1>워터 권종·대여 분석</h1><p>매출관리 원본과 같은 일별 데이터를 사용합니다. 권종 순매출과 전체 매출을 대조하고, 대여상품의 사용 현황을 관리합니다.</p></div><small>최근 동기화<br/><b>{lastSynced ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul' }).format(new Date(lastSynced)) : '아직 동기화되지 않음'}</b></small></header>
     <section className="water-ops-card">
       <div className="water-ops-heading"><div><Ticket size={19}/><div><span>TICKET MIX</span><h2>{selected} 권종 분석</h2></div></div><small>동기화 후부터 판매·취소 상세가 누적됩니다.</small></div>
       {active?.ticket.length ? <>

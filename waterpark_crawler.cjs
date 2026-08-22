@@ -167,6 +167,8 @@ async function run() {
       
       const chartData = [];
       const tableData = [];
+      const ticketAnalysis = [];
+      const rentalAnalysis = [];
 
       for (const zoneItem of rawData) {
         const zonePrice = Number(zoneItem.price) || 0;
@@ -193,6 +195,10 @@ async function run() {
               const subName = sub.sub || '기타';
               const subPrice = Number(sub.price) || 0;
               const subCnt = Number(sub.cnt) || 0;
+              const raw = { name: subName, status: sub.cancelflag || '판매', quantity: subCnt, amount: subPrice };
+              const normalizedZone = String(zoneItem.zone || '').replace(/\s/g, '');
+              if (normalizedZone === '매표소' || normalizedZone === '입장권') ticketAnalysis.push(raw);
+              if (['물품대여', '카바나', '썬베드'].includes(normalizedZone)) rentalAnalysis.push(raw);
               
               if (subMap.has(subName)) {
                 const ext = subMap.get(subName);
@@ -246,6 +252,8 @@ async function run() {
           },
           chart_data: chartData,
           table_data: tableData,
+          ticket_analysis: ticketAnalysis,
+          rental_analysis: rentalAnalysis,
           updated_at: new Date().toISOString()
         }
       };
