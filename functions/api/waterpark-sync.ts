@@ -16,6 +16,7 @@ interface PortalRow {
   sub?: string;
   price?: number | string;
   cnt?: number | string;
+  cancelflag?: string;
 }
 
 const PORTAL_URL = 'https://wapi.wellihillipark.com/sub2/portal/portal.asp';
@@ -94,6 +95,8 @@ async function collectDate(date: DateInfo) {
   })).sort((left, right) => right.amount - left.amount);
 
   const detailGroups = [];
+  const ticketAnalysis: Array<{ name: string; status: string; quantity: number; amount: number }> = [];
+  const rentalAnalysis: Array<{ name: string; status: string; quantity: number; amount: number }> = [];
   for (const zone of zones) {
     const category = zone.zone || '기타';
     const amount = Number(zone.price) || 0;
@@ -108,10 +111,14 @@ async function collectDate(date: DateInfo) {
       const merged = new Map<string, { category: string; name: string; quantity: number; amount: number }>();
       for (const detail of details) {
         const name = detail.sub || '기타';
+        const status = detail.cancelflag || '판매';
         const current = merged.get(name) || { category, name, quantity: 0, amount: 0 };
         current.quantity += Number(detail.cnt) || 0;
         current.amount += Number(detail.price) || 0;
         merged.set(name, current);
+        const raw = { name, status, quantity: Number(detail.cnt) || 0, amount: Number(detail.price) || 0 };
+        if (category.replace(/\s/g, '') === '매표소' || category.replace(/\s/g, '') === '입장권') ticketAnalysis.push(raw);
+        if (['물품대여', '카바나', '썬베드'].includes(category.replace(/\s/g, ''))) rentalAnalysis.push(raw);
       }
       detailGroups.push(...merged.values());
     } catch {
@@ -131,6 +138,8 @@ async function collectDate(date: DateInfo) {
       },
       chart_data: chartData,
       table_data: detailGroups,
+      ticket_analysis: ticketAnalysis,
+      rental_analysis: rentalAnalysis,
       updated_at: new Date().toISOString(),
       source: 'Cloudflare server sync',
     },

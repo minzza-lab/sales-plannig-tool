@@ -45,6 +45,7 @@ type RoomStateReport = {
   summary: RoomSummary
   roomData: RoomRow[]
   groupData: GroupRow[]
+  condoAvailability: Record<string, boolean>
   updatedAt: string
 }
 
@@ -56,6 +57,7 @@ type SyncEntry = {
 
 const SYNC_DAYS = 31
 const CONDO_CAPACITY = 767
+const CONDO_ROOM_TYPES = ['스탠다드 A', '스탠다드 B', '패밀리', '스위트 A', '스위트 B', '럭셔리 A', '럭셔리 B', '하우스']
 
 function getFacility(report: RoomStateReport | null, category: string): RoomRow {
   return report?.roomData.find((row) => row.category === category) || {
@@ -136,6 +138,7 @@ export default function RoomStateDashboard() {
         summary: { ...emptySummary, ...(row.data?.summary || {}) },
         roomData: Array.isArray(row.data?.room_data) ? row.data.room_data : [],
         groupData: Array.isArray(row.data?.group_data) ? row.data.group_data : [],
+        condoAvailability: row.data?.condo_availability && typeof row.data.condo_availability === 'object' ? row.data.condo_availability : {},
         updatedAt: row.data?.updated_at || '',
       }))
       setReports(nextReports)
@@ -333,6 +336,19 @@ export default function RoomStateDashboard() {
             </div>
           </section>
 
+          <section className="room-card room-availability-card">
+            <div className="room-card-heading"><div><span>CONDO TYPE AVAILABILITY</span><h2>객실 타입별 예약 가능 현황</h2></div><em>{formatLongDate(selectedDate)} · 공개 예약 시스템 기준</em></div>
+            {Object.keys(activeReport?.condoAvailability || {}).length > 0 ? (
+              <div className="room-availability-grid">
+                {CONDO_ROOM_TYPES.map((roomType) => {
+                  const available = activeReport?.condoAvailability[roomType]
+                  return <article key={roomType} className={available ? 'available' : 'sold-out'}><small>{roomType}</small><strong>{available ? '예약 가능' : '예약 완료'}</strong><span>{available ? 'OPEN' : 'CLOSED'}</span></article>
+                })}
+              </div>
+            ) : <div className="room-no-availability"><Hotel size={26} /><span>이 날짜의 타입별 현황은 다음 최신 데이터 동기화부터 표시됩니다.</span></div>}
+            <p className="room-availability-note">스탠다드·패밀리·스위트·럭셔리·하우스 타입의 공실 여부를 표시합니다. 원본 시스템은 잔여 객실 수량을 제공하지 않습니다.</p>
+          </section>
+
           <section className="room-card room-group-card">
             <div className="room-card-heading"><div><span>GROUP SCHEDULE</span><h2>단체 입·퇴실 현황</h2></div><em>{formatLongDate(selectedDate)} · {activeReport?.groupData.length || 0}개 단체</em></div>
             {activeReport?.groupData.length ? (
@@ -357,7 +373,7 @@ export default function RoomStateDashboard() {
             ) : <div className="room-no-groups"><Users size={28} /><span>이 날짜에 표시할 단체 투숙 정보가 없습니다.</span></div>}
           </section>
 
-          <p className="room-source-note">데이터 출처: 웰리힐리파크 객실 투숙정보 · 원본 사이트는 오늘 이전 날짜 조회를 지원하지 않아 동기화 시점부터 일자별 데이터가 누적됩니다.</p>
+          <p className="room-source-note">데이터 출처: 웰리힐리파크 객실 투숙정보 및 실시간 객실 타입 현황 · 원본 사이트는 오늘 이전 날짜 조회를 지원하지 않아 동기화 시점부터 일자별 데이터가 누적됩니다.</p>
         </>
       )}
     </div>

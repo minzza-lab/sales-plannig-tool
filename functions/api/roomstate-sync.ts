@@ -26,9 +26,17 @@ type GroupRow = {
   youthQty: number;
 };
 
+export type CondoAvailabilityRow = {
+  date: string;
+  weekday: string;
+  rooms: Record<string, boolean>;
+};
+
 const ROOMSTATE_URL = 'https://wapi.wellihillipark.com/sub2/roomstate/roomstate.html';
+const CONDO_AVAILABILITY_URL = 'https://wapi.wellihillipark.com/sub2/agentCondoRoom/agent_condo_room.html';
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_FUTURE_DAYS = 60;
+const CONDO_ROOM_TYPES = ['스탠다드 A', '스탠다드 B', '패밀리', '스위트 A', '스위트 B', '럭셔리 A', '럭셔리 B', '하우스'];
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,6 +140,29 @@ export function parseRoomState(html: string, requestedDate: string) {
   return { roomRows, groupRows, totals };
 }
 
+export function parseCondoAvailability(html: string, requestedDate: string): CondoAvailabilityRow[] {
+  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].flatMap((rowMatch) => {
+    const cells = [...rowMatch[1].matchAll(/<td\b[^>]*>([\s\S]*?)(?=<td\b|<\/tr>|$)/gi)].map((cellMatch) => cellMatch[1]);
+    const date = decodeText(cells[0] || '').match(/(\d{4})\.(\d{2})\.(\d{2})/);
+    if (!date || cells.length < 10) return [];
+
+    return [{
+      date: `${date[1]}-${date[2]}-${date[3]}`,
+      weekday: decodeText(cells[1] || ''),
+      rooms: Object.fromEntries(CONDO_ROOM_TYPES.map((roomType, index) => [
+        roomType,
+        /icon_reserv\.gif/i.test(cells[index + 2] || ''),
+      ])),
+    }];
+  });
+
+  if (!rows.some((row) => row.date === requestedDate)) {
+    throw new Error('객실 타입별 예약 가능 현황을 확인하지 못했습니다.');
+  }
+
+  return rows;
+}
+
 export async function fetchRoomState(date: string): Promise<string> {
   const [year, month, day] = date.split('-');
   const controller = new AbortController();
@@ -147,6 +178,34 @@ export async function fetchRoomState(date: string): Promise<string> {
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`객실 시스템 응답 오류: ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchCondoAvailability(date: string): Promise<string> {
+  const [year, month, day] = date.split('-');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(CONDO_AVAILABILITY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'User-Agent': 'Mozilla/5.0 (compatible; WellihilliRoomStateSync/1.0)',
+      },
+      body: new URLSearchParams({
+        yy: year,
+        mm: String(Number(month)),
+        dd: String(Number(day)),
+        yy2: year,
+        mm2: String(Number(month)),
+        dd2: String(Number(day)),
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`객실 타입 현황 시스템 응답 오류: ${response.status}`);
     return await response.text();
   } finally {
     clearTimeout(timer);
@@ -181,6 +240,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const html = await fetchRoomState(requestedDate);
     const parsed = parseRoomState(html, requestedDate);
+    const condoAvailability = parseCondoAvailability(await fetchCondoAvailability(requestedDate), requestedDate)
+      .find((row) => row.date === requestedDate);
     const report = {
       report_date: requestedDate,
       report_type: 'ROOM_STATE',
@@ -196,6 +257,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         },
         room_data: parsed.roomRows,
         group_data: parsed.groupRows,
+        condo_availability: condoAvailability?.rooms || {},
         updated_at: new Date().toISOString(),
         source: 'Wellihilli roomstate server sync',
       },
@@ -220,6 +282,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       summary: report.data.summary,
       roomData: parsed.roomRows,
       groupData: parsed.groupRows,
+      condoAvailability: condoAvailability?.rooms || {},
       message: `${requestedDate} 객실 현황 동기화가 완료되었습니다.`,
     });
   } catch (error) {

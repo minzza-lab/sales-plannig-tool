@@ -88,6 +88,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                   </NavLink>
                 </li>
                 <li className="menu-highlight">
+                  <NavLink to="/tools/water-operations-analysis" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🛟</span> 워터 권종·대여 분석
+                  </NavLink>
+                </li>
+                <li className="menu-highlight">
                   <NavLink to="/tools/room-state" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🏨</span> 객실 투숙 현황
                   </NavLink>

@@ -41,6 +41,7 @@ const categories: ToolCategory[] = [
     description: '현장 판매 데이터를 비교하고 운영 현황을 빠르게 파악합니다.',
     tools: [
       { id: 'waterpark-sales', title: '워터파크 매출 관리', description: '일별 실적과 날씨, 전년 데이터를 함께 분석합니다.', icon: '🌊', path: '/tools/waterpark-sales' },
+      { id: 'water-operations-analysis', title: '워터 권종·대여 분석', description: '권종 구성·취소와 대여 상품 사용 현황을 분석합니다.', icon: '🛟', path: '/tools/water-operations-analysis' },
       { id: 'room-state', title: '객실 투숙 현황', description: '날짜별 객실 구성과 단체 입·퇴실 일정을 확인합니다.', icon: '🏨', path: '/tools/room-state' },
       { id: 'sports-sales', title: '리조트 발권 현황', description: '일자별 스포츠 발권수와 업장별 매출을 확인합니다.', icon: '🎟️', path: '/tools/sports-sales' },
       { id: 'nicepay-settlement', title: '나이스페이 정산 자동화', description: '날짜별 품목 분류와 안분·수수료·부가세 엑셀을 처리합니다.', icon: '💳', path: '/tools/nicepay-settlement' },

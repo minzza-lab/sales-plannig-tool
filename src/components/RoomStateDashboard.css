@@ -164,6 +164,18 @@
 .room-secondary-summary p span { display: flex; justify-content: space-between; }
 .room-secondary-summary p b { color: #405a63; font-size: 9px; }
 .room-group-card { margin-bottom: 14px; }
+.room-availability-card { margin-bottom: 14px; }
+.room-availability-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.room-availability-grid article { display: flex; min-height: 102px; padding: 13px 11px; box-sizing: border-box; flex-direction: column; align-items: flex-start; justify-content: space-between; border: 1px solid #dce7e5; border-radius: 10px; background: #f7fcfa; }
+.room-availability-grid article.available { border-color: #afdbce; background: linear-gradient(145deg, #effbf5, #f9fdfb); }
+.room-availability-grid article.sold-out { border-color: #ead9d5; background: #fcf8f7; }
+.room-availability-grid small { color: #708288; font-size: 9px; font-weight: 900; }
+.room-availability-grid strong { color: #27725e; font-size: 13px; letter-spacing: -.03em; }
+.room-availability-grid .sold-out strong { color: #9e6059; }
+.room-availability-grid span { padding: 3px 5px; border-radius: 4px; background: #d9f0e5; color: #328169; font-size: 7px; font-weight: 950; letter-spacing: .08em; }
+.room-availability-grid .sold-out span { background: #f4e5e1; color: #a45d56; }
+.room-no-availability { display: flex; min-height: 110px; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #8a989d; font-size: 10px; }
+.room-availability-note { margin: 12px 0 0; color: #829095; font-size: 8px; line-height: 1.5; }
 .room-group-table-wrap { overflow-x: auto; }
 .room-group-table-wrap table { width: 100%; border-collapse: collapse; font-size: 10px; }
 .room-group-table-wrap th { padding: 10px 12px; border-bottom: 1px solid #dce4e7; background: #f5f7f8; color: #718087; text-align: left; font-size: 8px; letter-spacing: .03em; }
@@ -182,6 +194,7 @@
   .room-date-strip { grid-template-columns: repeat(14, 90px); }
   .room-kpis { grid-template-columns: repeat(2, 1fr); }
   .room-kpis.condo-priority { grid-template-columns: repeat(2, 1fr); }
+  .room-availability-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .room-secondary-summary { grid-column: 1 / -1; }
   .room-calendar-heading { grid-template-columns: 1fr auto; }
   .room-calendar-summary { grid-column: 1 / -1; grid-row: 2; }
@@ -200,6 +213,7 @@
   .room-calendar-weekdays { display: none; }
   .room-calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 11px; }
   .room-calendar-day.outside { display: none; }
+  .room-availability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .facility-list article { grid-template-columns: 92px 1fr; }
 }
 @media (max-width: 480px) {
