@@ -20,6 +20,8 @@ interface ToolCategory {
   tools: Tool[]
 }
 
+type AnalysisItem = { name?: string; quantity?: number; amount?: number }
+
 const categories: ToolCategory[] = [
   {
     id: 'work',
@@ -83,6 +85,10 @@ type IntegratedSnapshot = {
   waterparkSales: number
   waterparkProductSales: number
   waterparkVisitors: number
+  waterTicketMix: Array<{ name: string; quantity: number }>
+  waterCabanaUsed: number
+  waterSunbedUsed: number
+  waterOtherRentalUsed: number
   condoRooms: number
   condoOcc: number
   condoMember: number
@@ -100,6 +106,8 @@ type DashboardReportRow = {
   data?: {
     summary?: { totalAmount?: number }
     table_data?: Array<{ category?: string; name?: string; quantity?: number; amount?: number }>
+    ticket_analysis?: AnalysisItem[]
+    rental_analysis?: AnalysisItem[]
     room_data?: Array<{ category?: string; total?: number; member?: number; general?: number; group?: number }>
     venue_data?: Array<{ code?: string; name?: string; quantity?: number; amount?: number }>
     updated_at?: string
@@ -150,6 +158,19 @@ function formatSnapshotDate(value: string) {
   return `${Number(month)}월 ${Number(day)}일`
 }
 
+function classifyWaterTicket(name: string, amount: number) {
+  if (/추가요금/.test(name)) return '추가요금'
+  if (/comp|무료|초대/i.test(name) || amount === 0) return '무료·COMP'
+  if (/할인/.test(name)) return '할인권'
+  return '일반권'
+}
+
+function getWaterRentalGroup(name: string) {
+  if (/카바나/i.test(name)) return '카바나'
+  if (/썬베드|선베드/i.test(name)) return '썬베드'
+  return '기타'
+}
+
 export default function Dashboard() {
   const [snapshot, setSnapshot] = useState<IntegratedSnapshot | null>(null)
   const [currentTime, setCurrentTime] = useState(() => new Date())
@@ -181,8 +202,17 @@ export default function Dashboard() {
       )
       const ticketRows = admissionRows.filter(isAdmission)
       const productRows = admissionRows.filter((row) => !isAdmission(row))
-      const waterparkVisitors = ticketRows
+      const ticketAnalysis = Array.isArray(waterpark?.data?.ticket_analysis) ? waterpark.data.ticket_analysis : []
+      const rentalAnalysis = Array.isArray(waterpark?.data?.rental_analysis) ? waterpark.data.rental_analysis : []
+      const waterparkVisitors = ticketAnalysis.length ? ticketAnalysis
+        .reduce((total, row) => total + (Number(row.quantity) || 0), 0) : ticketRows
         .reduce((total, row) => total + (Number(row.quantity) || 0), 0)
+      const ticketMixMap = new Map<string, number>()
+      for (const item of ticketAnalysis) {
+        const group = classifyWaterTicket(String(item.name || ''), Number(item.amount) || 0)
+        ticketMixMap.set(group, (ticketMixMap.get(group) || 0) + (Number(item.quantity) || 0))
+      }
+      const rentalUsed = (group: string) => Math.max(0, rentalAnalysis.filter((item) => getWaterRentalGroup(String(item.name || '')) === group).reduce((total, item) => total + (Number(item.quantity) || 0), 0))
       const roomRows: Array<{ category?: string; total?: number; member?: number; general?: number; group?: number }> = Array.isArray(room?.data?.room_data) ? room.data.room_data : []
       const condo = roomRows.find((row) => row.category === '콘도')
       const condoRooms = Number(condo?.total) || 0
@@ -196,6 +226,10 @@ export default function Dashboard() {
         waterparkSales: ticketRows.reduce((total, row) => total + (Number(row.amount) || 0), 0),
         waterparkProductSales: productRows.reduce((total, row) => total + (Number(row.amount) || 0), 0),
         waterparkVisitors,
+        waterTicketMix: ['일반권', '할인권', '무료·COMP', '추가요금'].map((name) => ({ name, quantity: ticketMixMap.get(name) || 0 })),
+        waterCabanaUsed: rentalUsed('카바나'),
+        waterSunbedUsed: rentalUsed('썬베드'),
+        waterOtherRentalUsed: rentalUsed('기타'),
         condoRooms,
         condoOcc: condoRooms / CONDO_CAPACITY * 100,
         condoMember: Number(condo?.member) || 0,
@@ -338,6 +372,15 @@ export default function Dashboard() {
             <div className="domain-primary sports-ticket-primary"><small>발권수</small><strong>{snapshot ? snapshot.sportsTickets.toLocaleString('ko-KR') : '—'}<em>건</em></strong></div>
             <div className="sports-summary-lines"><span><small>발권 매출</small><b>{snapshot ? formatCompactWon(snapshot.sportsSales) : '—'}</b></span><span><small>운영 업장</small><b>{snapshot ? `${snapshot.sportsVenues.toLocaleString('ko-KR')}개` : '—'}</b></span></div>
           </article>
+        </div>
+        <div className="dashboard-water-summary">
+          <div className="dashboard-water-summary-heading"><div><span>WATER OPERATIONS AT A GLANCE</span><h3>워터 운영 상세 요약</h3></div><p>권종 구성과 대여상품 가동 현황을 바로 확인하세요.</p></div>
+          <div className="dashboard-water-summary-grid">
+            <article className="dashboard-water-ticket"><small>권종 구성</small><div>{snapshot?.waterTicketMix.map((item) => <span key={item.name}><b>{item.name}</b><em>{item.quantity.toLocaleString('ko-KR')}건</em></span>) || '—'}</div><Link to="/tools/water-operations-analysis">권종 상세 분석 →</Link></article>
+            <article className="dashboard-water-rental"><small>카바나 · 선베드 가동률</small><div><span><b>카바나</b><strong>{snapshot ? `${snapshot.waterCabanaUsed.toLocaleString('ko-KR')} / 142동` : '—'}</strong><em>{snapshot ? `${(snapshot.waterCabanaUsed / 142 * 100).toFixed(1)}%` : '—'}</em></span><span><b>선베드</b><strong>{snapshot ? `${snapshot.waterSunbedUsed.toLocaleString('ko-KR')} / 274개` : '—'}</strong><em>{snapshot ? `${(snapshot.waterSunbedUsed / 274 * 100).toFixed(1)}%` : '—'}</em></span></div><Link to="/tools/water-operations">워터 운영 통합 현황 →</Link></article>
+            <article className="dashboard-water-other"><small>기타 대여상품</small><strong>{snapshot ? `${snapshot.waterOtherRentalUsed.toLocaleString('ko-KR')}개` : '—'}</strong><p>{snapshot ? `당일 발권객 ${snapshot.waterparkVisitors.toLocaleString('ko-KR')}명 대비 ${snapshot.waterparkVisitors ? (snapshot.waterOtherRentalUsed / snapshot.waterparkVisitors * 100).toFixed(1) : '0.0'}%` : '데이터 준비 중'}</p><Link to="/tools/waterpark-sales">워터파크 매출 관리 →</Link></article>
+          </div>
+          <div className="dashboard-water-links"><Link to="/tools/water-operations"><span>📍</span><b>워터 운영 통합 현황</b><small>오늘 핵심 운영 수치</small></Link><Link to="/tools/water-operations-analysis"><span>🛟</span><b>권종·대여 분석</b><small>권종·구역별 상세</small></Link><Link to="/tools/waterpark-sales"><span>🌊</span><b>워터파크 매출 관리</b><small>일별·전년·날씨 분석</small></Link></div>
         </div>
       </section>
 

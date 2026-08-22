@@ -322,6 +322,26 @@
 .integrated-domain-card.room-domain { border-color: rgba(245,183,83,.26); background: linear-gradient(145deg, rgba(177,111,24,.17), rgba(4,26,35,.26)); }
 .integrated-domain-card.sports-domain { border-color: rgba(221,144,102,.24); background: linear-gradient(145deg, rgba(126,72,93,.29), rgba(4,26,35,.22)); }
 
+.dashboard-water-summary { position: relative; z-index: 1; margin-top: 14px; padding-top: 17px; border-top: 1px solid rgba(255,255,255,.14); }
+.dashboard-water-summary-heading { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.dashboard-water-summary-heading span { color: #82d8cf; font-size: 8px; font-weight: 900; letter-spacing: .14em; }
+.dashboard-water-summary-heading h3 { margin: 4px 0 0; font-size: 16px; }
+.dashboard-water-summary-heading p { margin: 0; color: #aacacb; font-size: 9px; }
+.dashboard-water-summary-grid { display: grid; grid-template-columns: 1.15fr 1.25fr .9fr; gap: 9px; margin-top: 11px; }
+.dashboard-water-summary-grid article { display: grid; gap: 10px; padding: 13px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: rgba(4,26,35,.22); }
+.dashboard-water-summary-grid small { color: #86b6b7; font-size: 8px; font-weight: 900; }
+.dashboard-water-summary-grid a { color: #a8eee2; font-size: 9px; font-weight: 800; text-decoration: none; }
+.dashboard-water-ticket > div { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
+.dashboard-water-ticket span { display: flex; justify-content: space-between; gap: 6px; color: #d9f1ee; font-size: 9px; }
+.dashboard-water-ticket em { color: #98c2c0; font-style: normal; }
+.dashboard-water-rental > div { display: grid; gap: 7px; }
+.dashboard-water-rental span { display: grid; grid-template-columns: 50px 1fr auto; gap: 7px; align-items: center; color: #d9f1ee; font-size: 9px; }
+.dashboard-water-rental strong { color: #f6fffd; font-size: 11px; }.dashboard-water-rental em { color: #8ee2d3; font-size: 11px; font-style: normal; font-weight: 900; }
+.dashboard-water-other strong { color: #f6fffd; font-size: 22px; letter-spacing: -.04em; }.dashboard-water-other p { margin: 0; color: #98c2c0; font-size: 9px; line-height: 1.45; }
+.dashboard-water-links { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-top: 11px; }
+.dashboard-water-links a { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 10px 11px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.07); color: #effffe; text-decoration: none; transition: transform .2s ease, background .2s ease; }
+.dashboard-water-links a:hover { transform: translateY(-2px); background: rgba(255,255,255,.12); }.dashboard-water-links span { font-size: 15px; }.dashboard-water-links b { font-size: 10px; }.dashboard-water-links small { color: #9dc2c1; font-size: 8px; }
+
 .domain-title { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .domain-title > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: rgba(255,255,255,.09); font-size: 16px; }
 .domain-title > div { display: flex; flex-direction: column; gap: 1px; }
@@ -507,6 +527,8 @@
   .spotlight-action { grid-column: 1 / -1; justify-content: center; }
   .integrated-spotlight { margin-bottom: 30px; padding: 20px; }
   .integrated-title-row, .integrated-meta-row { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .dashboard-water-summary-heading { align-items: flex-start; flex-direction: column; }
+  .dashboard-water-summary-grid, .dashboard-water-links { grid-template-columns: 1fr; }
   .integrated-title-row time { align-items: flex-start; }
   .dashboard-sync-button { width: 100%; }
   .integrated-links { width: 100%; }
