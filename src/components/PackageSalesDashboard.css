@@ -121,6 +121,7 @@
 .pkg-category-manager h2 { margin: 0 0 0.35rem; color: #f8fafc; font-size: 1.2rem; }
 .pkg-category-manager p { margin: 0; color: #94a3b8; font-size: 0.88rem; }
 .pkg-category-manager-actions { display: flex; gap: 0.55rem; }
+.pkg-category-status { margin: 0 0 1rem; padding: 0.7rem 0.8rem; border: 1px solid rgba(96, 165, 250, 0.28); border-radius: 8px; background: rgba(30, 64, 175, 0.12); color: #bfdbfe; font-size: 0.84rem; line-height: 1.5; }
 .pkg-category-save-btn { color: #fff; background: #7c3aed; border: 1px solid #8b5cf6; }
 .pkg-category-save-btn:disabled { opacity: 0.6; cursor: wait; }
 .pkg-category-cancel-btn { color: #cbd5e1; background: transparent; border: 1px solid #475569; }

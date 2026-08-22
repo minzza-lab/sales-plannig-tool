@@ -147,11 +147,20 @@ const PackageSalesDashboard: React.FC = () => {
   const [showMonthlyList, setShowMonthlyList] = useState(false);
   const [selectedProductDetail, setSelectedProductDetail] = useState<{ name: string; variants: ProductVariant[]; revenue: number } | null>(null);
   const [productCategories, setProductCategories] = useState<Record<string, ProductCategory>>({});
+  const [savedCategoryFamilies, setSavedCategoryFamilies] = useState<Record<string, true>>({});
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
   const [bundleCategories, setBundleCategories] = useState<Record<string, ProductCategory>>({});
   const [selectedClassificationDetail, setSelectedClassificationDetail] = useState<ClassificationDetail | null>(null);
 
+  const categoryForFamily = (family: string) => {
+    const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
+    const savedCategory = productCategories[family];
+    return savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
+      ? savedCategory
+      : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
+  };
 
 
   const fetchData = async () => {
@@ -222,7 +231,11 @@ const PackageSalesDashboard: React.FC = () => {
         .eq('report_date', CATEGORY_CONFIG_DATE)
         .eq('report_type', 'PACKAGE_PRODUCT_CATEGORIES')
         .maybeSingle();
-      if (config?.data && typeof config.data === 'object') setProductCategories(config.data as Record<string, ProductCategory>);
+      if (config?.data && typeof config.data === 'object') {
+        const categories = config.data as Record<string, ProductCategory>;
+        setProductCategories(categories);
+        setSavedCategoryFamilies(Object.fromEntries(Object.keys(categories).map((family) => [family, true])));
+      }
     };
     void loadCategories();
   }, []);
@@ -230,12 +243,17 @@ const PackageSalesDashboard: React.FC = () => {
   const saveProductCategories = async () => {
     setIsSavingCategories(true);
     try {
+      // 저장을 누르는 순간 현재 수집된 상품 전체를 확정한다. 다음 화면에서는 신규 상품만 남긴다.
+      const completedCategories = Object.fromEntries(uniqueProductFamilies.map((family) => [family, categoryForFamily(family)]));
       const { error } = await supabase.from('daily_reports').upsert({
         report_date: CATEGORY_CONFIG_DATE,
         report_type: 'PACKAGE_PRODUCT_CATEGORIES',
-        data: productCategories,
+        data: completedCategories,
       }, { onConflict: 'report_date,report_type' });
       if (error) throw error;
+      setProductCategories(completedCategories);
+      setSavedCategoryFamilies(Object.fromEntries(Object.keys(completedCategories).map((family) => [family, true])));
+      setShowAllCategories(false);
       setSyncMessage('상품 분류 기준을 저장했습니다. 이후 모든 매출 분석에 바로 반영됩니다.');
       setIsCategoryManagerOpen(false);
     } catch (error) {
@@ -626,7 +644,9 @@ const PackageSalesDashboard: React.FC = () => {
 
   const renderCategoryManager = () => {
     if (!isCategoryManagerOpen) return null;
-    const recommendedBundles = Object.entries(uniqueProductFamilies.reduce((acc, family) => {
+    const unclassifiedProductFamilies = uniqueProductFamilies.filter((family) => !savedCategoryFamilies[family]);
+    const displayedProductFamilies = showAllCategories ? uniqueProductFamilies : unclassifiedProductFamilies;
+    const recommendedBundles = Object.entries(displayedProductFamilies.reduce((acc, family) => {
       const key = recommendedBundleKey(family);
       if (key.length < 2) return acc;
       if (!acc[key]) acc[key] = [];
@@ -636,13 +656,6 @@ const PackageSalesDashboard: React.FC = () => {
       .filter(([, families]) => families.length >= 2)
       .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
       .slice(0, 30);
-    const categoryForFamily = (family: string) => {
-      const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
-      const savedCategory = productCategories[family];
-      return savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
-        ? savedCategory
-        : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
-    };
     return (
       <section className="pkg-category-manager">
         <div className="pkg-category-manager-header">
@@ -651,10 +664,12 @@ const PackageSalesDashboard: React.FC = () => {
             <p>대분류는 객실 포함 여부, 중분류는 상품 유형, 소분류는 대표 상품명으로 확정하세요.</p>
           </div>
           <div className="pkg-category-manager-actions">
+            <button onClick={() => setShowAllCategories((show) => !show)} className="pkg-category-cancel-btn">{showAllCategories ? '신규 미분류만 보기' : `전체 분류 기준 보기 (${uniqueProductFamilies.length})`}</button>
             <button onClick={() => setIsCategoryManagerOpen(false)} className="pkg-category-cancel-btn">닫기</button>
             <button onClick={() => void saveProductCategories()} className="pkg-category-save-btn" disabled={isSavingCategories}>{isSavingCategories ? '저장 중…' : '분류 저장'}</button>
           </div>
         </div>
+        <div className="pkg-category-status">{showAllCategories ? `전체 ${uniqueProductFamilies.length}개 대표 상품의 분류 기준을 편집 중입니다.` : `새로 들어온 미분류 상품 ${unclassifiedProductFamilies.length}개만 표시합니다. 저장된 상품은 분석에 그대로 반영되며, 필요할 때 전체 분류 기준에서 수정할 수 있습니다.`}</div>
         {recommendedBundles.length > 0 && (
           <div className="pkg-recommended-bundles">
             <div className="pkg-recommended-bundles-title"><strong>추천 묶음별 분류</strong><span>묶음을 펼쳐 대·중분류는 일괄 적용하고, 소분류 대표명은 상품별로 조정하세요.</span></div>
@@ -699,7 +714,7 @@ const PackageSalesDashboard: React.FC = () => {
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
-            <tbody>{uniqueProductFamilies.map((family) => {
+            <tbody>{displayedProductFamilies.map((family) => {
               const category = categoryForFamily(family);
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
               return (
