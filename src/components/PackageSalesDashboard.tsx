@@ -56,7 +56,6 @@ const PackageSalesDashboard: React.FC = () => {
   const [data, setData] = useState<PackageOrder[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isBackfilling, setIsBackfilling] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
@@ -150,36 +149,6 @@ const PackageSalesDashboard: React.FC = () => {
       setSyncMessage(error instanceof Error ? error.message : '패키지 동기화 중 오류가 발생했습니다.');
     } finally {
       setIsSyncing(false);
-    }
-  };
-
-  const backfillHistoricalOrders = async () => {
-    setSyncMessage('');
-    setIsBackfilling(true);
-    try {
-      const start = new Date(2025, 0, 1);
-      const end = new Date();
-      const ranges: Array<{ from: string; to: string }> = [];
-      for (let cursor = new Date(start); cursor <= end;) {
-        const rangeEnd = new Date(cursor);
-        rangeEnd.setDate(rangeEnd.getDate() + 6);
-        if (rangeEnd > end) rangeEnd.setTime(end.getTime());
-        const iso = (value: Date) => value.toISOString().slice(0, 10);
-        ranges.push({ from: iso(cursor), to: iso(rangeEnd) });
-        cursor = new Date(rangeEnd);
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      for (let index = 0; index < ranges.length; index += 1) {
-        const range = ranges[index];
-        setSyncMessage(`과거 데이터 동기화 중… ${index + 1} / ${ranges.length} 구간`);
-        await runServerSync(`from=${range.from}&to=${range.to}`);
-      }
-      await fetchData();
-      setSyncMessage(`2025년 1월부터 현재까지 과거 패키지 데이터를 모두 반영했습니다. (${ranges.length}개 구간)`);
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : '과거 데이터 동기화 중 오류가 발생했습니다.');
-    } finally {
-      setIsBackfilling(false);
     }
   };
 
@@ -622,9 +591,6 @@ const PackageSalesDashboard: React.FC = () => {
          </button>
          <button onClick={() => void syncRecentOrders()} className="pkg-server-sync-btn" disabled={isSyncing || isProcessing}>
            {isSyncing ? '☁️ 서버에서 최근 주문 동기화 중...' : '☁️ 최근 7일 서버 직접 동기화'}
-         </button>
-         <button onClick={() => void backfillHistoricalOrders()} className="pkg-history-sync-btn" disabled={isSyncing || isBackfilling || isProcessing}>
-           {isBackfilling ? '🗂️ 과거 데이터 동기화 중...' : '🗂️ 2025년부터 과거 데이터 반영'}
          </button>
          <div style={{ marginLeft: 'auto' }}>
            <label className="pkg-upload-btn-small">
