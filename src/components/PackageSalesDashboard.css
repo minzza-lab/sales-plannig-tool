@@ -153,7 +153,7 @@
 .pkg-recommended-bundle-card summary strong, .pkg-recommended-bundle-card summary small { display: block; }
 .pkg-recommended-bundle-card summary small { margin-top: 0.25rem; color: #94a3b8; font-size: 0.78rem; }
 .pkg-accordion-hint { color: #5eead4; font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
-.pkg-bundle-controls { display: grid; grid-template-columns: 0.85fr 1fr 1.5fr auto auto; gap: 0.55rem; padding: 0.75rem 0.8rem; border-top: 1px solid rgba(94, 234, 212, 0.18); background: rgba(15, 23, 42, 0.36); }
+.pkg-bundle-controls { display: grid; grid-template-columns: 0.85fr 0.75fr 1fr 1.5fr auto auto; gap: 0.55rem; padding: 0.75rem 0.8rem; border-top: 1px solid rgba(94, 234, 212, 0.18); background: rgba(15, 23, 42, 0.36); }
 .pkg-bundle-controls label { display: grid; gap: 0.3rem; color: #a7f3d0; font-size: 0.75rem; font-weight: 700; }
 .pkg-bundle-controls label em { color: #94a3b8; font-style: normal; font-weight: 500; }
 .pkg-bundle-controls input, .pkg-bundle-controls select, .pkg-bundle-product-row input { min-width: 0; border: 1px solid rgba(94, 234, 212, 0.34); border-radius: 6px; padding: 0.5rem 0.55rem; background: #0f172a; color: #f8fafc; }
@@ -163,7 +163,7 @@
 .pkg-bundle-save-btn:disabled { opacity: 0.6; cursor: wait; }
 .pkg-show-remaining-btn { display: block; width: 100%; margin-top: 1rem; color: #ccfbf1; background: rgba(15, 23, 42, 0.72); border-color: rgba(94, 234, 212, 0.4); }
 .pkg-bundle-product-list { display: grid; gap: 0.45rem; padding: 0.75rem 0.8rem; }
-.pkg-bundle-product-row { display: grid; grid-template-columns: minmax(200px, 1.5fr) minmax(100px, 0.75fr) minmax(120px, 0.9fr) minmax(200px, 1.3fr); align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; border-radius: 6px; background: rgba(15, 23, 42, 0.5); }
+.pkg-bundle-product-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(95px, 0.7fr) minmax(80px, 0.55fr) minmax(115px, 0.8fr) minmax(180px, 1.2fr); align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; border-radius: 6px; background: rgba(15, 23, 42, 0.5); }
 .pkg-bundle-product-row strong { color: #e2e8f0; font-size: 0.86rem; }
 
 .pkg-sync-message {

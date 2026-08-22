@@ -44,11 +44,12 @@ type SeasonSummary = {
 
 type ProductVariant = { name: string; count: number; revenue: number };
 type ProductGroup = { name: string; count: number; revenue: number; variants: Record<string, ProductVariant> };
-type ProductCategory = { major: string; middle: string; minor: string };
+type ProductCategory = { major: string; middle: string; sub: string; minor: string };
 type ClassificationDetail = { label: string; orders: PackageOrder[] };
 
 const CATEGORY_CONFIG_DATE = '2000-01-01';
 const CATEGORY_MAJOR_OPTIONS = ['객실포함', '객실미포함'];
+const CATEGORY_SEASON_OPTIONS = ['봄', '여름', '가을', '겨울'];
 const CATEGORY_MIDDLE_SUGGESTIONS = ['룸온리', '객실PKG', '리프트 티켓', '렌탈·장비보관소', '스키강습', '워터파크 티켓', 'B2B', '프로모션', '부대시설·레저', '기타'];
 
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
@@ -68,13 +69,24 @@ function classifyPackageKeyword(order: PackageOrder) {
   return KEYWORD_RULES.find(({ terms }) => terms.some((term) => text.includes(term.toLowerCase())))?.label || '기타 패키지';
 }
 
+function classificationSeasonForOrder(order: PackageOrder) {
+  const source = order.reservationDate || order.orderDate;
+  const matched = source.match(/\d{4}[-./]?(\d{1,2})/);
+  const month = Number(matched?.[1]);
+  if (month === 12 || month <= 2) return '겨울';
+  if (month <= 5) return '봄';
+  if (month <= 8) return '여름';
+  return '가을';
+}
+
 function suggestedCategory(order: PackageOrder): ProductCategory {
   const middle = classifyPackageKeyword(order);
   const text = `${order.normalizedPackageName} ${order.rawPackageName}`.toLowerCase();
   const includesRoom = ['룸온리', '객실', '콘도', '숙박', '2박', '1박', 'room'].some((term) => text.includes(term));
   return {
     major: includesRoom ? '객실포함' : '객실미포함',
-    middle: middle === '기타 패키지' ? '기타' : middle,
+    middle: classificationSeasonForOrder(order),
+    sub: middle === '기타 패키지' ? '기타' : middle,
     minor: productFamilyName(order.normalizedPackageName),
   };
 }
@@ -159,9 +171,13 @@ const PackageSalesDashboard: React.FC = () => {
   const categoryForFamily = (family: string) => {
     const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
     const savedCategory = productCategories[family];
-    return savedCategory && CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)
+    const suggested = seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '겨울', sub: '기타', minor: family };
+    if (!savedCategory || !CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)) return suggested;
+    // 이전 3단계 저장값은 기존 중분류를 새 소분류로 자동 이관한다.
+    const savedSub = (savedCategory as ProductCategory & { sub?: string }).sub;
+    return savedSub
       ? savedCategory
-      : (seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '기타', minor: family });
+      : { major: savedCategory.major, middle: CATEGORY_SEASON_OPTIONS.includes(savedCategory.middle) ? savedCategory.middle : suggested.middle, sub: savedCategory.middle || suggested.sub, minor: savedCategory.minor || suggested.minor };
   };
 
 
@@ -584,10 +600,9 @@ const PackageSalesDashboard: React.FC = () => {
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
   const categoryForOrder = (order: PackageOrder) => {
-    const stored = productCategories[productFamilyName(order.normalizedPackageName)];
-    return stored && CATEGORY_MAJOR_OPTIONS.includes(stored.major) ? stored : suggestedCategory(order);
+    return categoryForFamily(productFamilyName(order.normalizedPackageName));
   };
-  const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.minor].filter(Boolean).join(' · ');
+  const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.sub, category.minor].filter(Boolean).join(' · ');
   const categoryOrderGroups = data.reduce((acc, order) => {
     const label = categoryLabel(categoryForOrder(order));
     if (!acc[label]) acc[label] = [];
@@ -688,7 +703,7 @@ const PackageSalesDashboard: React.FC = () => {
         <div className="pkg-category-manager-header">
           <div>
             <h2>상품 분류 관리</h2>
-            <p>대분류는 객실 포함 여부, 중분류는 상품 유형, 소분류는 대표 상품명으로 확정하세요.</p>
+            <p>대분류는 객실 포함 여부, 중분류는 계절, 소분류는 상품 유형, 마지막 상품명은 대표 노출명으로 확정하세요.</p>
           </div>
           <div className="pkg-category-manager-actions">
             <button onClick={() => setShowAllCategories((show) => !show)} className="pkg-category-cancel-btn">{showAllCategories ? '신규 미분류만 보기' : `전체 분류 기준 보기 (${uniqueProductFamilies.length})`}</button>
@@ -699,28 +714,29 @@ const PackageSalesDashboard: React.FC = () => {
         <div className="pkg-category-status">{showAllCategories ? `전체 ${uniqueProductFamilies.length}개 대표 상품의 분류 기준을 편집 중입니다.` : `새로 들어온 미분류 상품 ${unclassifiedProductFamilies.length}개만 표시합니다. 저장된 상품은 분석에 그대로 반영되며, 필요할 때 전체 분류 기준에서 수정할 수 있습니다.`}</div>
         {recommendedBundles.length > 0 && (
           <div className="pkg-recommended-bundles">
-            <div className="pkg-recommended-bundles-title"><strong>추천 묶음별 분류</strong><span>묶음을 펼쳐 대·중분류는 일괄 적용하고, 소분류 대표명은 상품별로 조정하세요.</span></div>
+            <div className="pkg-recommended-bundles-title"><strong>추천 묶음별 분류</strong><span>묶음을 펼쳐 대분류·계절·상품 유형은 일괄 적용하고, 상품명은 상품별로 조정하세요.</span></div>
             <div className="pkg-recommended-bundle-grid">{recommendedBundles.map(([key, families]) => {
               const representative = categoryForFamily(families[0]);
-              const bundleCategory = bundleCategories[key] || { major: representative.major, middle: representative.middle, minor: '' };
+              const bundleCategory = bundleCategories[key] || { major: representative.major, middle: representative.middle, sub: representative.sub, minor: '' };
               const updateBundle = (patch: Partial<ProductCategory>) => setBundleCategories((previous) => ({ ...previous, [key]: { ...bundleCategory, ...patch } }));
               const applyBundleCategory = () => {
                 setProductCategories((previous) => ({
                   ...previous,
                   ...Object.fromEntries(families.map((family) => {
                     const current = previous[family] || categoryForFamily(family);
-                    return [family, { ...current, major: bundleCategory.major, middle: bundleCategory.middle, minor: bundleCategory.minor.trim() || current.minor }];
+                    return [family, { ...current, major: bundleCategory.major, middle: bundleCategory.middle, sub: bundleCategory.sub, minor: bundleCategory.minor.trim() || current.minor }];
                   })),
                 }));
-                setSyncMessage(`“${key}” 추천 묶음 ${families.length}개에 대·중분류를 적용했습니다. 소분류는 각 상품 행에서 개별 수정할 수 있습니다.`);
+                setSyncMessage(`“${key}” 추천 묶음 ${families.length}개에 대분류·계절·상품 유형을 적용했습니다. 상품명은 각 상품 행에서 개별 수정할 수 있습니다.`);
               };
               return (
                 <details key={key} className="pkg-recommended-bundle-card">
                   <summary><span><strong>{key}</strong><small>{families.length}개 대표 상품</small></span><span className="pkg-accordion-hint">펼쳐서 설정</span></summary>
                   <div className="pkg-bundle-controls">
                     <label>대분류<select value={bundleCategory.major} onChange={(event) => updateBundle({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-                    <label>중분류<select value={bundleCategory.middle} onChange={(event) => updateBundle({ middle: event.target.value })}>{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-                    <label>소분류 일괄 변경 <em>(선택)</em><input value={bundleCategory.minor} placeholder="비우면 상품별 이름 유지" onChange={(event) => updateBundle({ minor: event.target.value })} /></label>
+                    <label>중분류(계절)<select value={bundleCategory.middle} onChange={(event) => updateBundle({ middle: event.target.value })}>{CATEGORY_SEASON_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                    <label>소분류(상품 유형)<select value={bundleCategory.sub} onChange={(event) => updateBundle({ sub: event.target.value })}>{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                    <label>상품명 일괄 변경 <em>(선택)</em><input value={bundleCategory.minor} placeholder="비우면 상품별 이름 유지" onChange={(event) => updateBundle({ minor: event.target.value })} /></label>
                     <button onClick={applyBundleCategory} className="pkg-batch-apply-btn">{families.length}개 일괄 적용</button>
                     <button onClick={() => void saveBundleCategories(key, families)} className="pkg-bundle-save-btn" disabled={savingBundleKey === key}>{savingBundleKey === key ? '저장 중…' : '이 묶음 저장 완료'}</button>
                   </div>
@@ -730,8 +746,9 @@ const PackageSalesDashboard: React.FC = () => {
                     return <div key={family} className="pkg-bundle-product-row">
                       <strong>{family}</strong>
                       <select value={category.major} aria-label={`${family} 대분류`} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                      <select value={category.middle} aria-label={`${family} 중분류`} onChange={(event) => update({ middle: event.target.value })}>{!CATEGORY_MIDDLE_SUGGESTIONS.includes(category.middle) && <option value={category.middle}>{category.middle}</option>}{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                      <input value={category.minor} aria-label={`${family} 소분류`} onChange={(event) => update({ minor: event.target.value })} />
+                      <select value={category.middle} aria-label={`${family} 중분류(계절)`} onChange={(event) => update({ middle: event.target.value })}>{CATEGORY_SEASON_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                      <select value={category.sub} aria-label={`${family} 소분류(상품 유형)`} onChange={(event) => update({ sub: event.target.value })}>{!CATEGORY_MIDDLE_SUGGESTIONS.includes(category.sub) && <option value={category.sub}>{category.sub}</option>}{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                      <input value={category.minor} aria-label={`${family} 상품명`} onChange={(event) => update({ minor: event.target.value })} />
                     </div>;
                   })}</div>
                 </details>
@@ -742,7 +759,7 @@ const PackageSalesDashboard: React.FC = () => {
         {!showAllCategories && remainingProductFamilies.length > 0 && <button onClick={() => setShowRemainingProductList((show) => !show)} className="pkg-show-remaining-btn">{showRemainingProductList ? '나머지 개별 상품 목록 닫기' : `추천 묶음에 없는 상품 ${remainingProductFamilies.length}개 직접 분류하기`}</button>}
         {(showAllCategories || showRemainingProductList) && <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
-            <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
+            <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(계절)</th><th>소분류(상품 유형)</th><th>상품명(노출명)</th></tr></thead>
             <tbody>{(showAllCategories ? uniqueProductFamilies : remainingProductFamilies).map((family) => {
               const category = categoryForFamily(family);
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
@@ -750,7 +767,8 @@ const PackageSalesDashboard: React.FC = () => {
                 <tr key={family}>
                   <td><strong>{family}</strong></td>
                   <td><select value={category.major} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
-                  <td><select aria-label={`${family} 중분류(상품 유형)`} title="중분류(상품 유형)" value={category.middle} onChange={(event) => update({ middle: event.target.value })}>{!CATEGORY_MIDDLE_SUGGESTIONS.includes(category.middle) && <option value={category.middle}>{category.middle}</option>}{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
+                  <td><select aria-label={`${family} 중분류(계절)`} value={category.middle} onChange={(event) => update({ middle: event.target.value })}>{CATEGORY_SEASON_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
+                  <td><select aria-label={`${family} 소분류(상품 유형)`} value={category.sub} onChange={(event) => update({ sub: event.target.value })}>{!CATEGORY_MIDDLE_SUGGESTIONS.includes(category.sub) && <option value={category.sub}>{category.sub}</option>}{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
                   <td><input value={category.minor} placeholder="대표 상품명" onChange={(event) => update({ minor: event.target.value })} /></td>
                 </tr>
               );
@@ -771,6 +789,7 @@ const PackageSalesDashboard: React.FC = () => {
       return acc;
     }, {} as Record<string, { label: string; count: number; revenue: number }>)).sort((a, b) => b.revenue - a.revenue);
     const minorRows = summarize((order) => categoryForOrder(order).minor || productFamilyName(order.normalizedPackageName));
+    const subRows = summarize((order) => categoryForOrder(order).sub || '기타');
     const peopleRows = summarize((order) => extractPeopleLabel(order.rawPackageName || order.normalizedPackageName));
     const scheduleRows = summarize((order) => extractScheduleLabel(order.rawPackageName || order.normalizedPackageName));
     const totalRevenue = selectedClassificationDetail.orders.reduce((sum, order) => sum + order.paymentAmount, 0);
@@ -787,7 +806,8 @@ const PackageSalesDashboard: React.FC = () => {
         <div className="pkg-analysis-heading"><div><h2>분류 상세 분석 · {selectedClassificationDetail.label}</h2><p>통합 과정에서 숨긴 인원·상품명 기간 표기를 원본 주문 데이터에서 다시 분석합니다.</p></div><button onClick={() => setSelectedClassificationDetail(null)} className="pkg-category-cancel-btn">닫기</button></div>
         <div className="pkg-classification-detail-summary">총 {selectedClassificationDetail.orders.length.toLocaleString()}건 · {formatCurrency(totalRevenue)}</div>
         <div className="pkg-analysis-grid pkg-analysis-grid-three">
-          {renderBreakdown('소분류(대표 상품명)', minorRows)}
+          {renderBreakdown('소분류(상품 유형)', subRows)}
+          {renderBreakdown('상품명(대표 노출명)', minorRows)}
           {renderBreakdown('인원 구성', peopleRows)}
           {renderBreakdown('상품명에 포함된 기간', scheduleRows)}
         </div>
@@ -800,7 +820,7 @@ const PackageSalesDashboard: React.FC = () => {
       <div className="pkg-analysis-heading">
         <div>
           <h2>상품 분류·시즌 판매 분석</h2>
-          <p>저장한 대·중·소분류와 실제 결제가 발생한 주문일을 기준으로 집계합니다.</p>
+          <p>저장한 대분류·계절·상품 유형·상품명과 실제 결제가 발생한 주문일을 기준으로 집계합니다.</p>
         </div>
         <span className="pkg-analysis-badge">저장된 이력 기준</span>
       </div>
