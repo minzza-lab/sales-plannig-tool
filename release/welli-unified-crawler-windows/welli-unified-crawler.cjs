@@ -105,7 +105,6 @@ function parseArgs() {
     from: getValue('--from', process.env.CRAWLER_BACKFILL_FROM || '2025-01-01'),
     skipAdmin: has('--skip-admin'),
     skipWaterpark: has('--skip-waterpark'),
-    adminManual: mode === 'manual' || has('--manual'),
   };
 }
 
@@ -666,7 +665,7 @@ async function scrapePackage(page, supabase, isManual) {
 }
 
 async function runAdminCrawlers(supabase, adminId, adminPw, options) {
-  say('\n[관리자 페이지 크롤러] VOC / 시즌권 / 패키지 수집 시작', 'blue');
+  say('\n[관리자 페이지 크롤러] VOC / 시즌권 수집 시작', 'blue');
   const browser = await puppeteer.launch({
     headless: 'new',
     defaultViewport: { width: 1440, height: 1000 },
@@ -687,8 +686,7 @@ async function runAdminCrawlers(supabase, adminId, adminPw, options) {
     await loginAdmin(page, adminId, adminPw);
     const voc = await scrapeVOC(page, supabase);
     const season = await scrapeSeasonPass(page, supabase);
-    const packageResult = await scrapePackage(page, supabase, options.adminManual);
-    return { voc, season, package: packageResult };
+    return { voc, season };
   } finally {
     await browser.close();
   }

@@ -178,9 +178,15 @@ async function getAdminToken(id: string, pwd: string) {
   return token;
 }
 
-async function collectOrders(token: string, days: number) {
-  const start = dateString(days - 1);
-  const end = dateString(0);
+function toCompactDate(value: string) {
+  return value.replace(/-/g, '');
+}
+
+function daysBetween(start: string, end: string) {
+  return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+async function collectOrders(token: string, start: string, end: string) {
   const all: WadmPackage[] = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const query = new URLSearchParams({
@@ -222,11 +228,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const adminId = context.env.WADM_ADMIN_ID;
   const adminPwd = context.env.WADM_ADMIN_PWD;
   const authorization = context.request.headers.get('Authorization');
-  const requestedDays = Number(new URL(context.request.url).searchParams.get('days') || '7');
+  const requestUrl = new URL(context.request.url);
+  const requestedDays = Number(requestUrl.searchParams.get('days') || '7');
   const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 7;
+  const fromParam = requestUrl.searchParams.get('from');
+  const toParam = requestUrl.searchParams.get('to');
+  const rangePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const rangeStart = fromParam && toParam && rangePattern.test(fromParam) && rangePattern.test(toParam)
+    ? fromParam
+    : dateString(days - 1).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+  const rangeEnd = fromParam && toParam && rangePattern.test(fromParam) && rangePattern.test(toParam)
+    ? toParam
+    : dateString(0).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+  const rangeDays = daysBetween(rangeStart, rangeEnd);
   if (!supabaseUrl || !anonKey) return jsonResponse({ error: '서버의 데이터베이스 연결 설정이 없습니다.' }, 500);
   if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: '로그인이 필요합니다.' }, 401);
   if (!adminId || !adminPwd) return jsonResponse({ error: '서버 직접 동기화 설정이 아직 완료되지 않았습니다. 관리자 계정 환경변수를 등록해주세요.' }, 503);
+  if (!Number.isFinite(rangeDays) || rangeDays < 1 || rangeDays > 92) return jsonResponse({ error: '한 번에 최대 90일 범위만 동기화할 수 있습니다.' }, 400);
 
   const user = await verifyUser(supabaseUrl, anonKey, authorization);
   if (!user?.id) return jsonResponse({ error: '로그인 정보가 만료되었습니다. 다시 로그인해주세요.' }, 401);
@@ -238,16 +256,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     lock = await acquireLock(supabaseUrl, anonKey, authorization);
     if (!lock) return jsonResponse({ error: '패키지 동기화가 이미 진행 중입니다. 잠시 후 다시 확인해주세요.' }, 409);
     const token = await getAdminToken(adminId, adminPwd);
-    const sourceRows = await collectOrders(token, days);
+    const sourceRows = await collectOrders(token, toCompactDate(rangeStart), toCompactDate(rangeEnd));
     const saved = await saveOrders(supabaseUrl, anonKey, authorization, sourceRows);
     result = {
       status: 'completed',
-      days,
+      days: rangeDays,
+      rangeStart,
+      rangeEnd,
       sourceCount: sourceRows.length,
       savedCount: saved.upsertedCount,
       completedCount: saved.completedCount,
       finishedAt: new Date().toISOString(),
-      message: `최근 ${days}일 결제완료 패키지 주문 ${saved.completedCount.toLocaleString()}건을 동기화했습니다.`,
+      message: `${rangeStart}~${rangeEnd} 결제완료 패키지 주문 ${saved.completedCount.toLocaleString()}건을 동기화했습니다.`,
     };
     state = 'completed';
     return jsonResponse(result);
