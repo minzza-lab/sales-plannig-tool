@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, addDays } from 'date-fns';
@@ -172,6 +172,7 @@ const PackageSalesDashboard: React.FC = () => {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
   const [savingBundleKey, setSavingBundleKey] = useState<string | null>(null);
+  const [completedBundleKeys, setCompletedBundleKeys] = useState<Record<string, true>>({});
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showRemainingProductList, setShowRemainingProductList] = useState(false);
   const [bundleCategories, setBundleCategories] = useState<Record<string, ProductCategory>>({});
@@ -300,6 +301,7 @@ const PackageSalesDashboard: React.FC = () => {
       if (error) throw error;
       setProductCategories(categoriesToSave);
       setSavedCategoryFamilies((previous) => ({ ...previous, ...Object.fromEntries(families.map((family) => [family, true])) }));
+      setCompletedBundleKeys((previous) => ({ ...previous, [key]: true }));
       setSyncMessage(`“${key}” 묶음 ${families.length}개 상품의 분류 기준을 저장했습니다.`);
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : '묶음 분류 기준을 저장하지 못했습니다.');
@@ -420,12 +422,12 @@ const PackageSalesDashboard: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
-  const filteredData = data.filter(d => {
+  const filteredData = useMemo(() => data.filter(d => {
     let match = true;
     if (selectedPackage !== 'all' && d.normalizedPackageName !== selectedPackage) match = false;
     if (selectedComponent !== 'all' && !d.components.includes(selectedComponent)) match = false;
     return match;
-  });
+  }), [data, selectedPackage, selectedComponent]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
 
@@ -472,7 +474,10 @@ const PackageSalesDashboard: React.FC = () => {
     });
     return { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl };
   };
-  const { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl } = getCumulativeStats();
+  const { currentAmt, currentPpl, prevAmt, prevPpl, currentYearAmt, currentYearPpl, prevYearAmt, prevYearPpl } = useMemo(
+    () => getCumulativeStats(),
+    [filteredData, currentMonth],
+  );
 
   const renderCalendar = () => {
     const monthStart = startOfMonth(currentMonth);
@@ -599,58 +604,60 @@ const PackageSalesDashboard: React.FC = () => {
     );
   };
 
+  // 분류 입력 중에는 무거운 달력 계산을 다시 하지 않는다.
+  const calendarContent = useMemo(() => renderCalendar(), [filteredData, currentMonth]);
+
   const uniquePackages = Array.from(new Set(data.map(d => d.normalizedPackageName))).sort();
   const uniqueProductFamilies = Array.from(new Set(data.map(d => productFamilyName(d.normalizedPackageName)))).sort();
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
-  const categoryForOrder = (order: PackageOrder) => {
+  const categoryForOrder = useCallback((order: PackageOrder) => {
     // 집계 중에는 전체 주문을 다시 탐색하지 않는다. (기존 O(n²) 병목 제거)
     return normalizeProductCategory(productCategories[productFamilyName(order.normalizedPackageName)], suggestedCategory(order));
-  };
+  }, [productCategories]);
   const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.sub, category.minor].filter(Boolean).join(' · ');
-  const categoryOrderGroups = data.reduce((acc, order) => {
-    const label = categoryLabel(categoryForOrder(order));
-    if (!acc[label]) acc[label] = [];
-    acc[label].push(order);
-    return acc;
-  }, {} as Record<string, PackageOrder[]>);
-
-  const keywordSummaries = Object.values(data.reduce((acc, order) => {
-    const keyword = categoryLabel(categoryForOrder(order));
-    const saleDate = extractCleanDate('', order.orderDate);
-    if (!acc[keyword]) acc[keyword] = { keyword, productNames: new Set<string>(), orders: 0, revenue: 0, firstSaleDate: '', lastSaleDate: '' };
-    const summary = acc[keyword];
-    summary.productNames.add(order.normalizedPackageName);
-    summary.orders += 1;
-    summary.revenue += order.paymentAmount;
-    if (saleDate) {
-      summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
-      summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
-    }
-    return acc;
-  }, {} as Record<string, KeywordSummary>)).sort((a, b) => b.revenue - a.revenue);
-
-  const seasonSummaries = Object.values(data.reduce((acc, order) => {
-    const usageDate = extractCleanDate('', order.orderDate);
-    const saleDate = extractCleanDate('', order.orderDate);
-    const season = seasonForDate(usageDate);
-    if (!season) return acc;
-    if (!acc[season.id]) {
-      acc[season.id] = { id: season.id, label: season.label, usageStartDate: '', usageEndDate: '', firstSaleDate: '', lastSaleDate: '', orders: 0, revenue: 0, keywords: {} };
-    }
-    const summary = acc[season.id];
-    summary.usageStartDate = earlierDate(summary.usageStartDate, usageDate);
-    summary.usageEndDate = laterDate(summary.usageEndDate, usageDate);
-    if (saleDate) {
-      summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
-      summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
-    }
-    summary.orders += 1;
-    summary.revenue += order.paymentAmount;
-    const keyword = categoryLabel(categoryForOrder(order));
-    summary.keywords[keyword] = (summary.keywords[keyword] || 0) + order.paymentAmount;
-    return acc;
-  }, {} as Record<string, SeasonSummary>)).sort((a, b) => b.id.localeCompare(a.id));
+  const { categoryOrderGroups, keywordSummaries, seasonSummaries } = useMemo(() => {
+    const orderGroups = data.reduce((acc, order) => {
+      const label = categoryLabel(categoryForOrder(order));
+      if (!acc[label]) acc[label] = [];
+      acc[label].push(order);
+      return acc;
+    }, {} as Record<string, PackageOrder[]>);
+    const keywords = Object.values(data.reduce((acc, order) => {
+      const keyword = categoryLabel(categoryForOrder(order));
+      const saleDate = extractCleanDate('', order.orderDate);
+      if (!acc[keyword]) acc[keyword] = { keyword, productNames: new Set<string>(), orders: 0, revenue: 0, firstSaleDate: '', lastSaleDate: '' };
+      const summary = acc[keyword];
+      summary.productNames.add(order.normalizedPackageName);
+      summary.orders += 1;
+      summary.revenue += order.paymentAmount;
+      if (saleDate) {
+        summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
+        summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
+      }
+      return acc;
+    }, {} as Record<string, KeywordSummary>)).sort((a, b) => b.revenue - a.revenue);
+    const seasons = Object.values(data.reduce((acc, order) => {
+      const usageDate = extractCleanDate('', order.orderDate);
+      const saleDate = extractCleanDate('', order.orderDate);
+      const season = seasonForDate(usageDate);
+      if (!season) return acc;
+      if (!acc[season.id]) acc[season.id] = { id: season.id, label: season.label, usageStartDate: '', usageEndDate: '', firstSaleDate: '', lastSaleDate: '', orders: 0, revenue: 0, keywords: {} };
+      const summary = acc[season.id];
+      summary.usageStartDate = earlierDate(summary.usageStartDate, usageDate);
+      summary.usageEndDate = laterDate(summary.usageEndDate, usageDate);
+      if (saleDate) {
+        summary.firstSaleDate = earlierDate(summary.firstSaleDate, saleDate);
+        summary.lastSaleDate = laterDate(summary.lastSaleDate, saleDate);
+      }
+      summary.orders += 1;
+      summary.revenue += order.paymentAmount;
+      const keyword = categoryLabel(categoryForOrder(order));
+      summary.keywords[keyword] = (summary.keywords[keyword] || 0) + order.paymentAmount;
+      return acc;
+    }, {} as Record<string, SeasonSummary>)).sort((a, b) => b.id.localeCompare(a.id));
+    return { categoryOrderGroups: orderGroups, keywordSummaries: keywords, seasonSummaries: seasons };
+  }, [data, categoryForOrder]);
 
   const topKeyword = (summary: SeasonSummary) => Object.entries(summary.keywords).sort(([, a], [, b]) => b - a)[0]?.[0] || '-';
 
@@ -698,7 +705,7 @@ const PackageSalesDashboard: React.FC = () => {
       acc[key].push(family);
       return acc;
     }, {} as Record<string, string[]>))
-      .filter(([, families]) => families.length >= 2)
+      .filter(([key, families]) => families.length >= 2 && (showAllCategories || !completedBundleKeys[key]))
       .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
       .slice(0, 30);
     const bundledFamilies = new Set(recommendedBundles.flatMap(([, families]) => families));
@@ -1216,7 +1223,7 @@ const PackageSalesDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {renderCalendar()}
+              {calendarContent}
             </>
           )}
         </div>
