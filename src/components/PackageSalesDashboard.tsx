@@ -96,8 +96,8 @@ function laterDate(current: string, candidate: string) {
 const normalizePackageName = (name: string) => {
   if (!name) return '알 수 없음';
   let normalized = name.replace(/\(\d{1,2}\/\d{1,2}\)/g, ''); // Fix AK플라자 얼리버드
-  // Remove trailing date like 6/6~7/3 (금,토) or just 5/25 (월)
-  normalized = normalized.replace(/\s+\d{1,2}\/\d{1,2}(\s*~\s*\d{1,2}\/\d{1,2})?(\s*\(.*?\))?.*$/, '');
+  // 상품명 끝의 운영일·요일 표기는 같은 상품으로 합친다. 예: "9/6~ 주중", "6/6~7/3 (금,토)"
+  normalized = normalized.replace(/\s*\d{1,2}\/\d{1,2}(?:\s*~\s*(?:\d{1,2}\/\d{1,2})?)?(?:\s*\([^)]*\))?(?:\s*(?:주중|주말|평일|공휴일|종일|오후|야간))?\s*$/, '');
   // Remove starting dates like 5/22 ~ 6/5
   normalized = normalized.replace(/^\d{1,2}\/\d{1,2}(\s*~\s*\d{1,2}\/\d{1,2})?\s*/, '');
   normalized = normalized.replace(/^~\s*\d{1,2}\/\d{1,2}\s*/, ''); // Handle remaining '~ 5/20'
@@ -155,7 +155,8 @@ const PackageSalesDashboard: React.FC = () => {
           channel: d.channel || '',
           packageType: d.package_type || '',
           rawPackageName: d.raw_package_name || '',
-          normalizedPackageName: d.normalized_package_name || '',
+          // 기존 저장 이력도 최신 상품명 통합 규칙으로 다시 묶어 표시한다.
+          normalizedPackageName: normalizePackageName(d.raw_package_name || d.normalized_package_name || ''),
           reservationDate: d.reservation_date || '',
           components: d.components || '',
           memberType: d.member_type || '',
@@ -322,8 +323,8 @@ const PackageSalesDashboard: React.FC = () => {
     const prevYearPrefix = format(subMonths(currentMonth, 12), 'yyyy');
     
     filteredData.forEach(r => {
-      // Use reservationDate for grouping. Fallback to orderDate
-      const cleanDate = extractCleanDate(r.reservationDate, r.orderDate);
+      // 매출은 실제 결제 주문일을 기준으로 집계한다.
+      const cleanDate = extractCleanDate('', r.orderDate);
 
       if (cleanDate.startsWith(targetPrefix)) {
         currentAmt += r.paymentAmount;
@@ -364,7 +365,7 @@ const PackageSalesDashboard: React.FC = () => {
         let prevDispAmt = 0; let prevDispQty = 0;
 
         filteredData.forEach(d => {
-          const cleanDate = extractCleanDate(d.reservationDate, d.orderDate);
+          const cleanDate = extractCleanDate('', d.orderDate);
           
           if (cleanDate === dateStr) {
             currentDispAmt += d.paymentAmount;
@@ -490,7 +491,7 @@ const PackageSalesDashboard: React.FC = () => {
   }, {} as Record<string, KeywordSummary>)).sort((a, b) => b.revenue - a.revenue);
 
   const seasonSummaries = Object.values(data.reduce((acc, order) => {
-    const usageDate = extractCleanDate(order.reservationDate, order.orderDate);
+    const usageDate = extractCleanDate('', order.orderDate);
     const saleDate = extractCleanDate('', order.orderDate);
     const season = seasonForDate(usageDate);
     if (!season) return acc;
@@ -518,7 +519,7 @@ const PackageSalesDashboard: React.FC = () => {
       <div className="pkg-analysis-heading">
         <div>
           <h2>상품 키워드·시즌 판매 분석</h2>
-          <p>결제일은 판매 시작 시점을, 예약일은 실제 시즌 운영 시점을 기준으로 집계합니다.</p>
+          <p>모든 매출·시즌 집계는 실제 결제가 발생한 주문일을 기준으로 합니다.</p>
         </div>
         <span className="pkg-analysis-badge">저장된 이력 기준</span>
       </div>
@@ -545,7 +546,7 @@ const PackageSalesDashboard: React.FC = () => {
           <h3>시즌별 판매 이력</h3>
           <div className="pkg-analysis-table-wrap">
             <table className="pkg-analysis-table">
-              <thead><tr><th>시즌</th><th>시즌 이용기간</th><th>판매 시작일</th><th>매출 / 판매건</th><th>주력 키워드</th></tr></thead>
+              <thead><tr><th>시즌</th><th>판매기간</th><th>판매 시작일</th><th>매출 / 판매건</th><th>주력 키워드</th></tr></thead>
               <tbody>{seasonSummaries.map((summary) => (
                 <tr key={summary.id}>
                   <td><strong>{summary.label}</strong></td>
@@ -567,7 +568,7 @@ const PackageSalesDashboard: React.FC = () => {
     
     // Filter data for the specific day
     const dayData = filteredData.filter(d => {
-      return extractCleanDate(d.reservationDate, d.orderDate) === selectedDate;
+      return extractCleanDate('', d.orderDate) === selectedDate;
     });
 
     const dayRevenue = dayData.reduce((sum, d) => sum + d.paymentAmount, 0);
@@ -664,7 +665,7 @@ const PackageSalesDashboard: React.FC = () => {
   const renderMonthlyOrderList = () => {
     const targetPrefix = format(currentMonth, 'yyyy-MM');
     const monthData = filteredData.filter(d => {
-      return extractCleanDate(d.reservationDate, d.orderDate).startsWith(targetPrefix);
+      return extractCleanDate('', d.orderDate).startsWith(targetPrefix);
     });
     
     // sorting by orderDate descending
@@ -772,7 +773,7 @@ const PackageSalesDashboard: React.FC = () => {
               {renderSalesHistoryAnalysis()}
 
               <div className="cumulative-dashboard" style={{ marginBottom: '40px' }}>
-                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
+                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>🏆 연간 전체 누적 실적 비교 (결제 주문일 기준, {format(currentMonth, 'yyyy')}년)</h3>
                 <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
                   <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
                     <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년')} 전체 누적 (전년도)</h4>
@@ -808,7 +809,7 @@ const PackageSalesDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (결제/방문일 기준, {format(currentMonth, 'MM')}월)</h3>
+                <h3 style={{fontSize:'1.3rem', color:'#f8fafc', marginBottom:'16px'}}>📊 월간 영업 누적 실적 비교 (결제 주문일 기준, {format(currentMonth, 'MM')}월)</h3>
                 <div className="dash-compare-container" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'32px' }}>
                   <div className="dash-column prev" style={{ background:'rgba(255,255,255,0.02)', padding:'20px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.05)' }}>
                     <h4 style={{ color:'#94a3b8', marginBottom:'16px' }}>{format(subMonths(currentMonth, 12), 'yyyy년 MM월')} (전년 동월)</h4>
