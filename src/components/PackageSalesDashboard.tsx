@@ -144,6 +144,8 @@ const PackageSalesDashboard: React.FC = () => {
   const [productCategories, setProductCategories] = useState<Record<string, ProductCategory>>({});
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
+  const [batchKeyword, setBatchKeyword] = useState('');
+  const [batchCategory, setBatchCategory] = useState<ProductCategory>({ major: '기타', middle: '기타', minor: '' });
 
 
 
@@ -613,6 +615,17 @@ const PackageSalesDashboard: React.FC = () => {
 
   const renderCategoryManager = () => {
     if (!isCategoryManagerOpen) return null;
+    const batchMatches = batchKeyword.trim()
+      ? uniqueProductFamilies.filter((family) => family.toLowerCase().includes(batchKeyword.trim().toLowerCase()))
+      : [];
+    const applyBatchCategory = () => {
+      if (batchMatches.length === 0) return;
+      setProductCategories((previous) => ({
+        ...previous,
+        ...Object.fromEntries(batchMatches.map((family) => [family, { ...batchCategory }])),
+      }));
+      setSyncMessage(`“${batchKeyword}” 포함 대표 상품 ${batchMatches.length}개에 일괄 분류를 적용했습니다. 분류 저장을 눌러 확정해주세요.`);
+    };
     return (
       <section className="pkg-category-manager">
         <div className="pkg-category-manager-header">
@@ -627,6 +640,17 @@ const PackageSalesDashboard: React.FC = () => {
         </div>
         <datalist id="package-middle-category-list">{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
         <datalist id="package-minor-category-list">{CATEGORY_MINOR_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
+        <div className="pkg-batch-category-box">
+          <div className="pkg-batch-category-title"><strong>비슷한 상품명 일괄 분류</strong><span>대표 상품명에 포함된 단어로 묶어 적용합니다.</span></div>
+          <div className="pkg-batch-category-fields">
+            <input value={batchKeyword} placeholder="예: 올인원PKG, 골드시즌, 룸온리" onChange={(event) => setBatchKeyword(event.target.value)} />
+            <select value={batchCategory.major} onChange={(event) => setBatchCategory((category) => ({ ...category, major: event.target.value }))}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+            <input value={batchCategory.middle} list="package-middle-category-list" placeholder="중분류" onChange={(event) => setBatchCategory((category) => ({ ...category, middle: event.target.value }))} />
+            <input value={batchCategory.minor} list="package-minor-category-list" placeholder="소분류" onChange={(event) => setBatchCategory((category) => ({ ...category, minor: event.target.value }))} />
+            <button onClick={applyBatchCategory} disabled={batchMatches.length === 0} className="pkg-batch-apply-btn">{batchMatches.length}개 일괄 적용</button>
+          </div>
+          {batchMatches.length > 0 && <p className="pkg-batch-match-list">적용 대상: {batchMatches.slice(0, 8).join(' · ')}{batchMatches.length > 8 ? ` 외 ${batchMatches.length - 8}개` : ''}</p>}
+        </div>
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류</th><th>중분류</th><th>소분류</th></tr></thead>
