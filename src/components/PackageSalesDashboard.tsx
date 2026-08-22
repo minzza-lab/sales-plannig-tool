@@ -44,6 +44,11 @@ type SeasonSummary = {
 
 type ProductVariant = { name: string; count: number; revenue: number };
 type ProductGroup = { name: string; count: number; revenue: number; variants: Record<string, ProductVariant> };
+type ProductCategory = { major: string; middle: string; minor: string };
+
+const CATEGORY_CONFIG_DATE = '2000-01-01';
+const CATEGORY_MAJOR_OPTIONS = ['워터파크', '객실', '스키·보드', '레저·액티비티', '식음·힐링', '입장권·기타', '미분류'];
+const CATEGORY_MIDDLE_SUGGESTIONS = ['입장권', '패키지', '객실 패키지', '룸온리', '리프트', '렌탈', '대여', '액티비티', '식음', '프로모션', '기타'];
 
 const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
   { label: '워터파크', terms: ['워터', 'water', '아쿠아', '풀', '파도', '골드시즌', '하이시즌', '미들시즌'] },
@@ -57,6 +62,20 @@ const KEYWORD_RULES: Array<{ label: string; terms: string[] }> = [
 function classifyPackageKeyword(order: PackageOrder) {
   const text = `${order.normalizedPackageName} ${order.rawPackageName} ${order.components}`.toLowerCase();
   return KEYWORD_RULES.find(({ terms }) => terms.some((term) => text.includes(term.toLowerCase())))?.label || '기타 패키지';
+}
+
+function suggestedCategory(order: PackageOrder): ProductCategory {
+  const major = classifyPackageKeyword(order);
+  const middleByMajor: Record<string, string> = {
+    워터파크: order.normalizedPackageName.includes('입장권') || order.normalizedPackageName.includes('대인') || order.normalizedPackageName.includes('소인') ? '입장권' : '패키지',
+    객실: order.normalizedPackageName.includes('룸온리') ? '룸온리' : '객실 패키지',
+    '스키·보드': order.normalizedPackageName.includes('렌탈') ? '렌탈' : '리프트',
+    '레저·액티비티': '액티비티',
+    '식음·힐링': '식음',
+    '입장권·기타': '기타 패키지',
+    '기타 패키지': '기타',
+  };
+  return { major: major === '기타 패키지' ? '입장권·기타' : major, middle: middleByMajor[major] || '기타', minor: '' };
 }
 
 function seasonForDate(date: string) {
@@ -110,6 +129,9 @@ const PackageSalesDashboard: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showMonthlyList, setShowMonthlyList] = useState(false);
   const [selectedProductDetail, setSelectedProductDetail] = useState<{ name: string; variants: ProductVariant[]; revenue: number } | null>(null);
+  const [productCategories, setProductCategories] = useState<Record<string, ProductCategory>>({});
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [isSavingCategories, setIsSavingCategories] = useState(false);
 
 
 
@@ -172,6 +194,37 @@ const PackageSalesDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      const { data: config } = await supabase
+        .from('daily_reports')
+        .select('data')
+        .eq('report_date', CATEGORY_CONFIG_DATE)
+        .eq('report_type', 'PACKAGE_PRODUCT_CATEGORIES')
+        .maybeSingle();
+      if (config?.data && typeof config.data === 'object') setProductCategories(config.data as Record<string, ProductCategory>);
+    };
+    void loadCategories();
+  }, []);
+
+  const saveProductCategories = async () => {
+    setIsSavingCategories(true);
+    try {
+      const { error } = await supabase.from('daily_reports').upsert({
+        report_date: CATEGORY_CONFIG_DATE,
+        report_type: 'PACKAGE_PRODUCT_CATEGORIES',
+        data: productCategories,
+      }, { onConflict: 'report_date,report_type' });
+      if (error) throw error;
+      setSyncMessage('상품 분류 기준을 저장했습니다. 이후 모든 매출 분석에 바로 반영됩니다.');
+      setIsCategoryManagerOpen(false);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : '상품 분류 기준을 저장하지 못했습니다.');
+    } finally {
+      setIsSavingCategories(false);
+    }
+  };
 
   const runServerSync = async (query: string) => {
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -465,11 +518,14 @@ const PackageSalesDashboard: React.FC = () => {
   };
 
   const uniquePackages = Array.from(new Set(data.map(d => d.normalizedPackageName))).sort();
+  const uniqueProductFamilies = Array.from(new Set(data.map(d => productFamilyName(d.normalizedPackageName)))).sort();
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
+  const categoryForOrder = (order: PackageOrder) => productCategories[productFamilyName(order.normalizedPackageName)] || suggestedCategory(order);
+  const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.minor].filter(Boolean).join(' · ');
 
   const keywordSummaries = Object.values(data.reduce((acc, order) => {
-    const keyword = classifyPackageKeyword(order);
+    const keyword = categoryLabel(categoryForOrder(order));
     const saleDate = extractCleanDate('', order.orderDate);
     if (!acc[keyword]) acc[keyword] = { keyword, productNames: new Set<string>(), orders: 0, revenue: 0, firstSaleDate: '', lastSaleDate: '' };
     const summary = acc[keyword];
@@ -500,7 +556,7 @@ const PackageSalesDashboard: React.FC = () => {
     }
     summary.orders += 1;
     summary.revenue += order.paymentAmount;
-    const keyword = classifyPackageKeyword(order);
+    const keyword = categoryLabel(categoryForOrder(order));
     summary.keywords[keyword] = (summary.keywords[keyword] || 0) + order.paymentAmount;
     return acc;
   }, {} as Record<string, SeasonSummary>)).sort((a, b) => b.id.localeCompare(a.id));
@@ -540,21 +596,58 @@ const PackageSalesDashboard: React.FC = () => {
     );
   };
 
+  const renderCategoryManager = () => {
+    if (!isCategoryManagerOpen) return null;
+    return (
+      <section className="pkg-category-manager">
+        <div className="pkg-category-manager-header">
+          <div>
+            <h2>상품 분류 관리</h2>
+            <p>자동 제안값을 확인하고, 필요한 상품만 대·중·소분류를 직접 확정하세요.</p>
+          </div>
+          <div className="pkg-category-manager-actions">
+            <button onClick={() => setIsCategoryManagerOpen(false)} className="pkg-category-cancel-btn">닫기</button>
+            <button onClick={() => void saveProductCategories()} className="pkg-category-save-btn" disabled={isSavingCategories}>{isSavingCategories ? '저장 중…' : '분류 저장'}</button>
+          </div>
+        </div>
+        <datalist id="package-middle-category-list">{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
+        <div className="pkg-category-table-wrap">
+          <table className="pkg-category-table">
+            <thead><tr><th>대표 상품명</th><th>대분류</th><th>중분류</th><th>소분류</th></tr></thead>
+            <tbody>{uniqueProductFamilies.map((family) => {
+              const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
+              const category = productCategories[family] || (seed ? suggestedCategory(seed) : { major: '미분류', middle: '', minor: '' });
+              const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
+              return (
+                <tr key={family}>
+                  <td><strong>{family}</strong></td>
+                  <td><select value={category.major} onChange={(event) => update({ major: event.target.value })}>{CATEGORY_MAJOR_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></td>
+                  <td><input value={category.middle} list="package-middle-category-list" placeholder="예: 패키지" onChange={(event) => update({ middle: event.target.value })} /></td>
+                  <td><input value={category.minor} placeholder="예: 골드시즌" onChange={(event) => update({ minor: event.target.value })} /></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      </section>
+    );
+  };
+
   const renderSalesHistoryAnalysis = () => (
     <section className="pkg-history-analysis">
       <div className="pkg-analysis-heading">
         <div>
-          <h2>상품 키워드·시즌 판매 분석</h2>
-          <p>모든 매출·시즌 집계는 실제 결제가 발생한 주문일을 기준으로 합니다.</p>
+          <h2>상품 분류·시즌 판매 분석</h2>
+          <p>저장한 대·중·소분류와 실제 결제가 발생한 주문일을 기준으로 집계합니다.</p>
         </div>
         <span className="pkg-analysis-badge">저장된 이력 기준</span>
       </div>
       <div className="pkg-analysis-grid">
         <div className="pkg-analysis-panel">
-          <h3>상품 키워드별 판매 현황</h3>
+          <h3>상품 분류별 판매 현황</h3>
           <div className="pkg-analysis-table-wrap">
             <table className="pkg-analysis-table">
-              <thead><tr><th>키워드</th><th>상품 수</th><th>판매건</th><th>매출</th><th>첫 판매일</th><th>최근 판매일</th></tr></thead>
+              <thead><tr><th>분류</th><th>상품 수</th><th>판매건</th><th>매출</th><th>첫 판매일</th><th>최근 판매일</th></tr></thead>
               <tbody>{keywordSummaries.map((summary) => (
                 <tr key={summary.keyword}>
                   <td><strong>{summary.keyword}</strong></td>
@@ -572,7 +665,7 @@ const PackageSalesDashboard: React.FC = () => {
           <h3>시즌별 판매 이력</h3>
           <div className="pkg-analysis-table-wrap">
             <table className="pkg-analysis-table">
-              <thead><tr><th>시즌</th><th>판매기간</th><th>판매 시작일</th><th>매출 / 판매건</th><th>주력 키워드</th></tr></thead>
+              <thead><tr><th>시즌</th><th>판매기간</th><th>판매 시작일</th><th>매출 / 판매건</th><th>주력 분류</th></tr></thead>
               <tbody>{seasonSummaries.map((summary) => (
                 <tr key={summary.id}>
                   <td><strong>{summary.label}</strong></td>
@@ -820,6 +913,9 @@ const PackageSalesDashboard: React.FC = () => {
          <button onClick={() => void syncRecentOrders()} className="pkg-server-sync-btn" disabled={isSyncing || isProcessing}>
            {isSyncing ? '☁️ 서버에서 최근 주문 동기화 중...' : '☁️ 최근 7일 서버 직접 동기화'}
          </button>
+         <button onClick={() => setIsCategoryManagerOpen((open) => !open)} className="pkg-category-open-btn">
+           🗂️ 상품 분류 관리
+         </button>
          <div style={{ marginLeft: 'auto' }}>
            <label className="pkg-upload-btn-small">
              <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} hidden />
@@ -837,6 +933,7 @@ const PackageSalesDashboard: React.FC = () => {
             renderMonthlyOrderList()
           ) : (
             <>
+              {renderCategoryManager()}
               <div className="pkg-filters">
                 <div className="filter-group">
                   <label>상품별 조회 (통합됨)</label>
