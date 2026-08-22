@@ -91,6 +91,15 @@ function suggestedCategory(order: PackageOrder): ProductCategory {
   };
 }
 
+// 저장 구조가 3단계였던 이전 분류도 새 4단계 체계로 읽어낸다.
+function normalizeProductCategory(saved: ProductCategory | undefined, fallback: ProductCategory): ProductCategory {
+  if (!saved || !CATEGORY_MAJOR_OPTIONS.includes(saved.major)) return fallback;
+  const savedSub = (saved as ProductCategory & { sub?: string }).sub;
+  return savedSub
+    ? saved
+    : { major: saved.major, middle: CATEGORY_SEASON_OPTIONS.includes(saved.middle) ? saved.middle : fallback.middle, sub: saved.middle || fallback.sub, minor: saved.minor || fallback.minor };
+}
+
 function seasonForDate(date: string) {
   const matched = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!matched) return null;
@@ -172,12 +181,7 @@ const PackageSalesDashboard: React.FC = () => {
     const seed = data.find((order) => productFamilyName(order.normalizedPackageName) === family);
     const savedCategory = productCategories[family];
     const suggested = seed ? suggestedCategory(seed) : { major: '객실미포함', middle: '겨울', sub: '기타', minor: family };
-    if (!savedCategory || !CATEGORY_MAJOR_OPTIONS.includes(savedCategory.major)) return suggested;
-    // 이전 3단계 저장값은 기존 중분류를 새 소분류로 자동 이관한다.
-    const savedSub = (savedCategory as ProductCategory & { sub?: string }).sub;
-    return savedSub
-      ? savedCategory
-      : { major: savedCategory.major, middle: CATEGORY_SEASON_OPTIONS.includes(savedCategory.middle) ? savedCategory.middle : suggested.middle, sub: savedCategory.middle || suggested.sub, minor: savedCategory.minor || suggested.minor };
+    return normalizeProductCategory(savedCategory, suggested);
   };
 
 
@@ -600,7 +604,8 @@ const PackageSalesDashboard: React.FC = () => {
   const commonComponents = ['객실', '워터파크', '관광곤돌라', '사계절썰매', '플라잉라인', '루지', '고카트', '조식'];
   const availableComponents = commonComponents.filter(c => data.some(d => d.components.includes(c)));
   const categoryForOrder = (order: PackageOrder) => {
-    return categoryForFamily(productFamilyName(order.normalizedPackageName));
+    // 집계 중에는 전체 주문을 다시 탐색하지 않는다. (기존 O(n²) 병목 제거)
+    return normalizeProductCategory(productCategories[productFamilyName(order.normalizedPackageName)], suggestedCategory(order));
   };
   const categoryLabel = (category: ProductCategory) => [category.major, category.middle, category.sub, category.minor].filter(Boolean).join(' · ');
   const categoryOrderGroups = data.reduce((acc, order) => {
