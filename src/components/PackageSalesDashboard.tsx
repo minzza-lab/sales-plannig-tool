@@ -59,7 +59,7 @@ const PackageSalesDashboard: React.FC = () => {
   const [syncMessage, setSyncMessage] = useState('');
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showMonthlyList, setShowMonthlyList] = useState(false);
 

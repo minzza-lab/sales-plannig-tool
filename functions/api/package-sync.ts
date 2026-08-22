@@ -89,7 +89,7 @@ function numberValue(value: unknown) {
 
 function statusName(status: unknown) {
   const code = String(status ?? '');
-  return code === '00' ? '결제완료' : code === '01' ? '입금대기' : code === '02' ? '취소완료' : code;
+  return code === '00' ? '입금대기' : code === '01' ? '결제완료' : code === '02' ? '취소완료' : code;
 }
 
 function memberTypeName(type: unknown) {
