@@ -65,6 +65,35 @@
   transform: none;
 }
 
+.pkg-server-sync-btn {
+  padding: 1rem 1.4rem;
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pkg-server-sync-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.25);
+  transform: translateY(-1px);
+}
+
+.pkg-server-sync-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.pkg-sync-message {
+  margin: -1rem 0 1.5rem;
+  color: #bfdbfe;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
 .pkg-upload-btn-small {
   display: inline-block;
   padding: 0.8rem 1.5rem;
@@ -441,4 +470,3 @@
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-

@@ -55,6 +55,8 @@ const normalizePackageName = (name: string) => {
 const PackageSalesDashboard: React.FC = () => {
   const [data, setData] = useState<PackageOrder[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
   const [selectedComponent, setSelectedComponent] = useState<string>('all');
   const [currentMonth, setCurrentMonth] = useState(new Date(2026, 4, 1)); // 2026년 5월
@@ -121,6 +123,30 @@ const PackageSalesDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const syncRecentOrders = async () => {
+    setSyncMessage('');
+    setIsSyncing(true);
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('로그인 정보가 없습니다. 다시 로그인해주세요.');
+
+      const response = await fetch('/api/package-sync?days=7', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(result.error || '패키지 동기화를 시작하지 못했습니다.');
+      setSyncMessage(result.message || '최근 패키지 주문 동기화가 완료되었습니다.');
+      await fetchData();
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : '패키지 동기화 중 오류가 발생했습니다.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -552,12 +578,15 @@ const PackageSalesDashboard: React.FC = () => {
     <div className="pkg-dashboard-container animate-fade-in">
       <div className="pkg-header">
         <h1>📦 패키지 판매 현황 대시보드</h1>
-        <p>크롤러 봇이 실시간으로 수집한 Supabase 데이터를 바탕으로 판매 추이를 분석합니다.</p>
+        <p>관리자 주문 데이터를 안전하게 동기화해 판매 추이를 분석합니다.</p>
       </div>
 
       <div className="pkg-actions-bar">
          <button onClick={fetchData} className="pkg-refresh-btn" disabled={isProcessing}>
            {isProcessing ? '🔄 데이터 불러오는 중...' : '🔄 최신 DB 데이터 새로고침'}
+         </button>
+         <button onClick={() => void syncRecentOrders()} className="pkg-server-sync-btn" disabled={isSyncing || isProcessing}>
+           {isSyncing ? '☁️ 서버에서 최근 주문 동기화 중...' : '☁️ 최근 7일 서버 직접 동기화'}
          </button>
          <div style={{ marginLeft: 'auto' }}>
            <label className="pkg-upload-btn-small">
@@ -566,6 +595,7 @@ const PackageSalesDashboard: React.FC = () => {
            </label>
          </div>
       </div>
+      {syncMessage && <p className="pkg-sync-message">{syncMessage}</p>}
 
       {data.length > 0 && (
         <div className="pkg-content">
