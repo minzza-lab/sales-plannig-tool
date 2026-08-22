@@ -150,7 +150,9 @@ const PackageSalesDashboard: React.FC = () => {
   const [savedCategoryFamilies, setSavedCategoryFamilies] = useState<Record<string, true>>({});
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSavingCategories, setIsSavingCategories] = useState(false);
+  const [savingBundleKey, setSavingBundleKey] = useState<string | null>(null);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [showRemainingProductList, setShowRemainingProductList] = useState(false);
   const [bundleCategories, setBundleCategories] = useState<Record<string, ProductCategory>>({});
   const [selectedClassificationDetail, setSelectedClassificationDetail] = useState<ClassificationDetail | null>(null);
 
@@ -260,6 +262,29 @@ const PackageSalesDashboard: React.FC = () => {
       setSyncMessage(error instanceof Error ? error.message : '상품 분류 기준을 저장하지 못했습니다.');
     } finally {
       setIsSavingCategories(false);
+    }
+  };
+
+  const saveBundleCategories = async (key: string, families: string[]) => {
+    setSavingBundleKey(key);
+    try {
+      const categoriesToSave: Record<string, ProductCategory> = {
+        ...productCategories,
+        ...Object.fromEntries(families.map((family) => [family, categoryForFamily(family)])),
+      };
+      const { error } = await supabase.from('daily_reports').upsert({
+        report_date: CATEGORY_CONFIG_DATE,
+        report_type: 'PACKAGE_PRODUCT_CATEGORIES',
+        data: categoriesToSave,
+      }, { onConflict: 'report_date,report_type' });
+      if (error) throw error;
+      setProductCategories(categoriesToSave);
+      setSavedCategoryFamilies((previous) => ({ ...previous, ...Object.fromEntries(families.map((family) => [family, true])) }));
+      setSyncMessage(`“${key}” 묶음 ${families.length}개 상품의 분류 기준을 저장했습니다.`);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : '묶음 분류 기준을 저장하지 못했습니다.');
+    } finally {
+      setSavingBundleKey(null);
     }
   };
 
@@ -656,6 +681,8 @@ const PackageSalesDashboard: React.FC = () => {
       .filter(([, families]) => families.length >= 2)
       .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
       .slice(0, 30);
+    const bundledFamilies = new Set(recommendedBundles.flatMap(([, families]) => families));
+    const remainingProductFamilies = displayedProductFamilies.filter((family) => !bundledFamilies.has(family));
     return (
       <section className="pkg-category-manager">
         <div className="pkg-category-manager-header">
@@ -695,6 +722,7 @@ const PackageSalesDashboard: React.FC = () => {
                     <label>중분류<select value={bundleCategory.middle} onChange={(event) => updateBundle({ middle: event.target.value })}>{CATEGORY_MIDDLE_SUGGESTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                     <label>소분류 일괄 변경 <em>(선택)</em><input value={bundleCategory.minor} placeholder="비우면 상품별 이름 유지" onChange={(event) => updateBundle({ minor: event.target.value })} /></label>
                     <button onClick={applyBundleCategory} className="pkg-batch-apply-btn">{families.length}개 일괄 적용</button>
+                    <button onClick={() => void saveBundleCategories(key, families)} className="pkg-bundle-save-btn" disabled={savingBundleKey === key}>{savingBundleKey === key ? '저장 중…' : '이 묶음 저장 완료'}</button>
                   </div>
                   <div className="pkg-bundle-product-list">{families.map((family) => {
                     const category = categoryForFamily(family);
@@ -711,10 +739,11 @@ const PackageSalesDashboard: React.FC = () => {
             })}</div>
           </div>
         )}
-        <div className="pkg-category-table-wrap">
+        {!showAllCategories && remainingProductFamilies.length > 0 && <button onClick={() => setShowRemainingProductList((show) => !show)} className="pkg-show-remaining-btn">{showRemainingProductList ? '나머지 개별 상품 목록 닫기' : `추천 묶음에 없는 상품 ${remainingProductFamilies.length}개 직접 분류하기`}</button>}
+        {(showAllCategories || showRemainingProductList) && <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
-            <tbody>{displayedProductFamilies.map((family) => {
+            <tbody>{(showAllCategories ? uniqueProductFamilies : remainingProductFamilies).map((family) => {
               const category = categoryForFamily(family);
               const update = (patch: Partial<ProductCategory>) => setProductCategories((previous) => ({ ...previous, [family]: { ...category, ...patch } }));
               return (
@@ -727,7 +756,7 @@ const PackageSalesDashboard: React.FC = () => {
               );
             })}</tbody>
           </table>
-        </div>
+        </div>}
       </section>
     );
   };
