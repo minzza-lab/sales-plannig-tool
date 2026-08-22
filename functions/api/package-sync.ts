@@ -188,11 +188,11 @@ function daysBetween(start: string, end: string) {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
-async function collectOrders(token: string, start: string, end: string) {
+async function collectOrders(token: string, start: string, end: string, completedOnly: boolean) {
   const all: WadmPackage[] = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const query = new URLSearchParams({
-      pg: String(page), pgSz: String(PAGE_SIZE), schChnl: '', schMbrTp: '', schPkgTp: '', schStatList: '', schMthdList: '',
+      pg: String(page), pgSz: String(PAGE_SIZE), schChnl: '', schMbrTp: '', schPkgTp: '', schStatList: completedOnly ? '01' : '', schMthdList: '',
       schYmdTp: 'orderYmd', schStrtYmd: start, schEndYmd: end, schFld: 'ordNo', schTxt: '', schPkgKind: '1001', schPkgSubKind: '', sordFld: 'rgstYmd', schPkgSaleCardTp: '',
     });
     const response = await fetchWithTimeout(`${WADM_API}/order/packag/listbasis?${query}`, { headers: { 'X-AUTH-TOKEN': token } });
@@ -258,7 +258,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     lock = await acquireLock(supabaseUrl, anonKey, authorization);
     if (!lock) return jsonResponse({ error: '패키지 동기화가 이미 진행 중입니다. 잠시 후 다시 확인해주세요.' }, 409);
     const token = await getAdminToken(adminId, adminPwd);
-    const sourceRows = await collectOrders(token, toCompactDate(rangeStart), toCompactDate(rangeEnd));
+    const sourceRows = await collectOrders(token, toCompactDate(rangeStart), toCompactDate(rangeEnd), Boolean(fromParam && toParam));
     const saved = await saveOrders(supabaseUrl, anonKey, authorization, sourceRows);
     result = {
       status: 'completed',
