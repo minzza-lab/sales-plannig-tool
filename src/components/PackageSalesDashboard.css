@@ -116,6 +116,56 @@
   animation: fadeIn 0.5s ease-out;
 }
 
+/* WaterParkSales의 공용 클래스가 이 화면까지 영향을 주지 않도록 패키지 비교 영역의 대비를 고정한다. */
+.pkg-dashboard-container .cumulative-dashboard {
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.pkg-dashboard-container .cumulative-dashboard h3 {
+  color: #f8fafc !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column.prev {
+  background: #172033 !important;
+  border-color: #334155 !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column.current {
+  background: #102b2a !important;
+  border-color: #1f766b !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column h4 {
+  color: #cbd5e1 !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column.current h4 {
+  color: #5eead4 !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column > div > div {
+  background: #0f172a !important;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column.current > div > div {
+  background: #123a36 !important;
+  border-color: rgba(94, 234, 212, 0.22);
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column > div > div > span:first-child {
+  color: #cbd5e1 !important;
+}
+
+.pkg-dashboard-container .cumulative-dashboard .dash-column > div > div > span:last-child,
+.pkg-dashboard-container .cumulative-dashboard .dash-column > div > div > div > span:first-child {
+  color: #ffffff !important;
+}
+
 .pkg-history-analysis {
   margin-bottom: 2.5rem;
 }
