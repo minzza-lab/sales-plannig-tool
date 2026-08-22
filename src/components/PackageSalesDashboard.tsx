@@ -125,6 +125,16 @@ const extractPeopleLabel = (name: string) => name.match(/(?:^|\s)(\d+)\s*인(?:\
 
 const extractScheduleLabel = (name: string) => name.match(/\(?\d{1,2}\/\d{1,2}(?:\s*~\s*(?:(?:\d{1,2}\/)?\d{1,2}))?\)?(?:\s*\([^)]*\))?/)?.[0] || '기간 미표기';
 
+const recommendedBundleKey = (name: string) => {
+  const cleaned = name
+    .replace(/^\([^)]*\)\s*/, '')
+    .replace(/^(?:회원\/시즌권|회원|일반)\s*/, '')
+    .replace(/\b(?:PKG|패키지|룸온리|대인권|소인권|대인|소인)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.split(' ').slice(0, 2).join(' ').trim();
+};
+
 const PackageSalesDashboard: React.FC = () => {
   const [data, setData] = useState<PackageOrder[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -620,6 +630,16 @@ const PackageSalesDashboard: React.FC = () => {
     const batchMatches = batchKeyword.trim()
       ? uniqueProductFamilies.filter((family) => family.toLowerCase().includes(batchKeyword.trim().toLowerCase()))
       : [];
+    const recommendedBundles = Object.entries(uniqueProductFamilies.reduce((acc, family) => {
+      const key = recommendedBundleKey(family);
+      if (key.length < 2) return acc;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(family);
+      return acc;
+    }, {} as Record<string, string[]>))
+      .filter(([, families]) => families.length >= 2)
+      .sort(([, a], [, b]) => b.length - a.length || a[0].localeCompare(b[0]))
+      .slice(0, 30);
     const applyBatchCategory = () => {
       if (batchMatches.length === 0) return;
       setProductCategories((previous) => ({
@@ -652,6 +672,16 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
           {batchMatches.length > 0 && <p className="pkg-batch-match-list">적용 대상: {batchMatches.slice(0, 8).join(' · ')}{batchMatches.length > 8 ? ` 외 ${batchMatches.length - 8}개` : ''}</p>}
         </div>
+        {recommendedBundles.length > 0 && (
+          <div className="pkg-recommended-bundles">
+            <div className="pkg-recommended-bundles-title"><strong>추천 묶음</strong><span>표시된 묶음을 누르면 위의 일괄 분류 대상에 바로 입력됩니다.</span></div>
+            <div className="pkg-recommended-bundle-grid">{recommendedBundles.map(([key, families]) => (
+              <button key={key} onClick={() => setBatchKeyword(key)} className="pkg-recommended-bundle-card">
+                <strong>{key}</strong><span>{families.length}개 대표 상품</span><small>{families.slice(0, 3).join(' · ')}{families.length > 3 ? ` 외 ${families.length - 3}개` : ''}</small>
+              </button>
+            ))}</div>
+          </div>
+        )}
         <div className="pkg-category-table-wrap">
           <table className="pkg-category-table">
             <thead><tr><th>대표 상품명</th><th>대분류(객실 포함)</th><th>중분류(상품 유형)</th><th>소분류(노출 상품명)</th></tr></thead>
