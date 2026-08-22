@@ -3,23 +3,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, ArrowLeft, List, Calendar as CalendarIcon } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Bar, Cell } from 'recharts';
 import './PackageSalesDashboard.css';
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
-
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.1)', padding: '12px', borderRadius: '8px', color: '#f8fafc' }}>
-        <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>{payload[0].payload.name}</p>
-        <p style={{ margin: 0, color: '#93c5fd' }}>매출: {payload[0].value.toLocaleString()}원</p>
-        <p style={{ margin: '4px 0 0 0', color: '#6ee7b7' }}>건수: {payload[0].payload.count}건</p>
-      </div>
-    );
-  }
-  return null;
-};
 
 interface PackageOrder {
   orderId: string;
@@ -577,11 +561,12 @@ const PackageSalesDashboard: React.FC = () => {
     // Group by package
     const packageSales = dayData.reduce((acc, d) => {
       const key = d.normalizedPackageName;
-      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0 };
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, orderIds: [] as string[] };
       acc[key].count += 1;
       acc[key].revenue += d.paymentAmount;
+      acc[key].orderIds.push(d.orderId);
       return acc;
-    }, {} as Record<string, {name: string, count: number, revenue: number}>);
+    }, {} as Record<string, {name: string, count: number, revenue: number, orderIds: string[]}>);
     const dayPackageChartData = Object.values(packageSales).sort((a, b) => b.revenue - a.revenue);
 
     return (
@@ -608,29 +593,34 @@ const PackageSalesDashboard: React.FC = () => {
           </div>
         </div>
         
-        {dayPackageChartData.length > 0 && (
-          <div className="pkg-chart-panel" style={{ marginBottom: '32px' }}>
-            <h3>🏆 일일 상품별 매출 현황</h3>
-            <div className="chart-wrapper">
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={dayPackageChartData.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                  <XAxis type="number" stroke="#94a3b8" tickFormatter={(v) => (v / 10000).toFixed(0) + '만'} />
-                  <YAxis type="category" dataKey="name" stroke="#94a3b8" width={140} tick={{fontSize: 12, fill: '#f8fafc'}} />
-                  <RechartsTooltip content={<CustomTooltip />} />
-                  <Bar dataKey="revenue" fill="#8b5cf6" name="매출" radius={[0, 6, 6, 0]}>
-                    {dayPackageChartData.slice(0, 10).map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="pkg-table-container" style={{ background: 'rgba(96, 165, 250, 0.06)', borderRadius: '12px', border: '1px solid rgba(96, 165, 250, 0.2)', overflow: 'hidden', marginBottom: '32px' }}>
+          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}>📦 상품명 기준 주문 현황 ({dayPackageChartData.length}종)</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+              <thead>
+                <tr style={{ background: 'rgba(15, 23, 42, 0.72)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px' }}>상품명</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>주문건수</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제매출</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>건당 평균</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayPackageChartData.map((item) => (
+                  <tr key={item.name} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '13px 16px', color: '#f8fafc', fontWeight: 700 }}>{item.name}</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}>{item.count.toLocaleString()}건</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right', color: '#6ee7b7', fontWeight: 800 }}>{item.revenue.toLocaleString()}원</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}>{Math.round(item.revenue / item.count).toLocaleString()}원</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
 
         <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>📋 일일 주문 목록</h3>
+          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>📋 개별 주문 목록</h3>
           <div style={{ overflowX: 'auto' }}>
             <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
               <thead>
