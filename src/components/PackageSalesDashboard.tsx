@@ -660,6 +660,14 @@ const PackageSalesDashboard: React.FC = () => {
     
     // sorting by orderDate descending
     monthData.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+    const monthlyRevenue = monthData.reduce((total, order) => total + order.paymentAmount, 0);
+    const monthlyProductSales = Object.values(monthData.reduce((acc, order) => {
+      const key = order.normalizedPackageName;
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0 };
+      acc[key].count += 1;
+      acc[key].revenue += order.paymentAmount;
+      return acc;
+    }, {} as Record<string, { name: string; count: number; revenue: number }>)).sort((a, b) => b.revenue - a.revenue);
 
     return (
       <div className="pkg-detail-view animate-fade-in">
@@ -670,9 +678,38 @@ const PackageSalesDashboard: React.FC = () => {
           <h2 style={{ margin: 0, color: '#f8fafc' }}>{format(currentMonth, 'yyyy년 MM월')} 월간 전체 주문내역</h2>
         </div>
 
+        <div className="pkg-table-container" style={{ background: 'rgba(96, 165, 250, 0.06)', borderRadius: '12px', border: '1px solid rgba(96, 165, 250, 0.2)', overflow: 'hidden', marginBottom: '32px' }}>
+          <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📊 상품별 월간 매출 비중 ({monthlyProductSales.length}종)</span>
+            <span style={{ color: '#6ee7b7', fontSize: '0.95rem' }}>총 {monthlyRevenue.toLocaleString()}원</span>
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+              <thead>
+                <tr style={{ background: 'rgba(15, 23, 42, 0.72)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px' }}>상품명</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>주문건수</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>결제매출</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>매출 비중</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyProductSales.map((item) => (
+                  <tr key={item.name} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '13px 16px', color: '#f8fafc', fontWeight: 700 }}>{item.name}</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}>{item.count.toLocaleString()}건</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right', color: '#6ee7b7', fontWeight: 800 }}>{item.revenue.toLocaleString()}원</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right' }}>{monthlyRevenue ? (item.revenue / monthlyRevenue * 100).toFixed(1) : '0.0'}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div className="pkg-table-container" style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
           <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📋 전체 주문 목록 ({monthData.length.toLocaleString()}건)</span>
+            <span>📋 개별 주문 목록 ({monthData.length.toLocaleString()}건)</span>
           </h3>
           <div style={{ overflowX: 'auto', maxHeight: '700px', overflowY: 'auto' }}>
             <table className="pkg-data-table" style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
