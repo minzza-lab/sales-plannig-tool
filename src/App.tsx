@@ -26,6 +26,7 @@ const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
 const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
 const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
 const QRVerifier = lazy(() => import('./components/QRVerifier'))
+const TeamWorkspace = lazy(() => import('./components/TeamWorkspace'))
 const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
 const SportsSalesDashboard = lazy(() => import('./components/SportsSalesDashboard'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
@@ -93,6 +94,7 @@ function App() {
                 <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
                 <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
                 <Route path="tools/qr-verifier" element={<QRVerifier />} />
+                <Route path="tools/team-workspace" element={<TeamWorkspace />} />
                 <Route path="tools/room-state" element={<RoomStateDashboard />} />
                 <Route path="tools/sports-sales" element={<SportsSalesDashboard />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

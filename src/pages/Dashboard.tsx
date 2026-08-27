@@ -29,6 +29,7 @@ const categories: ToolCategory[] = [
     title: '핵심 업무와 협업',
     description: '팀의 요청, 지식, 문서와 고객 응대를 한곳에서 관리합니다.',
     tools: [
+      { id: 'team-workspace', title: '공유 스케줄 · 업무 트래커', description: '팀 일정, 담당 업무, 진행 상황과 의견을 함께 관리합니다.', icon: '🗓️', path: '/tools/team-workspace' },
       { id: 'automation-request', title: '자동화 요청 게시판', description: '반복 업무와 필요한 기능을 등록하고 함께 검토합니다.', icon: '⚡', path: '/tools/automation-request' },
       { id: 'knowledge-base', title: '공유 지식 베이스', description: '업무 노하우와 참고 자료를 팀원들과 축적합니다.', icon: '🤝', path: '/tools/knowledge-base' },
       { id: 'approvals', title: '품의서 보관함', description: '품의서를 보관하고 Gemini로 핵심 내용을 요약합니다.', icon: '📄', path: '/tools/approvals' },
