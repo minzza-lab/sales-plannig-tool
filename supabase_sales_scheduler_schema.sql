@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS sales_product_files (
 CREATE INDEX IF NOT EXISTS sales_products_dates_idx ON sales_products(sales_start, sales_end);
 CREATE INDEX IF NOT EXISTS sales_results_product_date_idx ON sales_daily_results(product_id, result_date);
 
+-- 외부 캘린더 가져오기 시 원본 일정과 상세 이력을 보존합니다.
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_uid text;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_status text;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_created_at timestamptz;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_updated_at timestamptz;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_calendar_name text;
+CREATE UNIQUE INDEX IF NOT EXISTS sales_products_source_uid_unique ON sales_products(source_uid) WHERE source_uid IS NOT NULL;
+
 ALTER TABLE sales_companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_daily_results ENABLE ROW LEVEL SECURITY;
