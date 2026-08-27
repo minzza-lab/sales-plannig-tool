@@ -18,6 +18,12 @@ CREATE TABLE IF NOT EXISTS sales_products (
   sales_start date NOT NULL,
   sales_end date NOT NULL,
   target_amount numeric NOT NULL DEFAULT 0,
+  purchase_quantity integer NOT NULL DEFAULT 0,
+  purchase_amount numeric NOT NULL DEFAULT 0,
+  cancel_quantity integer NOT NULL DEFAULT 0,
+  cancel_amount numeric NOT NULL DEFAULT 0,
+  net_quantity integer NOT NULL DEFAULT 0,
+  net_amount numeric NOT NULL DEFAULT 0,
   memo text,
   color text NOT NULL DEFAULT 'blue',
   created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -60,6 +66,14 @@ ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_created_at timestampt
 ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_updated_at timestamptz;
 ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS source_calendar_name text;
 CREATE UNIQUE INDEX IF NOT EXISTS sales_products_source_uid_unique ON sales_products(source_uid) WHERE source_uid IS NOT NULL;
+
+-- 기존 판매 상품에도 최종 실적 칼럼을 추가합니다.
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS purchase_quantity integer NOT NULL DEFAULT 0;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS purchase_amount numeric NOT NULL DEFAULT 0;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS cancel_quantity integer NOT NULL DEFAULT 0;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS cancel_amount numeric NOT NULL DEFAULT 0;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS net_quantity integer NOT NULL DEFAULT 0;
+ALTER TABLE sales_products ADD COLUMN IF NOT EXISTS net_amount numeric NOT NULL DEFAULT 0;
 
 ALTER TABLE sales_companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_products ENABLE ROW LEVEL SECURITY;
