@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import SalesOperationOffice from '../components/SalesOperationOffice'
 import './Dashboard.css'
 
 interface Tool {
@@ -333,6 +334,13 @@ export default function Dashboard() {
           <span>사용 가능한 도구</span>
         </div>
       </header>
+
+      <SalesOperationOffice
+        syncState={syncState}
+        syncProgress={syncProgress}
+        hasSnapshot={Boolean(snapshot)}
+        onSync={() => void startIntegratedSync()}
+      />
 
       <section className="integrated-spotlight">
         <div className="integrated-heading">
