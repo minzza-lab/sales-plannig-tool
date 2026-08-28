@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, Play, Settings2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import SalesOfficeWorld from './SalesOfficeWorld'
 import './SalesOperationOffice.css'
 import './SalesOperationOfficeMotion.css'
 
@@ -36,15 +37,8 @@ function normalizePreferences(value: unknown): OfficePreferences {
   return { title: typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.slice(0, 28) : defaultPreferences.title, tone, compact: Boolean(candidate.compact), visible: { ...defaultPreferences.visible, ...(candidate.visible || {}) }, staff }
 }
 
-function Agent({ name, role, className, speech, tone, hair, box = false }: { name: string; role: string; className: string; speech: string; tone: string; hair: StaffStyle['hair']; box?: boolean }) {
-  return <div className={`office-agent ${className} hair-${hair}`} style={{ '--agent-tone': tone } as CSSProperties}>
-    <span className="agent-bubble">{speech}</span><span className="agent-tag"><b>{name}</b><i>{role}</i></span>
-    <span className="agent-body"><i className="agent-shadow" /><i className="agent-leg left" /><i className="agent-leg right" /><i className="agent-torso" /><i className="agent-arm left" /><i className="agent-arm right" /><i className="agent-head"><b /><b /></i><i className="agent-hair" />{box ? <i className="agent-box" /> : null}</span>
-  </div>
-}
-
 export default function SalesOperationOffice({ syncState, syncProgress, hasSnapshot, onSync }: Props) {
-  const [tasks, setTasks] = useState<WorkTask[]>([])
+  const [, setTasks] = useState<WorkTask[]>([])
   const [taskSourceReady, setTaskSourceReady] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [preferences, setPreferences] = useState<OfficePreferences>(() => { try { return normalizePreferences(JSON.parse(localStorage.getItem(preferenceKey) || 'null')) } catch { return defaultPreferences } })
@@ -59,8 +53,6 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
   useEffect(() => { void loadTasks(); const channel = supabase.channel('sales-pixel-office').on('postgres_changes', { event: '*', schema: 'public', table: 'work_tasks' }, () => void loadTasks()).subscribe(); return () => { void supabase.removeChannel(channel) } }, [loadTasks])
   useEffect(() => { localStorage.setItem(preferenceKey, JSON.stringify(preferences)) }, [preferences])
 
-  const activeDepartments = useMemo(() => departments.filter((department) => preferences.visible[department.key]), [preferences.visible])
-  const activeTask = (department: DepartmentKey) => tasks.find((task) => departments.find((item) => item.key === department)!.match.test(task.title) && task.status !== 'done')
   const updatePreferences = (patch: Partial<OfficePreferences>) => setPreferences((current) => ({ ...current, ...patch }))
   const toggleDepartment = (key: DepartmentKey) => setPreferences((current) => ({ ...current, visible: { ...current.visible, [key]: !current.visible[key] } }))
   const updateStaff = (id: StaffId, patch: Partial<StaffStyle>) => setPreferences((current) => ({ ...current, staff: { ...current.staff, [id]: { ...current.staff[id], ...patch } } }))
@@ -70,19 +62,7 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     <header className="sales-office-head"><div><p>LIVE SALES OFFICE</p><h2>{preferences.title}</h2><span>업무 상태에 맞춰 직원들이 실제로 움직이는 운영 장면입니다.</span></div><button type="button" className="sales-office-settings" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}><Settings2 size={16} /> 화면 설정 <ChevronDown size={14} /></button></header>
     {settingsOpen ? <div className="sales-office-customizer"><label>관제실 이름<input value={preferences.title} maxLength={28} onChange={(event) => updatePreferences({ title: event.target.value })} /></label><fieldset><legend>강조 색상</legend><div className="office-tone-options">{(['teal', 'blue', 'amber', 'violet'] as OfficeTone[]).map((tone) => <button type="button" key={tone} className={preferences.tone === tone ? 'selected' : ''} onClick={() => updatePreferences({ tone })}>{tone === 'teal' ? '청록' : tone === 'blue' ? '블루' : tone === 'amber' ? '앰버' : '바이올렛'}</button>)}</div></fieldset><fieldset><legend>표시할 부서</legend><div className="office-department-toggles">{departments.map((department) => <label key={department.key}><input type="checkbox" checked={preferences.visible[department.key]} onChange={() => toggleDepartment(department.key)} /> {department.label}</label>)}</div></fieldset><label className="office-compact-toggle"><input type="checkbox" checked={preferences.compact} onChange={(event) => updatePreferences({ compact: event.target.checked })} /> 간단히 보기</label><fieldset className="office-staff-editor"><legend>직원 설정</legend>{(Object.keys(defaultStaff) as StaffId[]).map((id) => <div key={id}><span>{id === 'ops' ? '운영' : id === 'data' ? '분석' : id === 'water' ? '워터파크' : id === 'stay' ? '객실' : id === 'sports' ? '스포츠' : '기획'}</span><input value={preferences.staff[id].name} maxLength={12} aria-label={`${preferences.staff[id].name} 이름`} onChange={(event) => updateStaff(id, { name: event.target.value })} /><select value={preferences.staff[id].outfit} aria-label={`${preferences.staff[id].name} 복장`} onChange={(event) => updateStaff(id, { outfit: event.target.value })}><option value="#5d72d6">블루</option><option value="#3c9f91">청록</option><option value="#e0a53a">앰버</option><option value="#8a68c9">바이올렛</option><option value="#d18b4a">오렌지</option></select><select value={preferences.staff[id].hair} aria-label={`${preferences.staff[id].name} 헤어`} onChange={(event) => updateStaff(id, { hair: event.target.value as StaffStyle['hair'] })}><option value="short">숏컷</option><option value="wave">웨이브</option><option value="cap">캡</option></select></div>)}</fieldset></div> : null}
     <div className="pixel-command-bar"><div className={`pixel-mission ${syncState}`}><i /><strong>{missionTitle}</strong><span>{taskSourceReady ? '공유 업무 트래커 연결됨' : '공유 업무 트래커 확인 필요'}</span></div><button type="button" onClick={onSync} disabled={collecting}><Play size={14} /> {collecting ? '직원들이 자료 수집 중' : '매출 동기화 명령'}</button></div>
-    <div className={`office-world ${collecting ? 'mission-running' : ''} ${completed ? 'mission-complete' : ''}`}>
-      <div className="world-grid" /><div className="world-window"><i /><i /><i /></div><div className="world-clock">10:24</div><div className="world-title">SALES OPS · FLOOR 01</div>
-      <div className="office-room room-water"><b>워터파크</b><small>DATA PICKUP</small><i className="room-monitor" /><i className="room-shelf" /></div><div className="office-room room-stay"><b>객실</b><small>ROOM STATUS</small><i className="room-monitor" /><i className="room-bed" /></div><div className="office-room room-sports"><b>스포츠</b><small>SALES PICKUP</small><i className="room-monitor" /><i className="room-racket" /></div>
-      <div className="office-room room-data"><b>분석실</b><small>DATA LAB</small><i className="room-monitor" /><i className="room-chart" /></div><div className="office-room room-work"><b>운영 데스크</b><small>CONTROL</small><i className="room-monitor" /><i className="room-plant" /></div><div className="office-room room-creative"><b>기획 · 콘텐츠</b><small>CREATIVE</small><i className="room-monitor" /><i className="room-board" /></div>
-      <div className="office-route route-water" /><div className="office-route route-stay" /><div className="office-route route-sports" />
-      <Agent name={preferences.staff.ops.name} role="운영" className="agent-ops" tone={preferences.staff.ops.outfit} hair={preferences.staff.ops.hair} speech={collecting ? '세 곳에 수집 요청 보냈어요.' : completed ? '동기화 결과를 확인할게요.' : '오늘도 운영 현황을 살펴볼까요?'} />
-      <Agent name={preferences.staff.data.name} role="분석" className="agent-data" tone={preferences.staff.data.outfit} hair={preferences.staff.data.hair} speech={collecting ? '들어오는 자료를 정리 중이에요.' : completed ? '세 데이터, 분석 준비 완료!' : activeTask('analysis')?.title || '매출 데이터를 기다리고 있어요.'} />
-      <Agent name={preferences.staff.water.name} role="수집" className="agent-water" tone={preferences.staff.water.outfit} hair={preferences.staff.water.hair} speech={collecting ? '워터파크 자료 찾고 올게요!' : completed ? '워터파크 자료 도착!' : '워터파크 데이터 대기 중'} box={collecting || completed} />
-      <Agent name={preferences.staff.stay.name} role="수집" className="agent-stay" tone={preferences.staff.stay.outfit} hair={preferences.staff.stay.hair} speech={collecting ? '객실 현황 받아올게요!' : completed ? '객실 자료 도착!' : '객실 데이터 대기 중'} box={collecting || completed} />
-      <Agent name={preferences.staff.sports.name} role="수집" className="agent-sports" tone={preferences.staff.sports.outfit} hair={preferences.staff.sports.hair} speech={collecting ? '스포츠 판매 자료 수집 중!' : completed ? '스포츠 자료 도착!' : '스포츠 데이터 대기 중'} box={collecting || completed} />
-      <Agent name={preferences.staff.creative.name} role="기획" className="agent-creative" tone={preferences.staff.creative.outfit} hair={preferences.staff.creative.hair} speech={activeTask('planning')?.title || '다음 상품안을 정리하고 있어요.'} />
-      <div className="office-feed"><b>LIVE LOG</b><span className={collecting ? 'live' : ''}>{collecting ? '● 현장 3곳 수집 진행' : completed ? '✓ 분석실 전달 완료' : '○ 동기화 명령 대기'}</span></div>{activeDepartments.length === 0 ? <p className="office-empty">화면 설정에서 표시할 부서를 선택해주세요.</p> : null}
-    </div>
+    <SalesOfficeWorld syncState={syncState} />
     <footer>동기화 명령을 내리면 각 현장 담당자의 말풍선과 이동 경로가 실시간으로 바뀝니다.</footer>
   </section>
 }
