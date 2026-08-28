@@ -1,0 +1,10 @@
+.office-staff-editor{grid-column:1/-1;padding-top:11px;border-top:1px dashed var(--line)}
+.office-staff-editor>div{display:grid;grid-template-columns:64px minmax(80px,1fr) 76px 72px;gap:6px;align-items:center;margin-top:5px}
+.office-staff-editor span{color:#587174;font-size:10px;font-weight:900}.office-staff-editor input,.office-staff-editor select{min-width:0;border:1.5px solid var(--ink);border-radius:6px;background:#fff;padding:5px 6px;color:var(--ink);font-size:10px}
+.hair-wave .agent-hair{height:11px;border-radius:9px 9px 4px 4px}.hair-cap .agent-hair{height:7px;border-radius:8px 8px 1px 1px;background:#e0a53a}.hair-cap .agent-hair:after{position:absolute;right:-5px;bottom:-3px;width:8px;height:3px;background:#e0a53a;content:""}
+.office-world:not(.mission-running) .office-agent{animation:none}.mission-complete .agent-water,.mission-complete .agent-stay,.mission-complete .agent-sports{animation:none}
+.mission-running .agent-water .agent-body,.mission-running .agent-stay .agent-body,.mission-running .agent-sports .agent-body{animation:pixelWalk .32s steps(2) infinite}
+.mission-running .agent-water .agent-leg.left,.mission-running .agent-stay .agent-leg.left,.mission-running .agent-sports .agent-leg.left,.mission-running .agent-water .agent-arm.left,.mission-running .agent-stay .agent-arm.left,.mission-running .agent-sports .agent-arm.left{animation:walkLeft .32s steps(2) infinite}
+.mission-running .agent-water .agent-leg.right,.mission-running .agent-stay .agent-leg.right,.mission-running .agent-sports .agent-leg.right,.mission-running .agent-water .agent-arm.right,.mission-running .agent-stay .agent-arm.right,.mission-running .agent-sports .agent-arm.right{animation:walkRight .32s steps(2) infinite}
+@keyframes pixelWalk{50%{transform:translateY(-3px)}}@keyframes walkLeft{50%{transform:rotate(25deg)}}@keyframes walkRight{50%{transform:rotate(-25deg)}}
+@media(max-width:620px){.office-staff-editor>div{grid-template-columns:54px minmax(70px,1fr) 68px 64px;gap:4px}.office-staff-editor input,.office-staff-editor select{padding:4px;font-size:9px}}
