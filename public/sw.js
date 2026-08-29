@@ -1,5 +1,5 @@
-const CACHE_NAME = 'whp-sales-shell-v1'
-const SHELL = ['/', '/index.html', '/manifest.json', '/favicon.svg']
+const CACHE_NAME = 'whp-sales-shell-v2'
+const SHELL = ['/', '/index.html', '/manifest.json', '/app-icons/whp-sales-192.png', '/app-icons/whp-sales-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)))
