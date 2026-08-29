@@ -4,6 +4,7 @@
 import { findPath } from "./pathfinding";
 import { CEO, DEPT_BRIEF, DEPT_LEAD, STAFF, type StaffSeed } from "./staff";
 import {
+  CEO_ROOM,
   CEO_REPORT_SPOT,
   CEO_SEAT,
   COLS,
@@ -185,6 +186,9 @@ export class Company {
   phaseIndex = 0;
   approvalPending = false;
   approved = false;
+  /** 업무 지시 회의는 보고 확인 전까지 참석자를 회의실에 머물게 한다. */
+  private investigationApprovalPending = false;
+  private investigationApproved = false;
   briefingReady = false;
   meetingTitle: string | null = null;
   onBriefing: (() => void) | null = null;
@@ -221,6 +225,8 @@ export class Company {
     this.phaseIndex = 0;
     this.approvalPending = false;
     this.approved = false;
+    this.investigationApprovalPending = false;
+    this.investigationApproved = false;
     this.briefingReady = false;
     this.meetingTitle = null;
     this.main = { gen: null, wait: 0, until: null };
@@ -252,7 +258,7 @@ export class Company {
     for (const room of DEPT_ROOMS) {
       this.deptStatus[room.id] = BLOCKED_DEPTS.has(room.id) ? "연동 대기" : "대기";
     }
-    this.pushLog("🎀", "대표실 준비 완료. 출근 버튼을 기다리는 중이에요.", "lav");
+    this.pushLog("🪴", "오픈 라운지 준비 완료. 출근 버튼을 기다리는 중이에요.", "lav");
     this.pushChat("staff", "김세리", "대표님, 비서실장 김세리입니다. 궁금한 건 여기에 바로 물어보세요.");
   }
 
@@ -390,6 +396,8 @@ export class Company {
     this.running = false;
     this.main = { gen: null, wait: 0, until: null };
     this.side = { gen: null, wait: 0, until: null };
+    this.investigationApprovalPending = false;
+    this.investigationApproved = false;
     for (const agent of this.agents) {
       agent.x = agent.home.x;
       agent.y = agent.home.y;
@@ -417,6 +425,9 @@ export class Company {
   ): boolean {
     if (this.side.gen) return false;
 
+    this.investigationApprovalPending = false;
+    this.investigationApproved = false;
+
     const ids = [...new Set([
       requesterId,
       ...departments.map((department) => DEPT_LEAD[department]?.id).filter(Boolean),
@@ -440,8 +451,17 @@ export class Company {
       const agent = this.agentById.get(id)!;
       return [id, this.investigationLine(agent, title)] as [string, string];
     });
-    yield* this.meeting(`업무 검토 · ${title.slice(0, 22)}`, ids, lines, onDialogue);
-    onComplete();
+    yield* this.meeting(`업무 검토 · ${title.slice(0, 22)}`, ids, lines, onDialogue, {
+      waitForApproval: true,
+      onReportReady: onComplete,
+    });
+  }
+
+  /** 보고를 확인한 사용자가 승인하면 회의 참석자들이 각자 자리로 복귀한다. */
+  approveInvestigation(): boolean {
+    if (!this.investigationApprovalPending) return false;
+    this.investigationApproved = true;
+    return true;
   }
 
   private investigationLine(agent: Agent, title: string): string {
@@ -637,7 +657,7 @@ export class Company {
     for (const agent of workers) {
       if (Math.random() < 0.45) {
         this.stand(agent);
-        this.goto(agent, rand(LOUNGE_ROOM.loiter), "휴식");
+        this.goto(agent, rand(Math.random() < 0.5 ? LOUNGE_ROOM.loiter : CEO_ROOM.loiter), "휴식");
       }
     }
   }
@@ -682,8 +702,14 @@ export class Company {
     yield 1.2;
   }
 
-  /** 회의: 참석자 소집 → 대사 → 자리 복귀 */
-  private *meeting(title: string, ids: string[], lines: [string, string][], onDialogue?: (name: string, text: string) => void) {
+  /** 회의: 참석자 소집 → 대사 → (필요 시 승인 대기) → 자리 복귀 */
+  private *meeting(
+    title: string,
+    ids: string[],
+    lines: [string, string][],
+    onDialogue?: (name: string, text: string) => void,
+    options?: { waitForApproval?: boolean; onReportReady?: () => void },
+  ) {
     this.meetingTitle = title;
     this.pushLog("💬", `회의 소집: ${title} (${ids.length}명)`, "lav");
     const crew = ids.map((id) => this.agentById.get(id)!);
@@ -714,6 +740,15 @@ export class Company {
     }
 
     yield 0.8;
+    if (options?.waitForApproval) {
+      this.investigationApprovalPending = true;
+      this.pushLog("✅", "회의 결과 작성 완료 — 사용자 승인 대기", "yellow");
+      options.onReportReady?.();
+      yield () => this.investigationApproved;
+      this.investigationApprovalPending = false;
+      this.investigationApproved = false;
+      this.pushLog("📤", "회의 승인 완료 — 참석자가 자리로 복귀합니다.", "mint");
+    }
     for (const agent of crew) {
       this.releaseSeat(agent);
       this.stand(agent);
@@ -1271,7 +1306,7 @@ export class Company {
 
   /** 할 일이 없을 때의 자율 행동 — 생각 말풍선, 커피, 잡담 */
   private idleBrain(agent: Agent, dt: number) {
-    if (agent.rank === "ceo" || this.locked.has(agent.id)) return;
+    if (this.locked.has(agent.id)) return;
     agent.idleFor -= dt;
     if (agent.idleFor > 0) return;
     agent.idleFor = 7 + Math.random() * 14;
@@ -1292,7 +1327,7 @@ export class Company {
       this.enqueue(
         agent,
         { k: "status", s: "휴식" },
-        { k: "walk", to: rand(LOUNGE_ROOM.loiter) },
+        { k: "walk", to: rand(Math.random() < 0.5 ? LOUNGE_ROOM.loiter : CEO_ROOM.loiter) },
         { k: "say", text: rand(["잠깐 커피 ☕", "머리 좀 식히고요", "당 충전 필요해요"]), dur: 2.6, kind: "talk" },
         { k: "wait", dur: 3 + Math.random() * 4 },
       );

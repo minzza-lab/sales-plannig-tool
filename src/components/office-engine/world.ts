@@ -79,9 +79,9 @@ function deptRoom(index: number): Room {
 
 export const CEO_ROOM: Room = {
   id: "ceo",
-  name: "대표실",
-  short: "ceo.office",
-  icon: "🎀",
+  name: "오픈 라운지",
+  short: "open.lounge",
+  icon: "🪴",
   kind: "ceo",
   x: 2,
   y: 2,
@@ -102,8 +102,8 @@ export const CEO_ROOM: Room = {
 
 export const MEETING_ROOM: Room = {
   id: "meeting",
-  name: "대표 승인 회의실",
-  short: "meeting.hall",
+  name: "협업 회의실",
+  short: "meeting.collab",
   icon: "💬",
   kind: "meeting",
   x: 23,
@@ -200,8 +200,10 @@ for (const room of DEPT_ROOMS) {
   PROPS.push({ kind: "cabinet", x: room.x + 12, y: room.y + 8, w: 2, h: 1 });
 }
 
-PROPS.push({ kind: "ceo-desk", x: 9, y: 6, w: 5, h: 2 });
-PROPS.push({ kind: "rug", x: 8, y: 9, w: 7, h: 3 });
+PROPS.push({ kind: "sofa", x: 4, y: 5, w: 4, h: 1 });
+PROPS.push({ kind: "sofa", x: 14, y: 5, w: 4, h: 1 });
+PROPS.push({ kind: "coffee", x: 9, y: 8, w: 3, h: 1, label: "☕" });
+PROPS.push({ kind: "table", x: 9, y: 10, w: 4, h: 1 });
 PROPS.push({ kind: "plant", x: 4, y: 4, w: 1, h: 1 });
 PROPS.push({ kind: "plant", x: 17, y: 4, w: 1, h: 1 });
 
