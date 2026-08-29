@@ -35,6 +35,7 @@ const categories: ToolCategory[] = [
       { id: 'knowledge-base', title: '공유 지식 베이스', description: '업무 노하우와 참고 자료를 팀원들과 축적합니다.', icon: '🤝', path: '/tools/knowledge-base' },
       { id: 'approvals', title: '품의서 보관함', description: '품의서를 보관하고 Gemini로 핵심 내용을 요약합니다.', icon: '📄', path: '/tools/approvals' },
       { id: 'product-proposals', title: '상품안 보관함', description: '상품안과 의견을 관리하고 AI 요약을 확인합니다.', icon: '💡', path: '/tools/product-proposals' },
+      { id: 'official-letter', title: '발송공문제작기', description: '회사 공식 양식을 유지한 발송 공문을 작성하고 엑셀로 내려받습니다.', icon: '📨', path: '/tools/official-letter' },
       { id: 'voc-assistant', title: 'VOC 어시스턴트', description: '고객 문의를 분석해 답변 초안을 빠르게 작성합니다.', icon: '🎧', path: '/tools/voc-assistant' },
     ],
   },
@@ -339,6 +340,9 @@ export default function Dashboard() {
         syncState={syncState}
         syncProgress={syncProgress}
         hasSnapshot={Boolean(snapshot)}
+        salesContext={snapshot
+          ? `${formatSnapshotDate(snapshot.date)} 기준: 워터파크 매출 ${formatCompactWon(snapshot.waterparkSales)}, 방문 ${snapshot.waterparkVisitors.toLocaleString('ko-KR')}명, 객실 ${snapshot.condoRooms.toLocaleString('ko-KR')}실(${snapshot.condoOcc.toFixed(1)}%), 스포츠 매출 ${formatCompactWon(snapshot.sportsSales)}, 발권 ${snapshot.sportsTickets.toLocaleString('ko-KR')}건`
+          : '현재 통합 매출 데이터는 아직 준비 중입니다.'}
         onSync={() => void startIntegratedSync()}
       />
 

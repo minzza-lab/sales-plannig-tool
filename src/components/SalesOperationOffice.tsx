@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, Play, Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { callGeminiWithFallback } from '../utils/apiProxy'
 import SalesOfficeWorld from './SalesOfficeWorld'
 import './SalesOperationOffice.css'
 import './SalesOperationOfficeMotion.css'
@@ -13,7 +14,7 @@ type StaffId = 'ops' | 'data' | 'water' | 'stay' | 'sports' | 'creative'
 type WorkTask = { id: string; title: string; status: TaskStatus }
 type StaffStyle = { name: string; outfit: string; hair: 'short' | 'wave' | 'cap' }
 type OfficePreferences = { title: string; tone: OfficeTone; compact: boolean; visible: Record<DepartmentKey, boolean>; staff: Record<StaffId, StaffStyle> }
-type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; onSync: () => void }
+type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; salesContext: string; onSync: () => void }
 
 const preferenceKey = 'sales-pixel-office-preferences-v2'
 const defaultStaff: Record<StaffId, StaffStyle> = {
@@ -38,9 +39,9 @@ function normalizePreferences(value: unknown): OfficePreferences {
   return { title: typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.slice(0, 28) : defaultPreferences.title, tone, compact: Boolean(candidate.compact), visible: { ...defaultPreferences.visible, ...(candidate.visible || {}) }, staff }
 }
 
-export default function SalesOperationOffice({ syncState, syncProgress, hasSnapshot, onSync }: Props) {
+export default function SalesOperationOffice({ syncState, syncProgress, hasSnapshot, salesContext, onSync }: Props) {
   const navigate = useNavigate()
-  const [, setTasks] = useState<WorkTask[]>([])
+  const [tasks, setTasks] = useState<WorkTask[]>([])
   const [taskSourceReady, setTaskSourceReady] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [command, setCommand] = useState('')
@@ -79,12 +80,17 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     else setCommandResult('아직 연결되지 않은 명령입니다. “매출 동기화”, “상품 기획”, “영상 제작”, “디자인”, “SNS 콘텐츠”, “정산”을 사용할 수 있습니다.')
     setCommand('')
   }
+  const askForProposal = async ({ name, role, department }: { name: string; role: string; department: string }) => {
+    const workContext = tasks.slice(0, 12).map((task) => `- [${task.status}] ${task.title}`).join('\n') || '- 등록된 공유 업무 없음'
+    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로, 사용자에게 바로 보여줄 짧고 실무적인 제안을 작성하세요. 사실을 추정하거나 수치를 지어내지 마세요. 외부 게시·발송·결제·데이터 변경을 실행하라고 지시하지 마세요. 정보가 부족하면 무엇을 확인해야 하는지 명시하세요.\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 형식만 사용하세요.\n제안 제목: ...\n지금 할 일:\n1. ...\n2. ...\n3. ...\n확인할 점: ...`
+    return callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], { temperature: 0.4, maxOutputTokens: 500 })
+  }
 
   return <section className={`sales-office pixel-office pixel-office-${preferences.tone} ${preferences.compact ? 'is-compact' : ''}`} aria-label="세일즈 픽셀 운영실">
     <header className="sales-office-head"><div><p>LIVE SALES OFFICE</p><h2>{preferences.title}</h2></div><button type="button" className="sales-office-settings" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}><Settings2 size={16} /> 화면 설정 <ChevronDown size={14} /></button></header>
     {settingsOpen ? <div className="sales-office-customizer"><label>관제실 이름<input value={preferences.title} maxLength={28} onChange={(event) => updatePreferences({ title: event.target.value })} /></label><fieldset><legend>강조 색상</legend><div className="office-tone-options">{(['teal', 'blue', 'amber', 'violet'] as OfficeTone[]).map((tone) => <button type="button" key={tone} className={preferences.tone === tone ? 'selected' : ''} onClick={() => updatePreferences({ tone })}>{tone === 'teal' ? '청록' : tone === 'blue' ? '블루' : tone === 'amber' ? '앰버' : '바이올렛'}</button>)}</div></fieldset><fieldset><legend>표시할 부서</legend><div className="office-department-toggles">{departments.map((department) => <label key={department.key}><input type="checkbox" checked={preferences.visible[department.key]} onChange={() => toggleDepartment(department.key)} /> {department.label}</label>)}</div></fieldset><label className="office-compact-toggle"><input type="checkbox" checked={preferences.compact} onChange={(event) => updatePreferences({ compact: event.target.checked })} /> 간단히 보기</label><fieldset className="office-staff-editor"><legend>직원 설정</legend>{(Object.keys(defaultStaff) as StaffId[]).map((id) => <div key={id}><span>{id === 'ops' ? '운영' : id === 'data' ? '분석' : id === 'water' ? '워터파크' : id === 'stay' ? '객실' : id === 'sports' ? '스포츠' : '기획'}</span><input value={preferences.staff[id].name} maxLength={12} aria-label={`${preferences.staff[id].name} 이름`} onChange={(event) => updateStaff(id, { name: event.target.value })} /><select value={preferences.staff[id].outfit} aria-label={`${preferences.staff[id].name} 복장`} onChange={(event) => updateStaff(id, { outfit: event.target.value })}><option value="#5d72d6">블루</option><option value="#3c9f91">청록</option><option value="#e0a53a">앰버</option><option value="#8a68c9">바이올렛</option><option value="#d18b4a">오렌지</option></select><select value={preferences.staff[id].hair} aria-label={`${preferences.staff[id].name} 헤어`} onChange={(event) => updateStaff(id, { hair: event.target.value as StaffStyle['hair'] })}><option value="short">숏컷</option><option value="wave">웨이브</option><option value="cap">캡</option></select></div>)}</fieldset></div> : null}
     <div className="pixel-command-bar"><div className={`pixel-mission ${syncState}`}><i /><strong>{missionTitle}</strong><span>{taskSourceReady ? '공유 업무 트래커 연결됨' : '공유 업무 트래커 확인 필요'}</span></div><div className="office-command-input"><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runCommand() }} placeholder="명령 입력: 매출 동기화, 상품 기획, 영상 제작" /><button type="button" onClick={runCommand} disabled={collecting}><Play size={14} /> 실행</button></div></div>
     {commandResult ? <p className="office-command-result" role="status">{commandResult}</p> : null}
-    <SalesOfficeWorld syncState={syncState} onAgentAction={(department) => runDepartment(department)} />
+    <SalesOfficeWorld syncState={syncState} onAgentAction={(department) => runDepartment(department)} onAskProposal={askForProposal} />
   </section>
 }
