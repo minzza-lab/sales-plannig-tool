@@ -17,7 +17,8 @@ type OfficePreferences = { title: string; tone: OfficeTone; compact: boolean; vi
 export type InvestigationPlan = { departments: string[]; labels: string[] }
 export type ProposalRequest = { name: string; role: string; department: string; instruction: string; participantLabels: string[] }
 export type MeetingReport = { title: string; summary: string; discussion: Array<{ team: string; detail: string }>; actions: string[]; checks: string[] }
-type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; salesContext: string; onSync: () => void }
+type DailyReport = { report_date: string; report_type: string; data?: { table_data?: Array<{ category?: string; name?: string; amount?: number }>; room_data?: Array<{ category?: string; total?: number }>; venue_data?: Array<{ amount?: number }> } }
+type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; snapshotDate: string | null; salesContext: string; onSync: () => void }
 
 const preferenceKey = 'sales-pixel-office-preferences-v2'
 const defaultStaff: Record<StaffId, StaffStyle> = {
@@ -49,6 +50,25 @@ function planInvestigation(instruction: string, requestedDepartment: string): In
   return createPlan('review', 'secretary')
 }
 
+function previousYearDate(date: string) {
+  const value = new Date(`${date}T00:00:00+09:00`)
+  value.setFullYear(value.getFullYear() - 1)
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+}
+
+function amount(value: unknown) { return Number(value) || 0 }
+function compactAmount(value: number) { return `${Math.round(value).toLocaleString('ko-KR')}원` }
+function reportMetrics(rows: DailyReport[], date: string) {
+  const reports = rows.filter((row) => row.report_date === date)
+  const water = reports.find((row) => row.report_type === 'REALTIME_SALES')
+  const room = reports.find((row) => row.report_type === 'ROOM_STATE')
+  const sports = reports.find((row) => row.report_type === 'SPORTS_SALES')
+  const waterSales = (water?.data?.table_data || []).filter((row) => ['매표소', '입장권'].includes(String(row.category || '').replace(/\s/g, '')) || ['매표소', '입장권'].includes(String(row.name || '').replace(/\s/g, ''))).reduce((sum, row) => sum + amount(row.amount), 0)
+  const condoRooms = amount((room?.data?.room_data || []).find((row) => row.category === '콘도')?.total)
+  const sportsSales = (sports?.data?.venue_data || []).reduce((sum, row) => sum + amount(row.amount), 0)
+  return { hasWater: Boolean(water), hasRoom: Boolean(room), hasSports: Boolean(sports), waterSales, condoRooms, sportsSales }
+}
+
 function normalizePreferences(value: unknown): OfficePreferences {
   if (!value || typeof value !== 'object') return defaultPreferences
   const candidate = value as Partial<OfficePreferences>
@@ -58,7 +78,7 @@ function normalizePreferences(value: unknown): OfficePreferences {
   return { title: typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.slice(0, 28) : defaultPreferences.title, tone, compact: Boolean(candidate.compact), visible: { ...defaultPreferences.visible, ...(candidate.visible || {}) }, staff }
 }
 
-export default function SalesOperationOffice({ syncState, syncProgress, hasSnapshot, salesContext, onSync }: Props) {
+export default function SalesOperationOffice({ syncState, syncProgress, hasSnapshot, snapshotDate, salesContext, onSync }: Props) {
   const navigate = useNavigate()
   const [tasks, setTasks] = useState<WorkTask[]>([])
   const [taskSourceReady, setTaskSourceReady] = useState(true)
@@ -80,6 +100,16 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
   const updatePreferences = (patch: Partial<OfficePreferences>) => setPreferences((current) => ({ ...current, ...patch }))
   const toggleDepartment = (key: DepartmentKey) => setPreferences((current) => ({ ...current, visible: { ...current.visible, [key]: !current.visible[key] } }))
   const updateStaff = (id: StaffId, patch: Partial<StaffStyle>) => setPreferences((current) => ({ ...current, staff: { ...current.staff, [id]: { ...current.staff[id], ...patch } } }))
+  const loadComparisonContext = async (instruction: string) => {
+    if (!snapshotDate || !/전년|전월|동월|증감|비교|추이/.test(instruction)) return '추가 비교 조회 요청 없음'
+    const baselineDate = previousYearDate(snapshotDate)
+    const { data, error } = await supabase.from('daily_reports').select('report_date,report_type,data').in('report_date', [snapshotDate, baselineDate]).in('report_type', ['REALTIME_SALES', 'ROOM_STATE', 'SPORTS_SALES'])
+    if (error) return `비교 데이터 조회 실패: ${error.message}`
+    const current = reportMetrics((data || []) as DailyReport[], snapshotDate)
+    const previous = reportMetrics((data || []) as DailyReport[], baselineDate)
+    const change = (now: number, before: number) => before ? `${now >= before ? '+' : ''}${(((now - before) / before) * 100).toFixed(1)}% (${now - before >= 0 ? '+' : ''}${compactAmount(now - before)})` : '전년 기준값 없음'
+    return `[직접 조회한 비교 데이터]\n기준일 ${snapshotDate}: 워터파크 ${current.hasWater ? compactAmount(current.waterSales) : '보고 없음'}, 객실 ${current.hasRoom ? `${current.condoRooms.toLocaleString('ko-KR')}실` : '보고 없음'}, 스포츠 ${current.hasSports ? compactAmount(current.sportsSales) : '보고 없음'}\n전년 동일일 ${baselineDate}: 워터파크 ${previous.hasWater ? compactAmount(previous.waterSales) : '보고 없음'}, 객실 ${previous.hasRoom ? `${previous.condoRooms.toLocaleString('ko-KR')}실` : '보고 없음'}, 스포츠 ${previous.hasSports ? compactAmount(previous.sportsSales) : '보고 없음'}\n증감: 워터파크 ${current.hasWater && previous.hasWater ? change(current.waterSales, previous.waterSales) : '비교 불가'}, 객실 ${current.hasRoom && previous.hasRoom ? `${current.condoRooms - previous.condoRooms >= 0 ? '+' : ''}${(current.condoRooms - previous.condoRooms).toLocaleString('ko-KR')}실` : '비교 불가'}, 스포츠 ${current.hasSports && previous.hasSports ? change(current.sportsSales, previous.sportsSales) : '비교 불가'}`
+  }
   const missionTitle = collecting ? `현장 자료 수집 중 · ${syncProgress}%` : completed ? '자료 도착 · 분석실 전달 완료' : syncState === 'failed' ? '수집 확인 필요 · 운영실 알림' : hasSnapshot ? '오늘의 운영 현황' : '데이터를 준비하고 있습니다'
   const runDepartment = (department: string, typedCommand?: string) => {
     if (['research', 'brand', 'strategy1'].includes(department)) { onSync(); setCommandResult('워터파크·객실·스포츠 최신 데이터 동기화를 시작했습니다.'); return }
@@ -101,7 +131,8 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
   }
   const askForProposal = async ({ name, role, department, instruction, participantLabels }: ProposalRequest): Promise<MeetingReport> => {
     const workContext = tasks.slice(0, 12).map((task) => `- [${task.status}] ${task.title}`).join('\n') || '- 등록된 공유 업무 없음'
-    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 사용자 지시에 따라 관련 담당과 회의한 뒤, 바로 실행할 수 있는 상세 보고를 작성합니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로 쓰세요. 수치·완료 사실·외부 발송 결과를 지어내지 마세요. 정보가 없으면 '확인 필요'로 명확히 표기하세요. 제목만 쓰거나 한 줄로 끝내면 안 됩니다.\n\n[사용자 업무 지시]\n${instruction}\n\n[회의 참석 담당]\n${participantLabels.join(', ')}\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 JSON만 반환하세요. 각 배열은 비어 있으면 안 됩니다. discussion은 참석 담당별로 최소 1개, actions는 4개 이상, checks는 3개 이상 작성하세요.\n{"title":"구체적인 회의 결과 제목","summary":"현재 확인 가능한 사실과 이번 회의 결론을 2~3문장으로","discussion":[{"team":"참석 담당명","detail":"해당 담당이 확인한 범위와 다음 전달 내용"}],"actions":["순서가 있는 실행 항목"],"checks":["수치나 자료 확인이 필요한 항목"]}`
+    const comparisonContext = await loadComparisonContext(instruction)
+    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 사용자 지시에 따라 관련 담당과 회의한 뒤, 바로 실행할 수 있는 상세 보고를 작성합니다. 아래의 현재 대시보드 정보, 직접 조회한 비교 데이터, 공유 업무만 근거로 쓰세요. 수치·완료 사실·외부 발송 결과를 지어내지 마세요. 정보가 없으면 '확인 필요'로 명확히 표기하세요. 제목만 쓰거나 한 줄로 끝내면 안 됩니다.\n\n[사용자 업무 지시]\n${instruction}\n\n[회의 참석 담당]\n${participantLabels.join(', ')}\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n${comparisonContext}\n\n[공유 업무]\n${workContext}\n\n아래 JSON만 반환하세요. 각 배열은 비어 있으면 안 됩니다. discussion은 참석 담당별로 최소 1개, actions는 4개 이상, checks는 3개 이상 작성하세요.\n{"title":"구체적인 회의 결과 제목","summary":"현재 확인 가능한 사실과 이번 회의 결론을 2~3문장으로","discussion":[{"team":"참석 담당명","detail":"해당 담당이 확인한 범위와 다음 전달 내용"}],"actions":["순서가 있는 실행 항목"],"checks":["수치나 자료 확인이 필요한 항목"]}`
     const parseReport = (raw: string): MeetingReport | null => {
       try {
         const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, '')) as Partial<MeetingReport>

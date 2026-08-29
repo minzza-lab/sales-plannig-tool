@@ -340,6 +340,7 @@ export default function Dashboard() {
         syncState={syncState}
         syncProgress={syncProgress}
         hasSnapshot={Boolean(snapshot)}
+        snapshotDate={snapshot?.date || null}
         salesContext={snapshot
           ? `${formatSnapshotDate(snapshot.date)} 기준: 워터파크 매출 ${formatCompactWon(snapshot.waterparkSales)}, 방문 ${snapshot.waterparkVisitors.toLocaleString('ko-KR')}명, 객실 ${snapshot.condoRooms.toLocaleString('ko-KR')}실(${snapshot.condoOcc.toFixed(1)}%), 스포츠 매출 ${formatCompactWon(snapshot.sportsSales)}, 발권 ${snapshot.sportsTickets.toLocaleString('ko-KR')}건`
           : '현재 통합 매출 데이터는 아직 준비 중입니다.'}
