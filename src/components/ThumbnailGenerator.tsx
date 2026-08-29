@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { callGeminiWithFallback } from '../utils/apiProxy';
 import './ThumbnailGenerator.css';
@@ -16,6 +17,14 @@ interface ExportSize {
   category: '상단' | '리스트' | '구매하기' | '기타';
 }
 
+interface SalesBrief {
+  productName: string;
+  keyBenefits: string;
+  targetAudience: string;
+  vibe: string;
+  instagramBrief: string;
+}
+
 const EXPORT_SIZES: ExportSize[] = [
   { id: 'pc-header', name: 'PC 대표 이미지 (상단)', width: 1920, height: 800, category: '상단' },
   { id: 'mo-header', name: 'MO 대표 이미지 (상단)', width: 720, height: 400, category: '상단' },
@@ -27,6 +36,9 @@ const EXPORT_SIZES: ExportSize[] = [
 ];
 
 const ThumbnailGenerator: React.FC = () => {
+  const location = useLocation();
+  const salesBrief = (location.state as { salesBrief?: SalesBrief } | null)?.salesBrief;
+  const autoStarted = useRef(false);
   // Input & Generation States
   const [productName, setProductName] = useState('');
   const [keyBenefits, setKeyBenefits] = useState('');
@@ -88,6 +100,8 @@ const ThumbnailGenerator: React.FC = () => {
 
   // Generation loading progress step tracker (0: idle, 1: text/prompt, 2: image rendering, 3: assembling layout)
   const [loadingStep, setLoadingStep] = useState<number>(0);
+  const [instagramDraft, setInstagramDraft] = useState<string>('');
+  const [isInstagramGenerating, setIsInstagramGenerating] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -152,8 +166,24 @@ const ThumbnailGenerator: React.FC = () => {
     }
   };
 
-  const generateThumbnail = async () => {
-    const targetProduct = productName.trim() || "여름시즌 워터파크 시크릿 특가 티켓";
+  const generateInstagramDraft = async (brief: SalesBrief, copy: CopyOption) => {
+    setIsInstagramGenerating(true);
+    try {
+      const response = await callGeminiWithFallback([{ text: `당신은 리조트 SNS 에디터입니다. 아래 디자인 초안을 바탕으로 인스타그램 피드 게시물 문안을 작성하세요. 사실·가격·기간은 제공되지 않은 내용을 지어내지 말고, 확인이 필요한 경우 [확인 필요]로 표시하세요. 해시태그 8~12개와 이미지 ALT 문구도 포함하세요.\n\n[업무 지시]\n${brief.instagramBrief}\n\n[소재]\n${brief.productName}\n\n[핵심 내용]\n${brief.keyBenefits}\n\n[타겟]\n${brief.targetAudience}\n\n[디자인 카피]\n${copy.main}\n${copy.sub}` }], ['gemini-2.5-flash', 'gemini-2.5-pro'], { temperature: 0.55, maxOutputTokens: 850 });
+      setInstagramDraft(response);
+    } catch (error) {
+      setInstagramDraft(error instanceof Error ? error.message : '인스타그램 문안을 생성하지 못했습니다.');
+    } finally {
+      setIsInstagramGenerating(false);
+    }
+  };
+
+  const generateThumbnail = async (incomingBrief?: SalesBrief) => {
+    const brief = incomingBrief;
+    const targetProduct = brief?.productName || productName.trim() || "여름시즌 워터파크 시크릿 특가 티켓";
+    const benefits = brief?.keyBenefits || keyBenefits.trim() || '제한 없음';
+    const audience = brief?.targetAudience || targetAudience.trim() || '일반 대중';
+    const selectedVibe = brief?.vibe || vibe;
 
     setIsGenerating(true);
     setLoadingStep(1); // 1단계: 기획 의도 분석 및 문구 도출 시작
@@ -167,9 +197,9 @@ const ThumbnailGenerator: React.FC = () => {
 사용자가 다음 기획의도로 상품 썸네일(광고 이미지)을 만들려고 합니다:
 
 1. 상품명/메인 키워드: "${targetProduct}"
-2. 상세 소구점/혜택: "${keyBenefits.trim() || '제한 없음'}"
-3. 타겟 고객층: "${targetAudience.trim() || '일반 대중'}"
-4. 디자인 분위기/톤앤매너: "${vibe}"
+2. 상세 소구점/혜택: "${benefits}"
+3. 타겟 고객층: "${audience}"
+4. 디자인 분위기/톤앤매너: "${selectedVibe}"
 5. 이미지 분할 모드: ${isPkg ? '좌우 이미지 2분할 패키지 구성' : '단일 배경 구성'}
 
 이 정보를 바탕으로 다음 사항들을 제안해주세요:
@@ -303,6 +333,7 @@ const ThumbnailGenerator: React.FC = () => {
       // Reset design options to defaults on fresh generation
       setBgBlur(0);
       setSelectedBadge('none');
+      if (brief) void generateInstagramDraft(brief, parsed.copyOptions[0]);
 
     } catch (error: any) {
       alert("생성 중 오류가 발생했습니다: " + error.message);
@@ -312,6 +343,17 @@ const ThumbnailGenerator: React.FC = () => {
       setLoadingStep(0); // 로딩 해제
     }
   };
+
+  useEffect(() => {
+    if (!salesBrief || autoStarted.current) return;
+    autoStarted.current = true;
+    setProductName(salesBrief.productName);
+    setKeyBenefits(salesBrief.keyBenefits);
+    setTargetAudience(salesBrief.targetAudience);
+    setVibe(salesBrief.vibe);
+    setSelectedSizeId('square-general');
+    void generateThumbnail(salesBrief);
+  }, [salesBrief]);
 
   const handleCopySelect = (index: number) => {
     setSelectedCopyIndex(index);
@@ -684,7 +726,7 @@ const ThumbnailGenerator: React.FC = () => {
           </div>
         </div>
 
-        <button className="generate-btn" onClick={generateThumbnail} disabled={isGenerating}>
+        <button className="generate-btn" onClick={() => void generateThumbnail()} disabled={isGenerating}>
           {isGenerating ? '기획안 분석 및 디자인 그리는 중... ✨' : '썸네일 뚝딱 만들기 🚀'}
         </button>
       </div>
@@ -930,6 +972,19 @@ const ThumbnailGenerator: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {(isInstagramGenerating || instagramDraft) && (
+                    <div className="control-group">
+                      <h3>📣 인스타그램 게시물 초안</h3>
+                      <textarea
+                        value={isInstagramGenerating ? '게시물 문안을 생성하고 있습니다…' : instagramDraft}
+                        readOnly
+                        rows={12}
+                        className="edit-input"
+                        style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.55 }}
+                      />
+                    </div>
+                  )}
                 </>
               )}
 
