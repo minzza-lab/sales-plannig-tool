@@ -64,10 +64,6 @@ export default function SalesOfficeWorld({ syncState, onAgentAction, onPlanInves
     }
   }
 
-  useEffect(() => {
-    if (meetingFinished) setReportOpen(true)
-  }, [meetingFinished])
-
   const approveMeeting = () => {
     if (!engine.approveInvestigation()) return
     setReportOpen(false)
