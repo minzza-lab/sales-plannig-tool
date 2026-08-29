@@ -156,6 +156,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
                   </NavLink>
                 </li>
                 <li>
+                  <NavLink to="/tools/sms-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">💬</span> 문자 메시지 생성기
+                  </NavLink>
+                </li>
+                <li>
                   <NavLink to="/tools/thumbnail-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🎨</span> 상품 썸네일 제작기
                   </NavLink>

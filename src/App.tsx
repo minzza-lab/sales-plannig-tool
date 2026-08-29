@@ -21,6 +21,7 @@ const Login = lazy(() => import('./components/Auth/Login'))
 const Approvals = lazy(() => import('./components/Approvals'))
 const ProductProposals = lazy(() => import('./components/ProductProposals'))
 const TTSGenerator = lazy(() => import('./components/TTSGenerator'))
+const SMSGenerator = lazy(() => import('./components/SMSGenerator'))
 const ThumbnailGenerator = lazy(() => import('./components/ThumbnailGenerator'))
 const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
 const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
@@ -89,6 +90,7 @@ function App() {
                 <Route path="tools/approvals" element={<Approvals />} />
                 <Route path="tools/product-proposals" element={<ProductProposals />} />
                 <Route path="tools/tts-generator" element={<TTSGenerator />} />
+                <Route path="tools/sms-generator" element={<SMSGenerator />} />
                 <Route path="tools/thumbnail-generator" element={<ThumbnailGenerator />} />
                 <Route path="tools/season-pass-tracker" element={<SeasonPassTracker />} />
                 <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
