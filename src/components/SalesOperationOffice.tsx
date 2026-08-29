@@ -16,6 +16,7 @@ type StaffStyle = { name: string; outfit: string; hair: 'short' | 'wave' | 'cap'
 type OfficePreferences = { title: string; tone: OfficeTone; compact: boolean; visible: Record<DepartmentKey, boolean>; staff: Record<StaffId, StaffStyle> }
 export type InvestigationPlan = { departments: string[]; labels: string[] }
 export type ProposalRequest = { name: string; role: string; department: string; instruction: string; participantLabels: string[] }
+export type MeetingReport = { title: string; summary: string; discussion: Array<{ team: string; detail: string }>; actions: string[]; checks: string[] }
 type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; salesContext: string; onSync: () => void }
 
 const preferenceKey = 'sales-pixel-office-preferences-v2'
@@ -98,10 +99,33 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     else setCommandResult('아직 연결되지 않은 명령입니다. “매출 동기화”, “상품 기획”, “영상 제작”, “디자인”, “SNS 콘텐츠”, “정산”을 사용할 수 있습니다.')
     setCommand('')
   }
-  const askForProposal = async ({ name, role, department, instruction, participantLabels }: ProposalRequest) => {
+  const askForProposal = async ({ name, role, department, instruction, participantLabels }: ProposalRequest): Promise<MeetingReport> => {
     const workContext = tasks.slice(0, 12).map((task) => `- [${task.status}] ${task.title}`).join('\n') || '- 등록된 공유 업무 없음'
-    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 사용자의 업무 지시에 따라 관련 담당자와 회의한 뒤 보고하는 역할입니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로 실무 보고를 작성하세요. 사실을 추정하거나 수치를 지어내지 마세요. 외부 게시·발송·결제·데이터 변경을 실행했다고 말하지 마세요. 정보가 부족하면 확인이 필요한 항목을 분명히 적으세요.\n\n[사용자 업무 지시]\n${instruction}\n\n[회의 참석 담당]\n${participantLabels.join(', ')}\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 형식만 사용하세요.\n보고 제목: ...\n확인 결과:\n- ...\n- ...\n다음 조치:\n1. ...\n2. ...\n확인 필요: ...`
-    return callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], { temperature: 0.4, maxOutputTokens: 500 })
+    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 사용자 지시에 따라 관련 담당과 회의한 뒤, 바로 실행할 수 있는 상세 보고를 작성합니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로 쓰세요. 수치·완료 사실·외부 발송 결과를 지어내지 마세요. 정보가 없으면 '확인 필요'로 명확히 표기하세요. 제목만 쓰거나 한 줄로 끝내면 안 됩니다.\n\n[사용자 업무 지시]\n${instruction}\n\n[회의 참석 담당]\n${participantLabels.join(', ')}\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 JSON만 반환하세요. 각 배열은 비어 있으면 안 됩니다. discussion은 참석 담당별로 최소 1개, actions는 4개 이상, checks는 3개 이상 작성하세요.\n{"title":"구체적인 회의 결과 제목","summary":"현재 확인 가능한 사실과 이번 회의 결론을 2~3문장으로","discussion":[{"team":"참석 담당명","detail":"해당 담당이 확인한 범위와 다음 전달 내용"}],"actions":["순서가 있는 실행 항목"],"checks":["수치나 자료 확인이 필요한 항목"]}`
+    const raw = await callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], { responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 1100 })
+    try {
+      const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, '')) as Partial<MeetingReport>
+      if (typeof parsed.title === 'string' && typeof parsed.summary === 'string' && Array.isArray(parsed.discussion) && Array.isArray(parsed.actions) && Array.isArray(parsed.checks)) {
+        const discussion = parsed.discussion.filter((item): item is { team: string; detail: string } => Boolean(item && typeof item.team === 'string' && typeof item.detail === 'string'))
+        const actions = parsed.actions.filter((item): item is string => typeof item === 'string')
+        const checks = parsed.checks.filter((item): item is string => typeof item === 'string')
+        if (!discussion.length || actions.length < 4 || checks.length < 3) throw new Error('보고서 항목 부족')
+        return {
+          title: parsed.title,
+          summary: parsed.summary,
+          discussion,
+          actions,
+          checks,
+        }
+      }
+    } catch { /* 아래의 안전한 상세 보고 틀로 표시 */ }
+    return {
+      title: `${instruction.slice(0, 34)} 회의 결과`,
+      summary: raw || '회의에서 필요한 확인 범위를 정리했습니다. 실제 수치와 확정 여부는 연결된 데이터에서 확인이 필요합니다.',
+      discussion: participantLabels.map((team) => ({ team, detail: `${instruction}와 관련해 담당 범위의 자료·조건·전달 내용을 정리합니다.` })),
+      actions: ['확인 기준과 비교 기간을 먼저 확정합니다.', '참석 담당별 자료를 같은 기준으로 모읍니다.', '누락·중복 여부를 검토합니다.', '확인된 내용만 최종 실행안에 반영합니다.'],
+      checks: ['현재 대시보드에 연결된 최신 데이터 기준일', '비교 대상과 기간 조건', '외부 게시 또는 발송 전 최종 승인 여부'],
+    }
   }
 
   return <section className={`sales-office pixel-office pixel-office-${preferences.tone} ${preferences.compact ? 'is-compact' : ''}`} aria-label="세일즈 픽셀 운영실">
