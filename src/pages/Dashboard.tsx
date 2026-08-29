@@ -118,7 +118,8 @@ type DashboardReportRow = {
 }
 
 const CONDO_CAPACITY = 767
-const WATERPARK_SYNC_DAYS = 5
+// 메인 대시보드는 당일 운영 현황만 즉시 갱신한다. 과거 기간 재수집은 상세 화면에서 진행한다.
+const WATERPARK_SYNC_DAYS = 1
 
 function getKstToday() {
   const date = new Date(Date.now() + 9 * 60 * 60 * 1000)
