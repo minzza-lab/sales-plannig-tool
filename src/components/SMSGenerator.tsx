@@ -4,19 +4,13 @@ import './SMSGenerator.css'
 
 type MessageDraft = { title: string; body: string; usage: string }
 const byteLength = (value: string) => Array.from(value).reduce((total, char) => total + (char.charCodeAt(0) > 127 ? 2 : 1), 0)
-const extractJson = (value: string) => {
-  const withoutFence = value.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
-  const start = withoutFence.indexOf('{')
-  const end = withoutFence.lastIndexOf('}')
-  return start >= 0 && end > start ? withoutFence.slice(start, end + 1) : withoutFence
-}
 const parseMessages = (raw: string): MessageDraft[] | null => {
-  try {
-    const parsed = JSON.parse(extractJson(raw)) as { messages?: unknown }
-    if (!Array.isArray(parsed.messages)) return null
-    const messages = parsed.messages.filter((item): item is MessageDraft => Boolean(item && typeof item === 'object' && typeof (item as MessageDraft).title === 'string' && typeof (item as MessageDraft).body === 'string' && typeof (item as MessageDraft).usage === 'string'))
-    return messages.length >= 3 ? messages.slice(0, 3) : null
-  } catch { return null }
+  const tagged = [...raw.matchAll(/\[문안\s*([1-3])\s*\|\s*(SMS|LMS)\]\s*([\s\S]*?)(?=\n?\[문안\s*[1-3]\s*\||$)/g)]
+    .map((match) => ({ title: `${match[1]}안`, usage: match[2], body: match[3].trim() }))
+    .filter((item) => item.body.length > 4)
+  if (tagged.length >= 3) return tagged.slice(0, 3)
+  const blocks = raw.trim().replace(/^```[\s\S]*?\n|```$/g, '').split(/\n\s*(?:---+|={3,})\s*\n/).map((item) => item.trim()).filter((item) => item.length > 4)
+  return blocks.length >= 3 ? blocks.slice(0, 3).map((body, index) => ({ title: `${index + 1}안`, usage: byteLength(body) <= 90 ? 'SMS' : 'LMS', body })) : null
 }
 
 export default function SMSGenerator() {
@@ -32,13 +26,13 @@ export default function SMSGenerator() {
   const generate = async () => {
     if (!purpose.trim() || !facts.trim()) { setError('발송 목적과 확정된 정보를 입력해주세요.'); return }
     setError(''); setCopiedIndex(null); setIsGenerating(true)
-    const prompt = `당신은 리조트 영업기획팀의 문자 발송 담당자입니다. 아래 확정 정보만 사용해 고객용 문자 문안 3개를 작성하세요. 제공되지 않은 가격·기간·혜택·링크는 절대 지어내지 말고, 꼭 필요하면 [확인 필요]로 남기세요. 과장 표현, 스팸성 반복, 이모지 남용은 금지합니다.\n\n[발송 목적]\n${purpose}\n\n[대상 고객]\n${audience || '일반 고객'}\n\n[확정 정보]\n${facts}\n\n[톤]\n${tone}\n\n아래 JSON만 반환하세요. body는 고객에게 바로 보낼 문안이며, 1번은 90바이트 이내 SMS 우선, 2~3번은 필요한 경우 LMS로 작성하세요.\n{"messages":[{"title":"문안 이름","body":"발송 문안","usage":"SMS 또는 LMS와 사용 상황"}]}`
+    const prompt = `당신은 리조트 영업기획팀의 문자 발송 담당자입니다. 아래 확정 정보만 사용해 고객용 문자 문안 3개를 작성하세요. 제공되지 않은 가격·기간·혜택·링크는 절대 지어내지 말고, 꼭 필요하면 [확인 필요]로 남기세요. 과장 표현, 스팸성 반복, 이모지 남용은 금지합니다.\n\n[발송 목적]\n${purpose}\n\n[대상 고객]\n${audience || '일반 고객'}\n\n[확정 정보]\n${facts}\n\n[톤]\n${tone}\n\n다른 설명 없이 아래 형식을 정확히 지키세요. 1번은 90바이트 이내 SMS 우선, 2~3번은 필요한 경우 LMS로 작성하세요.\n[문안 1 | SMS]\n고객에게 보낼 문안\n[문안 2 | LMS]\n고객에게 보낼 문안\n[문안 3 | LMS]\n고객에게 보낼 문안`
     try {
-      const config = { responseMimeType: 'application/json', temperature: 0.5, maxOutputTokens: 900 }
+      const config = { temperature: 0.5, maxOutputTokens: 900 }
       const raw = await callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], config)
       let messages = parseMessages(raw)
       if (!messages) {
-        const repaired = await callGeminiWithFallback([{ text: `아래 응답을 버리고, 발송 문안 3개를 JSON 형식으로만 다시 작성하세요. body 안의 줄바꿈은 \\n으로 이스케이프하세요.\n\n${prompt}` }], ['gemini-2.5-flash', 'gemini-2.5-pro'], config)
+        const repaired = await callGeminiWithFallback([{ text: `응답 형식이 맞지 않습니다. JSON을 쓰지 말고, 아래 [문안 N | SMS/LMS] 표기 3개만 사용해 다시 작성하세요.\n\n${prompt}` }], ['gemini-2.5-flash', 'gemini-2.5-pro'], config)
         messages = parseMessages(repaired)
       }
       if (!messages) throw new Error('AI 문안 형식이 올바르지 않습니다. 잠시 후 다시 시도해주세요.')
