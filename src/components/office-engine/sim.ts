@@ -407,6 +407,41 @@ export class Company {
     }
   }
 
+  /** 대시보드에서 내린 업무 지시를 위해 관련 담당을 회의실로 소집한다. */
+  startInvestigation(
+    title: string,
+    departments: string[],
+    requesterId: string,
+    onComplete: () => void,
+  ): boolean {
+    if (this.side.gen) return false;
+
+    const ids = [...new Set([
+      requesterId,
+      ...departments.map((department) => DEPT_LEAD[department]?.id).filter(Boolean),
+    ])]
+      .filter((id) => !this.locked.has(id) && this.agentById.get(id)?.status !== '출근 전')
+      .slice(0, MEETING_SEATS.length);
+
+    if (!ids.length) return false;
+    this.spotlightRoom('meeting', 30);
+    this.side.gen = this.investigationScene(title, ids, onComplete);
+    return true;
+  }
+
+  private *investigationScene(
+    title: string,
+    ids: string[],
+    onComplete: () => void,
+  ): Generator<number | (() => boolean), void, void> {
+    const lines = ids.map((id) => {
+      const agent = this.agentById.get(id)!;
+      return [id, `${roomOf(agent.deptId).name} 관점에서 필요한 자료를 확인하겠습니다.`] as [string, string];
+    });
+    yield* this.meeting(`업무 검토 · ${title.slice(0, 22)}`, ids, lines);
+    onComplete();
+  }
+
   private *dayScript(): Generator<number | (() => boolean), void, void> {
     // ① 07:00 출근
     this.phaseIndex = 1;

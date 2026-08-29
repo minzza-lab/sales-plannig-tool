@@ -14,6 +14,8 @@ type StaffId = 'ops' | 'data' | 'water' | 'stay' | 'sports' | 'creative'
 type WorkTask = { id: string; title: string; status: TaskStatus }
 type StaffStyle = { name: string; outfit: string; hair: 'short' | 'wave' | 'cap' }
 type OfficePreferences = { title: string; tone: OfficeTone; compact: boolean; visible: Record<DepartmentKey, boolean>; staff: Record<StaffId, StaffStyle> }
+export type InvestigationPlan = { departments: string[]; labels: string[] }
+export type ProposalRequest = { name: string; role: string; department: string; instruction: string; participantLabels: string[] }
 type Props = { syncState: 'idle' | 'running' | 'completed' | 'failed'; syncProgress: number; hasSnapshot: boolean; salesContext: string; onSync: () => void }
 
 const preferenceKey = 'sales-pixel-office-preferences-v2'
@@ -29,6 +31,22 @@ const departments: Array<{ key: DepartmentKey; label: string; match: RegExp }> =
   { key: 'sns', label: 'SNS 데스크', match: /sns|인스타|instagram|게시|콘텐츠|블로그/i },
   { key: 'operations', label: '운영실', match: /동기화|수집|크롤러|운영|자동화/i },
 ]
+
+function planInvestigation(instruction: string, requestedDepartment: string): InvestigationPlan {
+  const text = instruction.toLowerCase()
+  const labelByDepartment: Record<string, string> = { research: '워터파크 수집', brand: '객실 수집', strategy1: '스포츠 수집', qa: '데이터 검수', strategy2: '상품 기획', reels: '영상 제작', carousel: '디자인', partner: 'SNS', finance: '정산', review: '성과 분석', ops: '자동화 운영', secretary: '운영 지원' }
+  const createPlan = (...ids: string[]) => {
+    const departments = [...new Set([requestedDepartment, ...ids])]
+    return { departments, labels: departments.map((department) => labelByDepartment[department] || '세일즈 운영') }
+  }
+  if (/전년|전월|동월|증감|비교|매출|실적|판매|추이/.test(text)) return createPlan('research', 'brand', 'strategy1', 'review')
+  if (/상품|패키지|기획|구성|프로모션|가격/.test(text)) return createPlan('strategy2', 'review', 'finance')
+  if (/디자인|배너|썸네일|이미지|카드/.test(text)) return createPlan('carousel', 'strategy2', 'partner')
+  if (/영상|릴스|콘티|음성|촬영/.test(text)) return createPlan('reels', 'strategy2', 'partner')
+  if (/sns|인스타|콘텐츠|게시|블로그/.test(text)) return createPlan('partner', 'strategy2', 'carousel')
+  if (/정산|취소|결제|입금/.test(text)) return createPlan('finance', 'review', 'qa')
+  return createPlan('review', 'secretary')
+}
 
 function normalizePreferences(value: unknown): OfficePreferences {
   if (!value || typeof value !== 'object') return defaultPreferences
@@ -80,9 +98,9 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     else setCommandResult('아직 연결되지 않은 명령입니다. “매출 동기화”, “상품 기획”, “영상 제작”, “디자인”, “SNS 콘텐츠”, “정산”을 사용할 수 있습니다.')
     setCommand('')
   }
-  const askForProposal = async ({ name, role, department }: { name: string; role: string; department: string }) => {
+  const askForProposal = async ({ name, role, department, instruction, participantLabels }: ProposalRequest) => {
     const workContext = tasks.slice(0, 12).map((task) => `- [${task.status}] ${task.title}`).join('\n') || '- 등록된 공유 업무 없음'
-    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로, 사용자에게 바로 보여줄 짧고 실무적인 제안을 작성하세요. 사실을 추정하거나 수치를 지어내지 마세요. 외부 게시·발송·결제·데이터 변경을 실행하라고 지시하지 마세요. 정보가 부족하면 무엇을 확인해야 하는지 명시하세요.\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 형식만 사용하세요.\n제안 제목: ...\n지금 할 일:\n1. ...\n2. ...\n3. ...\n확인할 점: ...`
+    const prompt = `당신은 세일즈 운영실의 ${name}(${role})입니다. 사용자의 업무 지시에 따라 관련 담당자와 회의한 뒤 보고하는 역할입니다. 아래의 현재 대시보드 정보와 공유 업무만 근거로 실무 보고를 작성하세요. 사실을 추정하거나 수치를 지어내지 마세요. 외부 게시·발송·결제·데이터 변경을 실행했다고 말하지 마세요. 정보가 부족하면 확인이 필요한 항목을 분명히 적으세요.\n\n[사용자 업무 지시]\n${instruction}\n\n[회의 참석 담당]\n${participantLabels.join(', ')}\n\n[담당 부서 ID]\n${department}\n\n[현재 대시보드]\n${salesContext}\n\n[공유 업무]\n${workContext}\n\n아래 형식만 사용하세요.\n보고 제목: ...\n확인 결과:\n- ...\n- ...\n다음 조치:\n1. ...\n2. ...\n확인 필요: ...`
     return callGeminiWithFallback([{ text: prompt }], ['gemini-2.5-flash', 'gemini-2.5-pro'], { temperature: 0.4, maxOutputTokens: 500 })
   }
 
@@ -91,6 +109,6 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     {settingsOpen ? <div className="sales-office-customizer"><label>관제실 이름<input value={preferences.title} maxLength={28} onChange={(event) => updatePreferences({ title: event.target.value })} /></label><fieldset><legend>강조 색상</legend><div className="office-tone-options">{(['teal', 'blue', 'amber', 'violet'] as OfficeTone[]).map((tone) => <button type="button" key={tone} className={preferences.tone === tone ? 'selected' : ''} onClick={() => updatePreferences({ tone })}>{tone === 'teal' ? '청록' : tone === 'blue' ? '블루' : tone === 'amber' ? '앰버' : '바이올렛'}</button>)}</div></fieldset><fieldset><legend>표시할 부서</legend><div className="office-department-toggles">{departments.map((department) => <label key={department.key}><input type="checkbox" checked={preferences.visible[department.key]} onChange={() => toggleDepartment(department.key)} /> {department.label}</label>)}</div></fieldset><label className="office-compact-toggle"><input type="checkbox" checked={preferences.compact} onChange={(event) => updatePreferences({ compact: event.target.checked })} /> 간단히 보기</label><fieldset className="office-staff-editor"><legend>직원 설정</legend>{(Object.keys(defaultStaff) as StaffId[]).map((id) => <div key={id}><span>{id === 'ops' ? '운영' : id === 'data' ? '분석' : id === 'water' ? '워터파크' : id === 'stay' ? '객실' : id === 'sports' ? '스포츠' : '기획'}</span><input value={preferences.staff[id].name} maxLength={12} aria-label={`${preferences.staff[id].name} 이름`} onChange={(event) => updateStaff(id, { name: event.target.value })} /><select value={preferences.staff[id].outfit} aria-label={`${preferences.staff[id].name} 복장`} onChange={(event) => updateStaff(id, { outfit: event.target.value })}><option value="#5d72d6">블루</option><option value="#3c9f91">청록</option><option value="#e0a53a">앰버</option><option value="#8a68c9">바이올렛</option><option value="#d18b4a">오렌지</option></select><select value={preferences.staff[id].hair} aria-label={`${preferences.staff[id].name} 헤어`} onChange={(event) => updateStaff(id, { hair: event.target.value as StaffStyle['hair'] })}><option value="short">숏컷</option><option value="wave">웨이브</option><option value="cap">캡</option></select></div>)}</fieldset></div> : null}
     <div className="pixel-command-bar"><div className={`pixel-mission ${syncState}`}><i /><strong>{missionTitle}</strong><span>{taskSourceReady ? '공유 업무 트래커 연결됨' : '공유 업무 트래커 확인 필요'}</span></div><div className="office-command-input"><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runCommand() }} placeholder="명령 입력: 매출 동기화, 상품 기획, 영상 제작" /><button type="button" onClick={runCommand} disabled={collecting}><Play size={14} /> 실행</button></div></div>
     {commandResult ? <p className="office-command-result" role="status">{commandResult}</p> : null}
-    <SalesOfficeWorld syncState={syncState} onAgentAction={(department) => runDepartment(department)} onAskProposal={askForProposal} />
+    <SalesOfficeWorld syncState={syncState} onAgentAction={(department) => runDepartment(department)} onPlanInvestigation={planInvestigation} onAskProposal={askForProposal} />
   </section>
 }
