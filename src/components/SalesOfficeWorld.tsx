@@ -4,7 +4,12 @@ import { Company, type Agent } from './office-engine/sim'
 import './office-engine/office-world.css'
 
 export default function SalesOfficeWorld({ syncState }: { syncState: 'idle' | 'running' | 'completed' | 'failed' }) {
-  const engine = useMemo(() => new Company(), [])
+  const engine = useMemo(() => {
+    const office = new Company()
+    // 첫 동기화 전에도 빈 사무실이 아니라 상시 근무 장면을 보여준다.
+    office.settleSalesSync()
+    return office
+  }, [])
   const [snapshot, setSnapshot] = useState(() => engine.snapshot())
   const [selected, setSelected] = useState<Agent | null>(null)
   const previous = useRef(syncState)

@@ -368,9 +368,13 @@ export class Company {
       agent.pathIdx = 0;
       agent.queue = [];
       agent.current = null;
-      agent.status = '업무 중';
+      // 실제 수집은 끝났지만, 사무실은 계속 살아 있어야 한다.
+      // idleBrain이 곧바로 입력·생각·커피·잡담을 순환하도록 대기 상태로 둔다.
+      agent.status = '대기';
       agent.anim = agent.rank === 'ceo' ? 'sit' : 'type';
       agent.speech = null;
+      agent.speechFor = 0;
+      agent.idleFor = Math.random() * 2.5;
     }
   }
 
