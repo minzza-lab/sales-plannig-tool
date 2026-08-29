@@ -83,19 +83,41 @@ export async function callGemini(
  */
 export async function callGeminiWithFallback(
   parts: GeminiPart[],
-  models: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro'],
+  models: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
   generationConfig?: Record<string, unknown>
 ): Promise<string> {
   let lastError: Error | null = null;
   for (const model of models) {
-    try {
-      return await callGemini(parts, model, generationConfig);
-    } catch (e) {
-      lastError = e as Error;
-      console.warn(`모델 ${model} 실패, 다음 모델 시도...`);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await callGemini(parts, model, generationConfig);
+      } catch (e) {
+        lastError = e as Error;
+        const retryable = isRetryableGeminiError(lastError);
+        const hasRetryLeft = attempt < 2;
+
+        if (!retryable || !hasRetryLeft) break;
+
+        const delay = 700 * 2 ** attempt + Math.round(Math.random() * 300);
+        console.warn(`Gemini ${model} 일시 오류, ${delay}ms 후 재시도...`);
+        await wait(delay);
+      }
     }
+    console.warn(`모델 ${model} 실패, 다음 모델 시도...`);
+  }
+
+  if (lastError && isRetryableGeminiError(lastError)) {
+    throw new Error('AI 서비스가 일시적으로 혼잡합니다. 잠시 후 다시 제안 받기를 눌러주세요.');
   }
   throw lastError || new Error('모든 모델이 실패했습니다.');
+}
+
+function isRetryableGeminiError(error: Error): boolean {
+  return /Gemini API 에러 \((408|429|5\d{2})\)/.test(error.message);
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 /**
