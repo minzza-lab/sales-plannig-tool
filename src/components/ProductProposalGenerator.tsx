@@ -5,7 +5,9 @@ import './ProductProposalGenerator.css'
 
 type ProductBrief = { productName?: string; keyBenefits?: string; targetAudience?: string; instagramBrief?: string }
 type ProductPlan = { title: string; concept: string; target: string; composition: Array<{ item: string; value: string; note: string }>; priceStrategy: string; salesMessages: string[]; channelPlan: string[]; operationChecklist: string[]; confirmationItems: string[] }
+type ReferenceItem = { id: string; url: string; label: string; purpose: string }
 const cleanJson = (value: string) => value.trim().replace(/^```json\s*|\s*```$/g, '')
+const referenceStorageKey = 'sales-product-reference-board-v1'
 
 export default function ProductProposalGenerator() {
   const location = useLocation()
@@ -18,8 +20,22 @@ export default function ProductProposalGenerator() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [references, setReferences] = useState<ReferenceItem[]>([])
+  const [referenceUrl, setReferenceUrl] = useState('')
+  const [referenceLabel, setReferenceLabel] = useState('')
+  const [referencePurpose, setReferencePurpose] = useState('')
+  const [referenceError, setReferenceError] = useState('')
 
   useEffect(() => { if (brief) { setTheme(brief.productName || ''); setGoal(brief.instagramBrief || brief.keyBenefits || ''); setTarget(brief.targetAudience || ''); setResources(brief.keyBenefits || '') } }, [brief])
+  useEffect(() => { try { const saved = JSON.parse(localStorage.getItem(referenceStorageKey) || '[]'); if (Array.isArray(saved)) setReferences(saved.filter((item): item is ReferenceItem => item && typeof item.url === 'string' && typeof item.label === 'string' && typeof item.purpose === 'string')) } catch { /* 저장된 레퍼런스가 없으면 비워 둔다. */ } }, [])
+  useEffect(() => { localStorage.setItem(referenceStorageKey, JSON.stringify(references)) }, [references])
+
+  const addReference = () => {
+    try { new URL(referenceUrl.trim()) } catch { setReferenceError('http:// 또는 https://로 시작하는 레퍼런스 주소를 입력해주세요.'); return }
+    if (!referenceLabel.trim()) { setReferenceError('레퍼런스 이름을 입력해주세요.'); return }
+    setReferences((current) => [{ id: `${Date.now()}-${Math.random()}`, url: referenceUrl.trim(), label: referenceLabel.trim(), purpose: referencePurpose.trim() || '활용 방향 미정' }, ...current])
+    setReferenceUrl(''); setReferenceLabel(''); setReferencePurpose(''); setReferenceError('')
+  }
 
   const generate = async () => {
     if (!theme.trim() || !goal.trim()) { setError('상품 주제와 판매 목표를 입력해주세요.'); return }
@@ -42,6 +58,7 @@ export default function ProductProposalGenerator() {
   return <main className="product-plan-tool animate-fade-in">
     <header><p>PRODUCT PLANNING</p><h1>상품 구성안 생성기</h1><span>회의 결과와 현재 확보한 소재를 바탕으로, 검토 가능한 판매 상품안을 만듭니다.</span></header>
     <section className="product-plan-form"><label>상품 주제 또는 캠페인<input value={theme} onChange={(event) => setTheme(event.target.value)} placeholder="예: 9월 가족 워터파크 1박 패키지" /></label><label>판매 목표 · 업무 지시<textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="예: 비수기 객실 점유를 높이고 워터파크 이용을 함께 제안" rows={4} /></label><div className="product-plan-two"><label>타깃 고객<input value={target} onChange={(event) => setTarget(event.target.value)} placeholder="예: 초등 자녀가 있는 수도권 가족" /></label><label>보유 소재 · 제약<textarea value={resources} onChange={(event) => setResources(event.target.value)} placeholder="예: 현장 이미지, 사용 가능한 시설, 제외 조건" rows={2} /></label></div>{error ? <p className="product-plan-error">{error}</p> : null}<button type="button" className="product-plan-generate" onClick={() => void generate()} disabled={isGenerating}>{isGenerating ? '상품안을 검토 중…' : 'AI 상품 구성안 만들기'}</button></section>
+    <section className="product-reference-board"><header><div><p>REFERENCE BOARD</p><h2>기획 · 디자인 레퍼런스</h2></div><span>이 브라우저에 저장</span></header><div className="product-reference-form"><input value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="레퍼런스 이름" /><input value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https:// 레퍼런스 URL" /><input value={referencePurpose} onChange={(event) => setReferencePurpose(event.target.value)} placeholder="활용 목적: 구성·카피·색감 등" /><button type="button" onClick={addReference}>추가</button></div>{referenceError ? <p className="product-reference-error">{referenceError}</p> : null}{references.length ? <div className="product-reference-list">{references.map((item) => <article key={item.id}><a href={item.url} target="_blank" rel="noreferrer"><b>{item.label}</b><span>{item.url.replace(/^https?:\/\//, '')}</span></a><p>{item.purpose}</p><button type="button" onClick={() => setReferences((current) => current.filter((reference) => reference.id !== item.id))}>삭제</button></article>)}</div> : <p className="product-reference-empty">아직 모은 레퍼런스가 없습니다. 상품 구성과 디자인 방향을 정할 때 URL을 저장해두세요.</p>}</section>
     {plan ? <section className="product-plan-result"><div className="product-plan-result-head"><div><p>PROPOSAL DRAFT</p><h2>{plan.title}</h2></div><button type="button" onClick={() => void copyPlan()}>{copied ? '복사 완료' : '전체 복사'}</button></div><p className="product-plan-concept">{plan.concept}</p><dl><div><dt>핵심 타깃</dt><dd>{plan.target}</dd></div><div><dt>가격 운영</dt><dd>{plan.priceStrategy}</dd></div></dl><section><h3>상품 구성</h3><div className="product-plan-composition">{plan.composition.map((item, index) => <article key={`${item.item}-${index}`}><b>{item.item}</b><strong>{item.value}</strong>{item.note ? <span>{item.note}</span> : null}</article>)}</div></section><div className="product-plan-columns"><section><h3>판매 메시지</h3><ul>{plan.salesMessages.map((item, index) => <li key={index}>{item}</li>)}</ul></section><section><h3>채널 실행</h3><ul>{plan.channelPlan.map((item, index) => <li key={index}>{item}</li>)}</ul></section><section><h3>운영 체크</h3><ul>{plan.operationChecklist.map((item, index) => <li key={index}>{item}</li>)}</ul></section><section className="needs-confirmation"><h3>확인 필요</h3><ul>{plan.confirmationItems.map((item, index) => <li key={index}>{item}</li>)}</ul></section></div></section> : null}
   </main>
 }
