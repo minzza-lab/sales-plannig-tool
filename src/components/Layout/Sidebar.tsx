@@ -43,6 +43,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
               <span className="icon">🏠</span> 대시보드
             </NavLink>
           </li>
+          <li>
+            <NavLink to="/tools/app-access" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">📲</span> 앱 설치 · 빠른 접속
+            </NavLink>
+          </li>
           <li className="menu-highlight">
             <NavLink to="/virtual-office" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">🏢</span> 가상 사무실

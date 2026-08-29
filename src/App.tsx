@@ -6,6 +6,7 @@ import './App.css'
 const MainLayout = lazy(() => import('./components/Layout/MainLayout'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const VirtualOffice = lazy(() => import('./pages/VirtualOffice'))
+const AppAccessCenter = lazy(() => import('./components/AppAccessCenter'))
 const QRCodeGenerator = lazy(() => import('./components/QRCodeGenerator'))
 const URLShortener = lazy(() => import('./components/URLShortener'))
 const BarcodeGenerator = lazy(() => import('./components/BarcodeGenerator'))
@@ -77,6 +78,7 @@ function App() {
               <Route path="/" element={<MainLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="virtual-office" element={<VirtualOffice />} />
+                <Route path="tools/app-access" element={<AppAccessCenter />} />
                 <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
                 <Route path="tools/water-operations" element={<WaterOperationsDashboard />} />
                 <Route path="tools/water-operations-analysis" element={<WaterOperationsAnalysis />} />
