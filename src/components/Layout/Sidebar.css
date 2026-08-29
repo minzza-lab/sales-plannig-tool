@@ -140,6 +140,26 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.admin-settings-btn {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 10px;
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  border-radius: 8px;
+  color: #5eead4;
+  background: rgba(45, 212, 191, 0.09);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-settings-btn:hover { background: rgba(45, 212, 191, 0.18); }
+
 .logout-btn {
   width: 100%;
   display: flex;

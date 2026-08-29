@@ -7,9 +7,10 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenApiModal: () => void;
+  isAdmin: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAdmin }) => {
   const navigate = useNavigate();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     sales: true,
@@ -217,6 +218,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
         <button onClick={onOpenApiModal} className="api-settings-btn" style={{ width: '100%', marginBottom: '8px', padding: '10px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '8px', color: '#818cf8', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.2s' }}>
           <span className="icon">🔑</span> API 키 설정
         </button>
+        {isAdmin && <NavLink to="/tools/admin" onClick={onClose} className="admin-settings-btn"><span className="icon">🛡️</span> 관리자 페이지</NavLink>}
         <button onClick={handleLogout} className="logout-btn">
           <span className="icon">🚪</span> 로그아웃
         </button>

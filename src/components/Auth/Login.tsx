@@ -85,7 +85,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             setError(`가입 오류: ${error.message}`);
           }
         } else {
-          setMessage('사번 등록이 완료되었습니다! 이제 로그인을 진행해주세요.');
+          setMessage('사번 등록이 접수되었습니다. 관리자 승인 후 로그인해 이용할 수 있습니다.');
           setIsSignUp(false);
           setUsername('');
           setPassword('');

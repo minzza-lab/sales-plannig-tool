@@ -7,6 +7,8 @@ const MainLayout = lazy(() => import('./components/Layout/MainLayout'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const VirtualOffice = lazy(() => import('./pages/VirtualOffice'))
 const AppAccessCenter = lazy(() => import('./components/AppAccessCenter'))
+const AdminConsole = lazy(() => import('./components/AdminConsole'))
+const AccessPending = lazy(() => import('./components/AccessPending'))
 const QRCodeGenerator = lazy(() => import('./components/QRCodeGenerator'))
 const URLShortener = lazy(() => import('./components/URLShortener'))
 const BarcodeGenerator = lazy(() => import('./components/BarcodeGenerator'))
@@ -43,6 +45,7 @@ const AppLoader = () => (
 function App() {
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [accessStatus, setAccessStatus] = useState<'checking' | 'pending' | 'approved' | 'suspended'>('checking');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,8 +62,32 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setAccessStatus('approved');
+      return;
+    }
+    let active = true;
+    setAccessStatus('checking');
+    supabase.from('app_user_access').select('status').eq('user_id', session.user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        // SQL 보안 설정을 배포하기 전에도 기존 서비스가 멈추지 않도록 한다.
+        setAccessStatus(error || !data ? 'approved' : data.status as 'pending' | 'approved' | 'suspended');
+      });
+    return () => { active = false; };
+  }, [session?.user?.id]);
+
   if (isLoading) {
     return <AppLoader />;
+  }
+
+  if (session && accessStatus === 'checking') {
+    return <AppLoader />;
+  }
+
+  if (session && (accessStatus === 'pending' || accessStatus === 'suspended')) {
+    return <AccessPending status={accessStatus} />;
   }
 
   return (
@@ -79,6 +106,7 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="virtual-office" element={<VirtualOffice />} />
                 <Route path="tools/app-access" element={<AppAccessCenter />} />
+                <Route path="tools/admin" element={<AdminConsole />} />
                 <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
                 <Route path="tools/water-operations" element={<WaterOperationsDashboard />} />
                 <Route path="tools/water-operations-analysis" element={<WaterOperationsAnalysis />} />

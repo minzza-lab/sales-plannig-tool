@@ -9,6 +9,7 @@ const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<{ name: string; dept: string } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchUserInfo = async () => {
     try {
@@ -18,6 +19,12 @@ const MainLayout: React.FC = () => {
           name: user.user_metadata?.full_name || user.email?.split('@')[0] || '사용자',
           dept: user.user_metadata?.department || '부서미지정'
         });
+        const { data: access } = await supabase
+          .from('app_user_access')
+          .select('role, status')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        setIsAdmin(access?.role === 'admin' && access?.status === 'approved');
       }
     } catch (err) {
       console.log('Error fetching user info', err);
@@ -38,6 +45,7 @@ const MainLayout: React.FC = () => {
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)} 
         onOpenApiModal={() => setIsApiModalOpen(true)}
+        isAdmin={isAdmin}
       />
       
       {isSidebarOpen && (
