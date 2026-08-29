@@ -86,6 +86,5 @@ export default function SalesOperationOffice({ syncState, syncProgress, hasSnaps
     <div className="pixel-command-bar"><div className={`pixel-mission ${syncState}`}><i /><strong>{missionTitle}</strong><span>{taskSourceReady ? '공유 업무 트래커 연결됨' : '공유 업무 트래커 확인 필요'}</span></div><div className="office-command-input"><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runCommand() }} placeholder="명령 입력: 매출 동기화, 상품 기획, 영상 제작" /><button type="button" onClick={runCommand} disabled={collecting}><Play size={14} /> 실행</button></div></div>
     {commandResult ? <p className="office-command-result" role="status">{commandResult}</p> : null}
     <SalesOfficeWorld syncState={syncState} onAgentAction={(department) => runDepartment(department)} />
-    <footer>동기화 명령을 내리면 각 현장 담당자의 말풍선과 이동 경로가 실시간으로 바뀝니다.</footer>
   </section>
 }

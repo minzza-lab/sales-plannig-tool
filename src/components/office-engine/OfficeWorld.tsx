@@ -324,7 +324,6 @@ export default function OfficeWorld({ engine, snap, selectedId, follow, onSelect
             🔍 가까이
           </button>
         </div>
-        <div className="world-hint">드래그로 둘러보기 · 직원 클릭하면 프로필</div>
       </div>
     </div>
   );
