@@ -377,10 +377,10 @@ export class Company {
       this.enqueue(
         agent,
         { k: 'status', s: '이동 중' },
-        { k: 'fn', fn: () => this.say(agent, '최신 자료를 확인하고 올게요.', 2.2) },
+        { k: 'fn', fn: () => this.say(agent, rand(['최신 자료부터 확인하고 올게요.', '지금 수치 다시 맞춰볼게요.', '변동 항목을 확인하러 다녀올게요.', '원본 자료 기준으로 점검하고 올게요.']), 2.4) },
         { k: 'walk', to: checkpoint },
         { k: 'wait', dur: 1.2 },
-        { k: 'fn', fn: () => this.say(agent, '자료 확인 완료. 분석실로 전달합니다.', 2.2) },
+        { k: 'fn', fn: () => this.say(agent, rand(['확인 끝났어요. 분석 쪽으로 넘길게요.', '정리한 자료를 분석실에 전달합니다.', '변동 항목 표시해서 공유할게요.', '수집 결과를 검수 대기열에 올렸어요.']), 2.4) },
         { k: 'walk', to: agent.home },
         { k: 'face', dir: 'up' },
         { k: 'anim', a: 'sit' },
@@ -690,7 +690,12 @@ export class Company {
     this.unlock(this.deptAgents(deptId));
     const lead = DEPT_LEAD[deptId];
     const agent = lead ? this.agentById.get(lead.id) : null;
-    if (agent) this.say(agent, "완료했어요!", 2.4);
+    if (agent) this.say(agent, rand([
+      "정리 끝났어요. 다음 단계로 넘길게요.",
+      "확인 완료했습니다. 결과 공유해둘게요.",
+      "제 담당 건은 마무리됐어요.",
+      "핵심 항목 정리해서 전달했습니다.",
+    ]), 2.8);
     this.pushLog(roomOf(deptId).icon, `${roomOf(deptId).name} 완료 — ${DEPT_BRIEF[deptId].report}`, "mint");
   }
 
@@ -716,7 +721,12 @@ export class Company {
     this.lock(crew);
     crew.forEach((agent, i) => {
       this.stand(agent);
-      this.say(agent, "회의실로 갈게요.", 2);
+      this.say(agent, rand([
+        "회의 안건 확인하고 올게요.",
+        "자료 들고 회의실로 이동합니다.",
+        "제 검토 내용 공유하러 갈게요.",
+        "회의실에서 기준부터 맞춰볼게요.",
+      ]), 2.3);
       const seat = this.bookSeat(agent, i);
       this.goto(agent, seat, "회의 중");
       this.enqueue(
@@ -1328,7 +1338,14 @@ export class Company {
         agent,
         { k: "status", s: "휴식" },
         { k: "walk", to: rand(Math.random() < 0.5 ? LOUNGE_ROOM.loiter : CEO_ROOM.loiter) },
-        { k: "say", text: rand(["잠깐 커피 ☕", "머리 좀 식히고요", "당 충전 필요해요"]), dur: 2.6, kind: "talk" },
+        { k: "say", text: rand([
+          "잠깐 커피 한 잔만요 ☕",
+          "머리 좀 식히고 다시 볼게요.",
+          "잠시 쉬었다가 자료 이어서 볼게요.",
+          "라운지에서 메모만 정리하고 갈게요.",
+          "다른 팀 의견도 잠깐 들어볼게요.",
+          "물 한 잔 마시고 다시 집중합니다.",
+        ]), dur: 2.8, kind: "talk" },
         { k: "wait", dur: 3 + Math.random() * 4 },
       );
       this.sitAtDesk(agent);
@@ -1340,8 +1357,20 @@ export class Company {
         (a) => a.deptId === agent.deptId && a.id !== agent.id && !this.busy(a) && a.status !== "출근 전",
       );
       if (mate) {
-        this.say(agent, rand(["이거 어떻게 생각해요?", "잠깐만요, 이거 봐봐요", "저장할 만한가요 이거?"]), 3);
-        this.say(mate, rand(["오, 괜찮은데요?", "각도를 살짝 틀면 좋겠어요", "근거만 붙이면 돼요"]), 3);
+        this.say(agent, rand([
+          "이 수치, 같은 기준으로 봐도 될까요?",
+          "잠깐만요. 이 부분 의견이 궁금해요.",
+          "이 흐름이면 다음 안을 바꿔야 할까요?",
+          "고객 입장에서는 어느 쪽이 더 직관적일까요?",
+          "여기 근거 하나만 더 붙이면 될 것 같아요.",
+        ]), 3.2);
+        this.say(mate, rand([
+          "좋아요. 비교 기준을 한 줄 더 적죠.",
+          "그 방향이면 다음 단계가 더 명확하겠어요.",
+          "숫자 근거만 보강하면 바로 공유할 수 있어요.",
+          "고객 반응 기준으로 한 번 더 걸러보죠.",
+          "그럼 제가 확인 항목을 더해둘게요.",
+        ]), 3.2);
         agent.anim = "talk";
         mate.anim = "talk";
         this.enqueue(agent, { k: "wait", dur: 2.6 }, { k: "anim", a: "sit" });
