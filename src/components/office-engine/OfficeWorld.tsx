@@ -77,7 +77,6 @@ const AgentLayer = memo(function AgentLayer({
           </span>
           <span className="ag-tag">
             {agent.name}
-            {agent.rank === "lead" ? <em>팀장</em> : null}
             {agent.rank === "ceo" ? <em>대표</em> : null}
           </span>
         </div>
