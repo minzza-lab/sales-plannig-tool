@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import OfficeWorld from './office-engine/OfficeWorld'
 import { Company, type Agent } from './office-engine/sim'
 import { roomOf } from './office-engine/world'
@@ -29,8 +28,6 @@ export default function SalesOfficeWorld({ syncState, onAgentAction, onPlanInves
   const [meetingDialogues, setMeetingDialogues] = useState<Array<{ name: string; text: string }>>([])
   const [activeInstruction, setActiveInstruction] = useState('')
   const [activeParticipants, setActiveParticipants] = useState<string[]>([])
-  const [workflowStatus, setWorkflowStatus] = useState('')
-  const [workflowSaving, setWorkflowSaving] = useState(false)
   const previous = useRef(syncState)
 
   useEffect(() => {
@@ -56,7 +53,7 @@ export default function SalesOfficeWorld({ syncState, onAgentAction, onPlanInves
     const plan = onPlanInvestigation(text, selected.deptId)
     const started = engine.startInvestigation(text, plan.departments, selected.id, () => { setMeetingActive(false); setMeetingFinished(true) }, (name, line) => setMeetingDialogues((current) => [...current, { name, text: line }]))
     if (!started) { setProposalError('현재 진행 중인 회의가 끝난 뒤 다시 요청해주세요.'); return }
-    setProposalLoading(true); setProposalError(''); setProposal(null); setMeetingFinished(false); setReportOpen(false); setMeetingActive(true); setMeetingDialogues([]); setActiveInstruction(text); setActiveParticipants(plan.labels); setWorkflowStatus('')
+    setProposalLoading(true); setProposalError(''); setProposal(null); setMeetingFinished(false); setReportOpen(false); setMeetingActive(true); setMeetingDialogues([]); setActiveInstruction(text); setActiveParticipants(plan.labels)
     try {
       const report = await onAskProposal({ name: selected.name, role: selected.role, department: selected.deptId, instruction: text, participantLabels: plan.labels })
       setProposal(report)
@@ -78,30 +75,11 @@ export default function SalesOfficeWorld({ syncState, onAgentAction, onPlanInves
     navigate('/tools/thumbnail-generator', { state: { salesBrief: { productName: proposal.title, keyBenefits: [proposal.summary, ...proposal.actions].join('\n'), targetAudience: '8월 마지막 주 인스타그램을 보는 리조트 방문 고려 고객', vibe: /여름|물놀이|워터/.test(activeInstruction) ? '시원하고 청량한' : '고급스럽고 감성적인', instagramBrief: activeInstruction } } })
   }
 
-  const startProductWorkflow = () => {
-    if (!proposal) return
-    navigate('/tools/proposal-generator', { state: { productBrief: { productName: proposal.title, keyBenefits: [proposal.summary, ...proposal.actions].join('\n'), targetAudience: '회의 결과를 검토하는 리조트 방문 고려 고객', instagramBrief: activeInstruction } } })
-  }
-
-  const registerWorkflow = async () => {
-    if (!proposal || workflowSaving) return
-    setWorkflowSaving(true); setWorkflowStatus('')
-    const { data: auth } = await supabase.auth.getUser()
-    const user = auth.user
-    const ownerName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '사용자'
-    const assignees = activeParticipants.length ? activeParticipants : [selected?.name || '담당 미정']
-    const description = `회의 지시: ${activeInstruction}\n\n회의 요약: ${proposal.summary}\n\n확인 필요:\n${proposal.checks.map((item) => `- ${item}`).join('\n')}`
-    const tasks = proposal.actions.map((action, index) => ({ title: `${proposal.title} · ${index + 1}. ${action}`, description, status: 'todo', priority: index === 0 ? 'high' : 'medium', assignee_names: assignees, created_by: user?.id ?? null, created_by_name: ownerName, department: selected?.deptId ?? null }))
-    const { error } = await supabase.from('work_tasks').insert(tasks)
-    setWorkflowSaving(false)
-    setWorkflowStatus(error ? `업무 등록에 실패했습니다: ${error.message}` : `실행 업무 ${tasks.length}건을 팀 트래커에 등록했습니다.`)
-  }
-
   return <div className="sales-original-world">
     <OfficeWorld engine={engine} snap={snapshot} selectedId={selected?.id ?? null} follow onSelect={setSelected} />
     {meetingActive ? <aside className="office-meeting-board" aria-live="polite"><p>MEETING IN PROGRESS</p><strong>{activeInstruction}</strong><div>{meetingDialogues.length ? meetingDialogues.slice(-3).map((dialogue, index) => <p key={`${dialogue.name}-${index}`}><b>{dialogue.name}</b>{dialogue.text}</p>) : <span className="office-meeting-wait"><i /><i /><i /></span>}</div></aside> : null}
     {meetingFinished && !reportOpen ? <button type="button" className="office-meeting-result" onClick={() => setReportOpen(true)}>회의 결과 보기 · 승인 대기</button> : null}
     {selected ? <aside className="office-agent-profile" aria-live="polite"><button type="button" className="office-profile-close" onClick={() => { setSelected(null); setProposal(null); setProposalError(''); setInstruction(''); setReportOpen(false) }} aria-label="직원 정보 닫기">×</button><p>STAFF PROFILE</p><h3>{selected.name}</h3><strong>{department?.name || '세일즈 운영실'}</strong><dl><div><dt>역할</dt><dd>{selected.role}</dd></div><div><dt>현재 상태</dt><dd>{selected.status}</dd></div><div><dt>현재 업무</dt><dd>{selected.taskLabel || department?.name || '업무 현황 확인'}</dd></div></dl><label className="office-instruction"><span>업무 지시</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} maxLength={240} placeholder="예: 전년 대비 동월 매출 증감 조사" /></label><div className="office-profile-buttons"><button type="button" className="office-profile-action" onClick={() => onAgentAction(selected.deptId)}>{runsSync ? '최신 데이터 동기화 실행' : '담당 업무 도구 열기'}</button><button type="button" className="office-profile-proposal" onClick={() => void requestProposal()} disabled={proposalLoading}>{proposalLoading ? '담당자 회의 중…' : '제안 받기'}</button></div>{proposalError && !reportOpen ? <p className="office-agent-proposal error">{proposalError}</p> : null}</aside> : null}
-    {reportOpen ? <div className="office-report-backdrop" role="presentation"><section className="office-report-modal" role="dialog" aria-modal="false" aria-label="업무 보고"><button type="button" className="office-report-close" onClick={() => setReportOpen(false)} aria-label="보고 닫기">×</button><p>MEETING REPORT</p><h3>{proposal?.title || `${selected?.name || '세일즈 운영실'} 보고`}</h3><dl className="office-report-meta"><div><dt>업무 지시</dt><dd>{activeInstruction}</dd></div><div><dt>참석 담당</dt><dd>{activeParticipants.join(' · ')}</dd></div></dl>{proposal ? <div className="office-report-detail"><section><h4>회의 요약</h4><p>{proposal.summary}</p></section><section><h4>담당별 검토</h4><ul>{proposal.discussion.map((item, index) => <li key={`${item.team}-${index}`}><b>{item.team}</b><span>{item.detail}</span></li>)}</ul></section><section><h4>실행 순서</h4><ol>{proposal.actions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ol></section><section><h4>확인 필요</h4><ul className="office-report-checks">{proposal.checks.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section></div> : <div className={`office-report-body ${proposalError ? 'error' : ''}`}>{proposalError || (proposalLoading ? '회의 결과를 정리하고 있습니다…' : '회의에서 정리한 확인 항목을 불러오지 못했습니다.')}</div>}{proposal ? <div className="office-report-actions"><button type="button" className="office-report-workflow" onClick={() => void registerWorkflow()} disabled={workflowSaving}>{workflowSaving ? '팀 업무 등록 중…' : '실행 업무를 팀에 등록하기'}</button>{activeParticipants.includes('상품 기획') ? <button type="button" className="office-report-workflow" onClick={startProductWorkflow}>상품 구성안 만들기</button> : null}{activeParticipants.includes('SNS') ? <button type="button" className="office-report-workflow" onClick={startContentWorkflow}>디자인·인스타 게시물 만들기</button> : null}{workflowStatus ? <p className={`office-workflow-status ${workflowStatus.includes('실패') ? 'error' : ''}`}>{workflowStatus}</p> : null}</div> : null}<button type="button" className="office-report-confirm" onClick={approveMeeting} disabled={proposalLoading}>{proposalLoading ? '보고서 작성 중…' : '회의 승인 · 자리 복귀'}</button></section></div> : null}
+    {reportOpen ? <div className="office-report-backdrop" role="presentation"><section className="office-report-modal" role="dialog" aria-modal="true" aria-label="업무 보고"><button type="button" className="office-report-close" onClick={() => setReportOpen(false)} aria-label="보고 닫기">×</button><p>MEETING REPORT</p><h3>{proposal?.title || `${selected?.name || '세일즈 운영실'} 보고`}</h3><dl className="office-report-meta"><div><dt>업무 지시</dt><dd>{activeInstruction}</dd></div><div><dt>참석 담당</dt><dd>{activeParticipants.join(' · ')}</dd></div></dl>{proposal ? <div className="office-report-detail"><section><h4>회의 요약</h4><p>{proposal.summary}</p></section><section><h4>담당별 검토</h4><ul>{proposal.discussion.map((item, index) => <li key={`${item.team}-${index}`}><b>{item.team}</b><span>{item.detail}</span></li>)}</ul></section><section><h4>실행 순서</h4><ol>{proposal.actions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ol></section><section><h4>확인 필요</h4><ul className="office-report-checks">{proposal.checks.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section></div> : <div className={`office-report-body ${proposalError ? 'error' : ''}`}>{proposalError || (proposalLoading ? '회의 결과를 정리하고 있습니다…' : '회의에서 정리한 확인 항목을 불러오지 못했습니다.')}</div>}{proposal && activeParticipants.includes('SNS') ? <button type="button" className="office-report-workflow" onClick={startContentWorkflow}>디자인·인스타 게시물 만들기</button> : null}<button type="button" className="office-report-confirm" onClick={approveMeeting} disabled={proposalLoading}>{proposalLoading ? '보고서 작성 중…' : '회의 승인 · 자리 복귀'}</button></section></div> : null}
   </div>
 }

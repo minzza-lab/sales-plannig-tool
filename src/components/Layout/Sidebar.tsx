@@ -70,7 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
           </li>
           <li className="menu-highlight">
             <NavLink to="/tools/proposal-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎁</span> 상품안 생성기 (제작중)
+              <span className="icon">🎁</span> AI 상품 구성안 생성기
             </NavLink>
           </li>
           <li>
