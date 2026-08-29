@@ -24,7 +24,7 @@ export default function SalesOfficeWorld({ syncState, onAgentAction }: { syncSta
     return () => cancelAnimationFrame(frame)
   }, [engine])
   useEffect(() => {
-    if (syncState === 'running' && previous.current !== 'running') engine.start()
+    if (syncState === 'running' && previous.current !== 'running') engine.beginSalesSync()
     if (syncState === 'completed' && previous.current === 'running') engine.settleSalesSync()
     if (syncState === 'failed' && previous.current === 'running') engine.settleSalesSync()
     previous.current = syncState

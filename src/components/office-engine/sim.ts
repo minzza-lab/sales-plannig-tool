@@ -356,6 +356,35 @@ export class Company {
     this.main.gen = this.dayScript();
   }
 
+  /** 대시보드의 최신 데이터 동기화용 장면. 전체 회사를 초기화하지 않는다. */
+  beginSalesSync() {
+    if (this.running) return;
+    this.running = true;
+    this.main = { gen: null, wait: 0, until: null };
+    this.side = { gen: null, wait: 0, until: null };
+    const collectors = ['research', 'brand', 'strategy1'].flatMap((department) => this.deptAgents(department));
+    const reviewRoom = roomOf('review');
+    this.lock(collectors);
+    collectors.forEach((agent, index) => {
+      const checkpoint = reviewRoom.loiter[index % reviewRoom.loiter.length];
+      this.stand(agent);
+      this.enqueue(
+        agent,
+        { k: 'status', s: '이동 중' },
+        { k: 'fn', fn: () => this.say(agent, '최신 자료를 확인하고 올게요.', 2.2) },
+        { k: 'walk', to: checkpoint },
+        { k: 'wait', dur: 1.2 },
+        { k: 'fn', fn: () => this.say(agent, '자료 확인 완료. 분석실로 전달합니다.', 2.2) },
+        { k: 'walk', to: agent.home },
+        { k: 'face', dir: 'up' },
+        { k: 'anim', a: 'sit' },
+        { k: 'status', s: '대기' },
+        { k: 'fn', fn: () => this.unlock([agent]) },
+      );
+    });
+    this.pushLog('↻', '최신 판매 데이터 수집을 시작했습니다.', 'yellow');
+  }
+
   /** 외부 동기화가 끝났을 때 모든 직원이 각자의 자리로 복귀하도록 한다. */
   settleSalesSync() {
     this.running = false;
