@@ -413,6 +413,7 @@ export class Company {
     departments: string[],
     requesterId: string,
     onComplete: () => void,
+    onDialogue: (name: string, text: string) => void,
   ): boolean {
     if (this.side.gen) return false;
 
@@ -425,7 +426,7 @@ export class Company {
 
     if (!ids.length) return false;
     this.spotlightRoom('meeting', 30);
-    this.side.gen = this.investigationScene(title, ids, onComplete);
+    this.side.gen = this.investigationScene(title, ids, onComplete, onDialogue);
     return true;
   }
 
@@ -433,13 +434,32 @@ export class Company {
     title: string,
     ids: string[],
     onComplete: () => void,
+    onDialogue: (name: string, text: string) => void,
   ): Generator<number | (() => boolean), void, void> {
     const lines = ids.map((id) => {
       const agent = this.agentById.get(id)!;
-      return [id, `${roomOf(agent.deptId).name} 관점에서 필요한 자료를 확인하겠습니다.`] as [string, string];
+      return [id, this.investigationLine(agent, title)] as [string, string];
     });
-    yield* this.meeting(`업무 검토 · ${title.slice(0, 22)}`, ids, lines);
+    yield* this.meeting(`업무 검토 · ${title.slice(0, 22)}`, ids, lines, onDialogue);
     onComplete();
+  }
+
+  private investigationLine(agent: Agent, title: string): string {
+    const task = title.slice(0, 34)
+    const byDepartment: Record<string, string> = {
+      research: `“${task}” 기준으로 워터파크 동월 자료를 대조하겠습니다.`,
+      brand: `“${task}” 기준으로 객실 판매와 재고 변동을 확인하겠습니다.`,
+      strategy1: `“${task}” 기준으로 스포츠 판매 흐름을 정리하겠습니다.`,
+      review: `수집 자료를 같은 기간 기준으로 묶어 증감 원인을 정리하겠습니다.`,
+      qa: `비교 기준과 누락 항목부터 검수하겠습니다.`,
+      strategy2: `확인 결과를 상품 구성과 다음 제안에 반영하겠습니다.`,
+      carousel: `핵심 결과가 정리되면 시각 자료로 바꾸겠습니다.`,
+      reels: `결과에 맞춰 전달할 영상 포인트를 정리하겠습니다.`,
+      partner: `확정된 내용만 채널별 메시지로 준비하겠습니다.`,
+      finance: `판매·취소·순매출 기준이 일치하는지 확인하겠습니다.`,
+      secretary: `회의 내용을 모아 최종 보고 형식으로 정리하겠습니다.`,
+    }
+    return byDepartment[agent.deptId] || `“${task}”에 필요한 확인 항목을 정리하겠습니다.`
   }
 
   private *dayScript(): Generator<number | (() => boolean), void, void> {
@@ -663,7 +683,7 @@ export class Company {
   }
 
   /** 회의: 참석자 소집 → 대사 → 자리 복귀 */
-  private *meeting(title: string, ids: string[], lines: [string, string][]) {
+  private *meeting(title: string, ids: string[], lines: [string, string][], onDialogue?: (name: string, text: string) => void) {
     this.meetingTitle = title;
     this.pushLog("💬", `회의 소집: ${title} (${ids.length}명)`, "lav");
     const crew = ids.map((id) => this.agentById.get(id)!);
@@ -687,6 +707,7 @@ export class Company {
       const speaker = this.agentById.get(id)!;
       speaker.anim = "talk";
       this.say(speaker, text, 3.2);
+      onDialogue?.(speaker.name, text);
       this.pushLog("🗣️", `${speaker.name}: “${text}”`, "lav");
       yield 2.3;
       speaker.anim = "sit";
