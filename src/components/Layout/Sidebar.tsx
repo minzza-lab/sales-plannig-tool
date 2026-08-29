@@ -44,6 +44,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal }) =>
             </NavLink>
           </li>
           <li className="menu-highlight">
+            <NavLink to="/virtual-office" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">🏢</span> 가상 사무실
+            </NavLink>
+          </li>
+          <li className="menu-highlight">
             <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">⚡</span> 자동화 요청 게시판
             </NavLink>

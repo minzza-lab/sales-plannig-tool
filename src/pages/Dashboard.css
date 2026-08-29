@@ -551,3 +551,4 @@
   .tool-card { grid-template-columns: 42px minmax(0, 1fr) 18px; padding: 13px; }
   .tool-icon { width: 42px; height: 42px; }
 }
+.virtual-office-page{max-width:1480px;margin:0 auto;padding:0 0 28px}

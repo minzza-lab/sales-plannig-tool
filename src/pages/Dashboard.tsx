@@ -174,7 +174,7 @@ function getWaterRentalGroup(name: string) {
   return '기타'
 }
 
-export default function Dashboard() {
+export default function Dashboard({ officeOnly = false }: { officeOnly?: boolean }) {
   const [snapshot, setSnapshot] = useState<IntegratedSnapshot | null>(null)
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const [syncState, setSyncState] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle')
@@ -322,6 +322,17 @@ export default function Dashboard() {
     ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul' }).format(new Date(snapshot.updatedAt))
     : '최신 데이터를 불러오는 중'
 
+  if (officeOnly) return <section className="virtual-office-page"><SalesOperationOffice
+    syncState={syncState}
+    syncProgress={syncProgress}
+    hasSnapshot={Boolean(snapshot)}
+    snapshotDate={snapshot?.date || null}
+    salesContext={snapshot
+      ? `${formatSnapshotDate(snapshot.date)} 기준: 워터파크 매출 ${formatCompactWon(snapshot.waterparkSales)}, 방문 ${snapshot.waterparkVisitors.toLocaleString('ko-KR')}명, 객실 ${snapshot.condoRooms.toLocaleString('ko-KR')}실(${snapshot.condoOcc.toFixed(1)}%), 스포츠 매출 ${formatCompactWon(snapshot.sportsSales)}, 발권 ${snapshot.sportsTickets.toLocaleString('ko-KR')}건`
+      : '현재 통합 매출 데이터는 아직 준비 중입니다.'}
+    onSync={() => void startIntegratedSync()}
+  /></section>
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -335,17 +346,6 @@ export default function Dashboard() {
           <span>사용 가능한 도구</span>
         </div>
       </header>
-
-      <SalesOperationOffice
-        syncState={syncState}
-        syncProgress={syncProgress}
-        hasSnapshot={Boolean(snapshot)}
-        snapshotDate={snapshot?.date || null}
-        salesContext={snapshot
-          ? `${formatSnapshotDate(snapshot.date)} 기준: 워터파크 매출 ${formatCompactWon(snapshot.waterparkSales)}, 방문 ${snapshot.waterparkVisitors.toLocaleString('ko-KR')}명, 객실 ${snapshot.condoRooms.toLocaleString('ko-KR')}실(${snapshot.condoOcc.toFixed(1)}%), 스포츠 매출 ${formatCompactWon(snapshot.sportsSales)}, 발권 ${snapshot.sportsTickets.toLocaleString('ko-KR')}건`
-          : '현재 통합 매출 데이터는 아직 준비 중입니다.'}
-        onSync={() => void startIntegratedSync()}
-      />
 
       <section className="integrated-spotlight">
         <div className="integrated-heading">
