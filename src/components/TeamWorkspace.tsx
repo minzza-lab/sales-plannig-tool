@@ -67,7 +67,7 @@ export default function TeamWorkspace() {
   const eventByDay = useMemo(() => events.reduce<Record<string, CalendarEvent[]>>((map, event) => {
     const key = dateKey(new Date(event.start_at)); (map[key] ??= []).push(event); return map
   }, {}), [events])
-  const salesScheduleEventIds = useMemo(() => new Set(events.filter(event => salesProductSchedules.some(product => product.title === event.title && product.sales_start === dateKey(new Date(event.start_at)) && product.sales_end === dateKey(new Date(event.end_at)))).map(event => event.id)), [events, salesProductSchedules])
+  const salesScheduleEventIds = useMemo(() => new Set(events.filter(event => event.all_day && salesProductSchedules.some(product => product.title === event.title)).map(event => event.id)), [events, salesProductSchedules])
   const myName = async () => {
     const { data } = await supabase.auth.getUser(); const user = data.user
     return { id: user?.id, name: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '사용자', department: user?.user_metadata?.department || null }
