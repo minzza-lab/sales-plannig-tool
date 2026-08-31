@@ -10,6 +10,7 @@ type TaskStatus = 'todo' | 'in_progress' | 'done'
 interface CalendarEvent { id: string; title: string; description?: string; start_at: string; end_at: string; all_day: boolean; color: string; assignee_names: string[]; created_by_name: string }
 interface WorkTask { id: string; title: string; description?: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; due_date?: string; assignee_names: string[]; created_by_name: string; created_at: string }
 interface TaskComment { id: string; task_id: string; content: string; author_name: string; created_at: string }
+interface SalesProductSchedule { title: string; sales_start: string; sales_end: string }
 
 const colors = ['blue', 'purple', 'orange', 'green']
 const statusLabels: Record<TaskStatus, string> = { todo: '할 일', in_progress: '진행 중', done: '완료' }
@@ -21,21 +22,25 @@ export default function TeamWorkspace() {
   const [view, setView] = useState<View>('calendar')
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [salesProductSchedules, setSalesProductSchedules] = useState<SalesProductSchedule[]>([])
   const [tasks, setTasks] = useState<WorkTask[]>([])
   const [comments, setComments] = useState<TaskComment[]>([])
   const [composer, setComposer] = useState<'event' | 'leave' | 'task' | null>(null)
   const [selectedTask, setSelectedTask] = useState<WorkTask | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeletingSalesSchedules, setIsDeletingSalesSchedules] = useState(false)
   const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
-    const [eventResult, taskResult] = await Promise.all([
+    const [eventResult, taskResult, salesResult] = await Promise.all([
       supabase.from('team_calendar_events').select('*').order('start_at'),
       supabase.from('work_tasks').select('*').order('created_at', { ascending: false }),
+      supabase.from('sales_products').select('title,sales_start,sales_end'),
     ])
     if (eventResult.error) setNotice('공유 기능을 사용하려면 Supabase 설정 SQL을 먼저 실행해 주세요.')
     else setEvents((eventResult.data ?? []) as CalendarEvent[])
     if (!taskResult.error) setTasks((taskResult.data ?? []) as WorkTask[])
+    if (!salesResult.error) setSalesProductSchedules((salesResult.data ?? []) as SalesProductSchedule[])
   }, [])
 
   useEffect(() => {
@@ -62,6 +67,7 @@ export default function TeamWorkspace() {
   const eventByDay = useMemo(() => events.reduce<Record<string, CalendarEvent[]>>((map, event) => {
     const key = dateKey(new Date(event.start_at)); (map[key] ??= []).push(event); return map
   }, {}), [events])
+  const salesScheduleEventIds = useMemo(() => new Set(events.filter(event => salesProductSchedules.some(product => product.title === event.title && product.sales_start === dateKey(new Date(event.start_at)) && product.sales_end === dateKey(new Date(event.end_at)))).map(event => event.id)), [events, salesProductSchedules])
   const myName = async () => {
     const { data } = await supabase.auth.getUser(); const user = data.user
     return { id: user?.id, name: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '사용자', department: user?.user_metadata?.department || null }
@@ -99,9 +105,17 @@ export default function TeamWorkspace() {
     const owner = await myName(); const { error } = await supabase.from('work_task_comments').insert({ task_id: selectedTask.id, content, author_id: owner.id, author_name: owner.name })
     if (!error) { event.currentTarget.reset(); await loadComments(selectedTask.id) }
   }
+  const removeSalesSchedules = async () => {
+    if (salesScheduleEventIds.size === 0) { setNotice('공유 캘린더에서 판매 상품과 일치하는 일정이 없습니다.'); return }
+    setIsDeletingSalesSchedules(true)
+    const { error } = await supabase.from('team_calendar_events').delete().in('id', [...salesScheduleEventIds])
+    setIsDeletingSalesSchedules(false)
+    if (error) setNotice(`판매 일정 삭제에 실패했습니다: ${error.message}`)
+    else { setNotice(`판매 상품 일정 ${salesScheduleEventIds.size}개를 공유 캘린더에서 삭제했습니다.`); await load() }
+  }
 
   return <div className="team-workspace animate-fade-in">
-    <header className="team-workspace-header"><div><p className="workspace-eyebrow"><Users size={15} /> TEAM WORKSPACE</p><h1>공유 스케줄 · 업무 트래커</h1><p>팀 일정과 담당 업무를 공유하고, 개인 휴무 일정도 함께 확인합니다.</p></div><div className="workspace-header-actions">{view === 'calendar' ? <><button className="workspace-secondary" onClick={() => setComposer('leave')}><Palmtree size={17} /> 개인 휴무 등록</button><button className="workspace-primary" onClick={() => setComposer('event')}><Plus size={18} /> 일정 등록</button></> : <button className="workspace-primary" onClick={() => setComposer('task')}><Plus size={18} /> 업무 등록</button>}</div></header>
+    <header className="team-workspace-header"><div><p className="workspace-eyebrow"><Users size={15} /> TEAM WORKSPACE</p><h1>공유 스케줄 · 업무 트래커</h1><p>팀 일정과 담당 업무를 공유하고, 개인 휴무 일정도 함께 확인합니다.</p></div><div className="workspace-header-actions">{view === 'calendar' ? <><button className="workspace-secondary" onClick={() => void removeSalesSchedules()} disabled={isDeletingSalesSchedules || salesScheduleEventIds.size === 0}>{isDeletingSalesSchedules ? '판매 일정 삭제 중...' : `판매 일정 정리${salesScheduleEventIds.size ? ` ${salesScheduleEventIds.size}` : ''}`}</button><button className="workspace-secondary" onClick={() => setComposer('leave')}><Palmtree size={17} /> 개인 휴무 등록</button><button className="workspace-primary" onClick={() => setComposer('event')}><Plus size={18} /> 일정 등록</button></> : <button className="workspace-primary" onClick={() => setComposer('task')}><Plus size={18} /> 업무 등록</button>}</div></header>
     <div className="workspace-tabs"><button className={view === 'calendar' ? 'active' : ''} onClick={() => setView('calendar')}><CalendarDays size={17} />공유 스케줄</button><button className={view === 'tracker' ? 'active' : ''} onClick={() => setView('tracker')}><ListTodo size={17} />업무 트래커 <span>{tasks.filter(t => t.status !== 'done').length}</span></button></div>
     {notice && <div className="workspace-notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
     {view === 'calendar' ? <section className="calendar-panel"><div className="calendar-toolbar"><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={19} /></button><strong>{month.getFullYear()}년 {month.getMonth() + 1}월</strong><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={19} /></button><button className="today-button" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>오늘</button></div><div className="calendar-grid calendar-weekdays">{['일','월','화','수','목','금','토'].map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid calendar-days">{days.map(day => { const key = dateKey(day); const today = key === dateKey(new Date()); return <div className={`calendar-day ${day.getMonth() !== month.getMonth() ? 'other-month' : ''} ${today ? 'today' : ''}`} key={key}><time>{day.getDate()}</time>{(eventByDay[key] ?? []).slice(0, 3).map(item => <button key={item.id} title={item.description} className={`calendar-event ${item.color}`}><span>{item.all_day ? '종일' : new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(item.start_at))}</span>{item.title}</button>)}{(eventByDay[key]?.length ?? 0) > 3 && <small>+{eventByDay[key].length - 3}개 일정</small>}</div> })}</div></section> : <section className="tracker-board">{(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => <div className="task-column" key={status}><header><h2>{statusLabels[status]}</h2><span>{tasks.filter(task => task.status === status).length}</span></header><div className="task-list">{tasks.filter(task => task.status === status).map(task => <article className="task-card" key={task.id} onClick={() => void openTask(task)}><div className="task-card-top"><span className={`priority ${task.priority}`}>{task.priority === 'high' ? '높음' : task.priority === 'low' ? '낮음' : '보통'}</span>{task.status !== 'done' && <button title="다음 상태로" onClick={e => { e.stopPropagation(); void moveTask(task, status === 'todo' ? 'in_progress' : 'done') }}><Check size={15} /></button>}</div><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<footer>{task.due_date ? <span className={new Date(`${task.due_date}T23:59:59`) < new Date() ? 'overdue' : ''}>마감 {displayDate(task.due_date)}</span> : <span>마감일 없음</span>}{task.assignee_names?.length > 0 && <span>👤 {task.assignee_names.join(', ')}</span>}</footer></article>)}{tasks.filter(task => task.status === status).length === 0 && <p className="empty-column">등록된 업무가 없습니다.</p>}</div></div>)}</section>}
