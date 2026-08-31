@@ -69,6 +69,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
               <span className="icon">🗓️</span> 공유 스케줄 · 업무 트래커
             </NavLink>
           </li>
+          <li className="menu-highlight">
+            <NavLink to="/tools/sales-schedule-performance" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+              <span className="icon">📈</span> 판매 스케줄 · 실적 관리
+            </NavLink>
+          </li>
           <li>
             <NavLink to="/tools/approvals" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
               <span className="icon">📄</span> 품의서 보관함
