@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ListTodo, MessageCircle, Palmtree, Plus, Users } from 'lucide-react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, FileUp, ListTodo, MessageCircle, Palmtree, Plus, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import './TeamWorkspace.css'
 
@@ -29,6 +29,8 @@ export default function TeamWorkspace() {
   const [selectedTask, setSelectedTask] = useState<WorkTask | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeletingSalesSchedules, setIsDeletingSalesSchedules] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
@@ -113,9 +115,35 @@ export default function TeamWorkspace() {
     if (error) setNotice(`판매 일정 삭제에 실패했습니다: ${error.message}`)
     else { setNotice(`판매 상품 일정 ${salesScheduleEventIds.size}개를 공유 캘린더에서 삭제했습니다.`); await load() }
   }
+  const importExcelSchedules = async (files: FileList | null) => {
+    if (!files?.length) return
+    setIsImporting(true)
+    try {
+      const XLSX = await import('xlsx'); const imported: Array<{ title: string; start_at: string; end_at: string; color: string; assignee_names: string[] }> = []
+      const weekdays = ['일', '월', '화', '수', '목', '금', '토']; const formatDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      for (const file of Array.from(files)) { const workbook = XLSX.read(await file.arrayBuffer()); const sheetName = workbook.SheetNames.find(name => name === '스케쥴(최종)')
+        if (!sheetName) continue
+        const rows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false }); const header = rows.findIndex(row => row[0] === '파트' && row[2] === '성 명'); const period = rows.flat().join(' ').match(/(20\d{2})년\s*(\d{1,2})월/) || file.name.match(/(20\d{2})년\s*(\d{1,2})월/)
+        if (header < 1 || !period) continue
+        const year = Number(period[1]); const month = Number(period[2]) - 1
+        for (const row of rows.slice(header + 1)) { const name = String(row[2] ?? '').replace(/\s/g, ''); if (!name || name.startsWith('비고')) continue
+          for (let column = 3; column < row.length; column++) { const day = Number(rows[header - 1][column]); const weekday = String(rows[header][column] ?? '').trim(); const date = new Date(year, month, day)
+            if (!day || !weekday || date.getMonth() !== month || weekdays[date.getDay()] !== weekday) continue
+            const code = String(row[column] ?? '').replace(/\s/g, ''); const kind = /출장/.test(code) ? '출장' : /당직/.test(code) ? '당직' : /연차/.test(code) ? '연차' : /반차/.test(code) ? '반차' : /보상/.test(code) ? '보상휴가' : /공휴대체/.test(code) ? '대체휴무' : null
+            if (!kind) continue
+            const dateValue = formatDate(date); imported.push({ title: kind === '출장' || kind === '당직' ? `${name} ${kind}` : `[휴무 · ${kind}] ${name}`, start_at: `${dateValue}T00:00`, end_at: `${dateValue}T23:59`, color: kind === '출장' ? 'purple' : kind === '당직' ? 'orange' : 'pink', assignee_names: [name] })
+          }
+        }
+      }
+      const owner = await myName(); const existing = new Set(events.map(item => `${item.title}|${dateKey(new Date(item.start_at))}`)); const unique = [...new Map(imported.filter(item => !existing.has(`${item.title}|${item.start_at.slice(0, 10)}`)).map(item => [`${item.title}|${item.start_at}`, item])).values()]
+      if (!unique.length) { setNotice('새로 등록할 연차·반차·보상휴가·대체휴무·출장·당직 일정이 없습니다.'); return }
+      const { error } = await supabase.from('team_calendar_events').insert(unique.map(item => ({ ...item, all_day: true, description: '영업기획팀 월별 스케줄 엑셀에서 가져온 일정', created_by: owner.id, created_by_name: owner.name, department: owner.department })))
+      if (error) setNotice(`엑셀 일정 등록에 실패했습니다: ${error.message}`); else { setNotice(`${unique.length}개의 팀 휴무·출장·당직 일정을 캘린더에 등록했습니다.`); await load() }
+    } catch { setNotice('엑셀 형식을 읽지 못했습니다. 영업기획팀 월별 스케줄 형식인지 확인해 주세요.') } finally { setIsImporting(false); if (importInputRef.current) importInputRef.current.value = '' }
+  }
 
   return <div className="team-workspace animate-fade-in">
-    <header className="team-workspace-header"><div><p className="workspace-eyebrow"><Users size={15} /> TEAM WORKSPACE</p><h1>공유 스케줄 · 업무 트래커</h1><p>팀 일정과 담당 업무를 공유하고, 개인 휴무 일정도 함께 확인합니다.</p></div><div className="workspace-header-actions">{view === 'calendar' ? <><button className="workspace-secondary" onClick={() => void removeSalesSchedules()} disabled={isDeletingSalesSchedules || salesScheduleEventIds.size === 0}>{isDeletingSalesSchedules ? '판매 일정 삭제 중...' : `판매 일정 정리${salesScheduleEventIds.size ? ` ${salesScheduleEventIds.size}` : ''}`}</button><button className="workspace-secondary" onClick={() => setComposer('leave')}><Palmtree size={17} /> 개인 휴무 등록</button><button className="workspace-primary" onClick={() => setComposer('event')}><Plus size={18} /> 일정 등록</button></> : <button className="workspace-primary" onClick={() => setComposer('task')}><Plus size={18} /> 업무 등록</button>}</div></header>
+    <header className="team-workspace-header"><div><p className="workspace-eyebrow"><Users size={15} /> TEAM WORKSPACE</p><h1>공유 스케줄 · 업무 트래커</h1><p>팀 일정과 담당 업무를 공유하고, 개인 휴무 일정도 함께 확인합니다.</p></div><div className="workspace-header-actions">{view === 'calendar' ? <><input ref={importInputRef} className="schedule-import-input" type="file" accept=".xlsx,.xls" multiple onChange={event => void importExcelSchedules(event.target.files)} /><button className="workspace-secondary" onClick={() => importInputRef.current?.click()} disabled={isImporting}>{isImporting ? '엑셀 일정 읽는 중...' : <><FileUp size={17} /> 엑셀 일정 가져오기</>}</button><button className="workspace-secondary" onClick={() => void removeSalesSchedules()} disabled={isDeletingSalesSchedules || salesScheduleEventIds.size === 0}>{isDeletingSalesSchedules ? '판매 일정 삭제 중...' : `판매 일정 정리${salesScheduleEventIds.size ? ` ${salesScheduleEventIds.size}` : ''}`}</button><button className="workspace-secondary" onClick={() => setComposer('leave')}><Palmtree size={17} /> 개인 휴무 등록</button><button className="workspace-primary" onClick={() => setComposer('event')}><Plus size={18} /> 일정 등록</button></> : <button className="workspace-primary" onClick={() => setComposer('task')}><Plus size={18} /> 업무 등록</button>}</div></header>
     <div className="workspace-tabs"><button className={view === 'calendar' ? 'active' : ''} onClick={() => setView('calendar')}><CalendarDays size={17} />공유 스케줄</button><button className={view === 'tracker' ? 'active' : ''} onClick={() => setView('tracker')}><ListTodo size={17} />업무 트래커 <span>{tasks.filter(t => t.status !== 'done').length}</span></button></div>
     {notice && <div className="workspace-notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
     {view === 'calendar' ? <section className="calendar-panel"><div className="calendar-toolbar"><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={19} /></button><strong>{month.getFullYear()}년 {month.getMonth() + 1}월</strong><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={19} /></button><button className="today-button" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>오늘</button></div><div className="calendar-grid calendar-weekdays">{['일','월','화','수','목','금','토'].map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid calendar-days">{days.map(day => { const key = dateKey(day); const today = key === dateKey(new Date()); return <div className={`calendar-day ${day.getMonth() !== month.getMonth() ? 'other-month' : ''} ${today ? 'today' : ''}`} key={key}><time>{day.getDate()}</time>{(eventByDay[key] ?? []).slice(0, 3).map(item => <button key={item.id} title={item.description} className={`calendar-event ${item.color}`}><span>{item.all_day ? '종일' : new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(item.start_at))}</span>{item.title}</button>)}{(eventByDay[key]?.length ?? 0) > 3 && <small>+{eventByDay[key].length - 3}개 일정</small>}</div> })}</div></section> : <section className="tracker-board">{(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => <div className="task-column" key={status}><header><h2>{statusLabels[status]}</h2><span>{tasks.filter(task => task.status === status).length}</span></header><div className="task-list">{tasks.filter(task => task.status === status).map(task => <article className="task-card" key={task.id} onClick={() => void openTask(task)}><div className="task-card-top"><span className={`priority ${task.priority}`}>{task.priority === 'high' ? '높음' : task.priority === 'low' ? '낮음' : '보통'}</span>{task.status !== 'done' && <button title="다음 상태로" onClick={e => { e.stopPropagation(); void moveTask(task, status === 'todo' ? 'in_progress' : 'done') }}><Check size={15} /></button>}</div><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<footer>{task.due_date ? <span className={new Date(`${task.due_date}T23:59:59`) < new Date() ? 'overdue' : ''}>마감 {displayDate(task.due_date)}</span> : <span>마감일 없음</span>}{task.assignee_names?.length > 0 && <span>👤 {task.assignee_names.join(', ')}</span>}</footer></article>)}{tasks.filter(task => task.status === status).length === 0 && <p className="empty-column">등록된 업무가 없습니다.</p>}</div></div>)}</section>}
