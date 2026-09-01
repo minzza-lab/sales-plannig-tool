@@ -4,7 +4,7 @@ import { CheckCircle2, DatabaseZap, LoaderCircle, TriangleAlert, X } from 'lucid
 import { supabase } from '../lib/supabase'
 import './CrawlerSyncButton.css'
 
-type SyncTarget = 'waterpark' | 'season-pass'
+type SyncTarget = 'waterpark' | 'season-pass' | 'voc'
 type SyncState = {
   id: string | null
   status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'
@@ -185,6 +185,45 @@ export default function CrawlerSyncButton({
     setError('')
     setIsStarting(true)
     try {
+      if (target === 'voc') {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) throw new Error('로그인 정보가 없습니다. 다시 로그인해주세요.')
+
+        setState({
+          id: null,
+          status: 'running',
+          progress: 20,
+          message: '서버가 관리자 시스템에서 최신 VOC를 수집하고 있습니다.',
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+        })
+        const response = await fetch('/api/voc-sync', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const result = await response.json().catch(() => ({})) as {
+          error?: string
+          sourceCount?: number
+          savedCount?: number
+          failedCount?: number
+          message?: string
+        }
+        if (!response.ok) throw new Error(result.error || 'VOC를 수집하지 못했습니다.')
+
+        await onCompleteRef.current()
+        setState({
+          id: null,
+          status: 'completed',
+          progress: 100,
+          message: result.message || `최신 VOC ${result.savedCount || 0}건을 동기화했습니다.`,
+          startedAt: null,
+          finishedAt: new Date().toISOString(),
+        })
+        return
+      }
+
       if (target === 'waterpark') {
         const dates = getRecentKstDateStrings(WATERPARK_SYNC_DAYS)
         const batchId = crypto.randomUUID()
@@ -312,6 +351,16 @@ export default function CrawlerSyncButton({
     } catch (startError) {
       const message = startError instanceof Error ? startError.message : '알 수 없는 오류'
       setError(`동기화를 시작하지 못했습니다: ${message}`)
+      if (target === 'voc') {
+        setState({
+          id: null,
+          status: 'failed',
+          progress: 0,
+          message: 'VOC 동기화 중 오류가 발생했습니다.',
+          startedAt: null,
+          finishedAt: new Date().toISOString(),
+        })
+      }
       if (target === 'waterpark') {
         setWaterparkModal((current) => ({
           ...current,
@@ -327,7 +376,7 @@ export default function CrawlerSyncButton({
 
   const isBusy = state.status === 'queued' || state.status === 'running'
   const buttonLabel = isStarting
-    ? target === 'waterpark' ? '서버에서 매출 수집 중' : '동기화 요청 중'
+    ? target === 'waterpark' ? '서버에서 매출 수집 중' : target === 'voc' ? '서버에서 VOC 수집 중' : '동기화 요청 중'
     : state.status === 'queued'
       ? '동기화 요청 대기 중'
       : state.status === 'running'
@@ -352,7 +401,11 @@ export default function CrawlerSyncButton({
       </div>
       {isStarting && (
         <small className="crawler-sync-pending">
-          {target === 'waterpark' ? '홈페이지 서버가 최신 매출을 직접 수집하고 있습니다.' : '전용 수집 PC에 요청을 보내고 있습니다.'}
+          {target === 'waterpark'
+            ? '홈페이지 서버가 최신 매출을 직접 수집하고 있습니다.'
+            : target === 'voc'
+              ? '홈페이지 서버가 관리자 시스템에서 최신 VOC를 직접 수집하고 있습니다.'
+              : '전용 수집 PC에 요청을 보내고 있습니다.'}
         </small>
       )}
       {state.status !== 'idle' && (

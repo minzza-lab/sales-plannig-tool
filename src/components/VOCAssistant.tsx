@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { callGeminiWithFallback } from '../utils/apiProxy';
+import CrawlerSyncButton from './CrawlerSyncButton';
 import './VOCAssistant.css';
 
 const VOCAssistant: React.FC = () => {
@@ -33,6 +34,49 @@ const VOCAssistant: React.FC = () => {
     setHiddenVocIds(prev => [...prev, id]);
   };
 
+  const refreshVocData = useCallback(async () => {
+    const [unansweredResult, answeredResult, syncResult] = await Promise.all([
+      supabase
+        .from('voc_inquiries')
+        .select('*')
+        .eq('status', 'unanswered')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('voc_inquiries')
+        .select('*')
+        .eq('status', 'answered')
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('knowledge_base')
+        .select('content')
+        .eq('title', '[SYSTEM] LAST_SYNC')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (unansweredResult.error) {
+      console.error('❌ 미답변 VOC 조회 실패:', unansweredResult.error);
+    } else {
+      setUnansweredList(unansweredResult.data || []);
+    }
+
+    if (answeredResult.error) {
+      console.error('❌ 답변완료 VOC 조회 실패:', answeredResult.error);
+    } else {
+      setAnsweredList(answeredResult.data || []);
+    }
+
+    if (syncResult.data?.content) {
+      try {
+        setSyncStatus(JSON.parse(syncResult.data.content));
+      } catch {
+        console.warn('마지막 VOC 동기화 정보를 해석하지 못했습니다.');
+      }
+    }
+  }, []);
+
   // DB에서 팀원들의 지식(팁) 가져오기
   useEffect(() => {
     const fetchTeamKnowledge = async () => {
@@ -55,62 +99,8 @@ const VOCAssistant: React.FC = () => {
     if (urlName) setCustomerName(urlName);
     if (urlContent) setVocContent(urlContent);
     
-    // 크롤러로 수집된 미답변 VOC 리스트 가져오기
-    const fetchUnansweredVocList = async () => {
-      const { data, error } = await supabase
-        .from('voc_inquiries')
-        .select('*')
-        .eq('status', 'unanswered')
-        .order('created_at', { ascending: false });
-        
-      if (error) {
-        console.error('❌ 미답변 VOC 조회 실패:', error);
-      }
-      if (data && !error) {
-        console.log('📦 미답변 VOC 데이터 수신 성공:', data);
-        setUnansweredList(data);
-      }
-    };
-    
-    // 답변 완료된 VOC 리스트 가져오기 (학습 자료용)
-    const fetchAnsweredVocList = async () => {
-      const { data, error } = await supabase
-        .from('voc_inquiries')
-        .select('*')
-        .eq('status', 'answered')
-        .order('created_at', { ascending: false })
-        .limit(5); // 최근 5개만
-        
-      if (error) {
-        console.error('❌ 답변완료 VOC 조회 실패:', error);
-      }
-      if (data && !error) {
-        console.log('📦 답변완료 VOC 데이터 수신 성공:', data);
-        setAnsweredList(data);
-      }
-    };
-    
-    // 마지막 동기화 기록 가져오기
-    const fetchSyncStatus = async () => {
-      const { data, error } = await supabase
-        .from('knowledge_base')
-        .select('content')
-        .eq('title', '[SYSTEM] LAST_SYNC')
-        .single();
-        
-      if (data && !error) {
-        try {
-          setSyncStatus(JSON.parse(data.content));
-        } catch {
-          console.warn('마지막 VOC 동기화 정보를 해석하지 못했습니다.');
-        }
-      }
-    };
-    
-    fetchUnansweredVocList();
-    fetchAnsweredVocList();
-    fetchSyncStatus();
-  }, []);
+    void refreshVocData();
+  }, [refreshVocData]);
 
   const getSeasonInfo = () => {
     const month = new Date().getMonth() + 1;
@@ -228,13 +218,18 @@ const VOCAssistant: React.FC = () => {
         <div className="sync-status-bar">
           <div className="sync-auto-indicator">
             <span className="sync-icon">🤖</span>
-            <span className="sync-text">크롤러가 15분마다 최신 데이터를 자동으로 수집 중입니다.</span>
+            <span className="sync-text">전용 수집 PC가 15분마다 최신 데이터를 자동으로 수집합니다.</span>
             {syncStatus && (
               <span className="sync-info-highlight">
                 (마지막 업데이트: {syncStatus.synced_at} | 업데이트자: {syncStatus.synced_by_name})
               </span>
             )}
           </div>
+          <CrawlerSyncButton
+            target="voc"
+            label="최신 VOC 수동 동기화"
+            onComplete={refreshVocData}
+          />
         </div>
       </div>
 
