@@ -18,6 +18,7 @@ const LunchRoulette = () => {
   const [isLoadingNames, setIsLoadingNames] = useState(true);
   const [raceParticipants, setRaceParticipants] = useState<Participant[]>([]);
   const [raceRun, setRaceRun] = useState(0);
+  const [mapHeight, setMapHeight] = useState(620);
   const [winnerCount, setWinnerCount] = useState(1);
   const [results, setResults] = useState<RaceResult[]>([]);
   const [isRacing, setIsRacing] = useState(false);
@@ -49,6 +50,7 @@ const LunchRoulette = () => {
     const host = boardRef.current;
     const width = host.clientWidth;
     const height = Math.max(620, Math.min(900, Math.round(width * 1.72)));
+    setMapHeight(height);
     const engine = Matter.Engine.create({ gravity: { x: 0, y: 1.12, scale: 0.001 } });
     const render = Matter.Render.create({ element: host, engine, options: { width, height, wireframes: false, background: 'transparent', pixelRatio: window.devicePixelRatio || 1 } });
     const runner = Matter.Runner.create();
@@ -92,7 +94,7 @@ const LunchRoulette = () => {
 
   return <main className="lunch-roulette lunch-roulette--physics">
     <header className="lunch-roulette__hero"><span>TEAM BREAK TIME · PHYSICS EDITION</span><h1>🎲 점심 내기 룰렛</h1><p>실제 물리 엔진으로 공이 굴러갑니다. 공이 많을수록 오늘의 커피를 살 확률도 높아집니다.</p></header>
-    <section className="physics-game"><div className="physics-board-shell"><div className="physics-board-heading"><span>☕ COFFEE FALLS</span><strong>{isRacing ? 'DROP IN PROGRESS' : 'MARBLE DROP MAP'}</strong><small>FIRST TO CUP WINS</small></div><div className="physics-board" ref={boardRef}><div className="physics-start-badge">START<br />DROP</div><div className="physics-goal"><span>☕</span><b>WINNER CUP</b><span>☕</span></div></div></div>
+    <section className="physics-game"><div className="physics-board-shell"><div className="physics-board-heading"><span>☕ COFFEE FALLS</span><strong>{isRacing ? 'DROP IN PROGRESS' : 'MARBLE DROP MAP'}</strong><small>FIRST TO CUP WINS</small></div><div className="physics-board" ref={boardRef} style={{ height: mapHeight }}><div className="physics-start-badge">START<br />DROP</div><div className="physics-goal"><span>☕</span><b>WINNER CUP</b><span>☕</span></div></div></div>
       <aside className="physics-result"><span className="lunch-roulette__panel-label">TODAY&apos;S PICK</span><h2>오늘의 당첨자</h2>{results.length ? <ol>{results.map((result) => <li key={result.name}><em>{result.rank}등</em><strong>{result.name}</strong><small>결승 컵 도착</small></li>)}</ol> : <div className="physics-result__empty"><span>🥤</span><p>공이 컵에 가장 먼저<br />도착한 사람이 당첨!</p></div>}<button type="button" onClick={() => void copyResult()} disabled={!results.length}>결과 복사</button></aside>
     </section>
     <section className="participant-picker"><div className="participant-picker__head"><div><span>TEAM SCHEDULER</span><h2>참가자와 공 개수</h2><p>공유 스케줄 · 업무 트래커에 사용된 이름을 불러왔습니다.</p></div><b>{participants.length}명 참여 · 공 {participants.reduce((total, participant) => total + participant.balls, 0)}개</b></div>
