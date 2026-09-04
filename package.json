@@ -26,6 +26,7 @@
     "lucide-react": "^1.14.0",
     "node-cron": "^4.2.1",
     "ora": "^5.4.1",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.20.0",
     "puppeteer": "^24.42.0",
     "qrcode.react": "^4.2.0",
