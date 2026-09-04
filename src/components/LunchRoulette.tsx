@@ -45,7 +45,7 @@ const LunchRoulette = () => {
   const participants = useMemo(() => teamNames.filter((name) => selected[name]?.included).map((name) => ({ name, balls: selected[name]?.balls || 1 })), [selected, teamNames]);
 
   useEffect(() => {
-    if (!raceRun || !boardRef.current || !raceParticipants.length) return;
+    if (!boardRef.current) return;
     const host = boardRef.current;
     const width = host.clientWidth;
     const height = Math.max(620, Math.min(900, Math.round(width * 1.72)));
@@ -64,7 +64,7 @@ const LunchRoulette = () => {
       const columns = row % 2 ? 5 : 4;
       bodies.push(Matter.Bodies.circle(width * .25 + column * (width * .5 / Math.max(1, columns - 1)) + (row % 2 ? -width * .055 : 0), 155 + row * 88, 8, pegStyle));
     }
-    const balls: RaceBall[] = raceParticipants.flatMap((participant, playerIndex) => Array.from({ length: participant.balls }, (_, ballIndex) => {
+    const balls: RaceBall[] = (raceRun ? raceParticipants : []).flatMap((participant, playerIndex) => Array.from({ length: participant.balls }, (_, ballIndex) => {
       const ball = Matter.Bodies.circle(width / 2 + ((playerIndex * 19 + ballIndex * 31) % 90) - 45, 48 + ballIndex * 5, 13, { restitution: .78, friction: .004, frictionAir: .0015, render: { fillStyle: ballColors[playerIndex % ballColors.length], strokeStyle: '#fff', lineWidth: 2 } }) as RaceBall;
       ball.playerName = participant.name; Matter.Body.setVelocity(ball, { x: ((playerIndex + ballIndex) % 3 - 1) * .9, y: 0 }); return ball;
     }));
@@ -77,12 +77,12 @@ const LunchRoulette = () => {
       if (finishers.size >= winnerCount) endRace();
     });
     Matter.Events.on(engine, 'beforeUpdate', onTick);
-    const safetyTimer = window.setTimeout(() => {
+    const safetyTimer = raceRun ? window.setTimeout(() => {
       if (ending) return;
       raceParticipants.filter((participant) => !finishers.has(participant.name)).slice(0, winnerCount - finishers.size).forEach((participant) => finishers.add(participant.name));
       setResults([...finishers].map((name, index) => ({ name, rank: index + 1 }))); endRace();
-    }, 15000);
-    return () => { window.clearTimeout(safetyTimer); Matter.Events.off(engine, 'beforeUpdate', onTick); Matter.Render.stop(render); Matter.Runner.stop(runner); Matter.Composite.clear(engine.world, false); Matter.Engine.clear(engine); render.canvas.remove(); render.textures = {}; };
+    }, 15000) : undefined;
+    return () => { if (safetyTimer) window.clearTimeout(safetyTimer); Matter.Events.off(engine, 'beforeUpdate', onTick); Matter.Render.stop(render); Matter.Runner.stop(runner); Matter.Composite.clear(engine.world, false); Matter.Engine.clear(engine); render.canvas.remove(); render.textures = {}; };
   }, [raceParticipants, raceRun, winnerCount]);
 
   const updateMember = (name: string, patch: Partial<{ included: boolean; balls: number }>) => { setSelected((current) => ({ ...current, [name]: { included: current[name]?.included ?? true, balls: current[name]?.balls ?? 1, ...patch } })); setResults([]); };
