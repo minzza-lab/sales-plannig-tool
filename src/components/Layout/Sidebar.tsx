@@ -200,6 +200,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
             {openGroups.util && (
               <ul className="accordion-content">
                 <li>
+                  <NavLink to="/tools/lunch-roulette" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎲</span> 점심 내기 룰렛
+                  </NavLink>
+                </li>
+                <li>
                   <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🔍</span> QR 코드 생성기
                   </NavLink>

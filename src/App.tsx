@@ -34,6 +34,7 @@ const QRVerifier = lazy(() => import('./components/QRVerifier'))
 const TeamWorkspace = lazy(() => import('./components/TeamWorkspace'))
 const SalesSchedulePerformance = lazy(() => import('./components/SalesSchedulePerformance'))
 const ApprovalCoverSplitter = lazy(() => import('./components/ApprovalCoverSplitter'))
+const LunchRoulette = lazy(() => import('./components/LunchRoulette'))
 const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
 const SportsSalesDashboard = lazy(() => import('./components/SportsSalesDashboard'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
@@ -133,6 +134,7 @@ function App() {
                 <Route path="tools/team-workspace" element={<TeamWorkspace />} />
                 <Route path="tools/sales-schedule-performance" element={<SalesSchedulePerformance />} />
                 <Route path="tools/approval-cover-splitter" element={<ApprovalCoverSplitter />} />
+                <Route path="tools/lunch-roulette" element={<LunchRoulette />} />
                 <Route path="tools/room-state" element={<RoomStateDashboard />} />
                 <Route path="tools/sports-sales" element={<SportsSalesDashboard />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
