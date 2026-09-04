@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.105.3",
+    "@types/matter-js": "^0.20.2",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.5",
@@ -24,6 +25,7 @@
     "jspdf": "^3.0.4",
     "jszip": "^3.10.1",
     "lucide-react": "^1.14.0",
+    "matter-js": "^0.20.0",
     "node-cron": "^4.2.1",
     "ora": "^5.4.1",
     "pdf-lib": "^1.17.1",
