@@ -5,6 +5,8 @@ import './LunchRoulette.css';
 
 type TeamRow = { assignee_names?: string[]; created_by_name?: string };
 type RaceResult = { name: string; rank: number };
+const EXCLUDED_PARTICIPANT_NAMES = new Set(['Google Calendar 가져오기']);
+const DEFAULT_PARTICIPANT_NAMES = ['강연기'];
 
 const LunchRoulette = () => {
   const gameHostRef = useRef<HTMLDivElement>(null);
@@ -27,7 +29,7 @@ const LunchRoulette = () => {
       const [eventsResponse, tasksResponse] = await Promise.all([supabase.from('team_calendar_events').select('assignee_names, created_by_name'), supabase.from('work_tasks').select('assignee_names, created_by_name')]);
       if (!active) return;
       const rows = [...((eventsResponse.data || []) as TeamRow[]), ...((tasksResponse.data || []) as TeamRow[])];
-      const names = [...new Set(rows.flatMap((row) => [...(row.assignee_names || []), row.created_by_name || '']).map((name) => name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko-KR'));
+      const names = [...new Set([...rows.flatMap((row) => [...(row.assignee_names || []), row.created_by_name || '']), ...DEFAULT_PARTICIPANT_NAMES].map((name) => name.trim()).filter((name) => Boolean(name) && !EXCLUDED_PARTICIPANT_NAMES.has(name)))].sort((a, b) => a.localeCompare(b, 'ko-KR'));
       setTeamNames(names);
       setSelected((current) => Object.fromEntries(names.map((name) => [name, current[name] || { included: true, balls: 1 }])));
       setIsLoadingNames(false);
