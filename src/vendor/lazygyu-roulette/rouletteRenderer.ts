@@ -131,38 +131,10 @@ export class RouletteRenderer {
     resizing();
   }
 
-  private async _loadImage(url: string): Promise<HTMLImageElement> {
-    return new Promise((rs) => {
-      const img = new Image();
-      img.addEventListener('load', () => {
-        rs(img);
-      });
-      img.src = url;
-    });
-  }
-
   private async _load(): Promise<void> {
-    const loadPromises = [
-      { name: '챔루', imgUrl: new URL('../assets/images/chamru.png', import.meta.url) },
-      { name: '쿠빈', imgUrl: new URL('../assets/images/kubin.png', import.meta.url) },
-      { name: '꽉변', imgUrl: new URL('../assets/images/kkwak.png', import.meta.url) },
-      { name: '꽉변호사', imgUrl: new URL('../assets/images/kkwak.png', import.meta.url) },
-      { name: '꽉 변호사', imgUrl: new URL('../assets/images/kkwak.png', import.meta.url) },
-      { name: '주누피', imgUrl: new URL('../assets/images/junyoop.png', import.meta.url) },
-      { name: '왈도쿤', imgUrl: new URL('../assets/images/waldokun.png', import.meta.url) },
-    ].map(({ name, imgUrl }) => {
-      return (async () => {
-        this._images[name] = await this._loadImage(imgUrl.toString());
-      })();
-    });
-
-    loadPromises.push(
-      (async () => {
-        await this._loadImage(new URL('../assets/images/ff.svg', import.meta.url).toString());
-      })()
-    );
-
-    await Promise.all(loadPromises);
+    // The original demo preloads image avatars for a few public streamer names.
+    // This host uses scheduler names, so avoid waiting forever on unavailable
+    // demo-only image paths before drawing the game canvas.
   }
 
   private getMarbleImage(name: string): CanvasImageSource | undefined {
