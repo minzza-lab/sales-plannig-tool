@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import './App.css'
+import ActivityTracker from './components/ActivityTracker'
 
 const MainLayout = lazy(() => import('./components/Layout/MainLayout'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -95,6 +96,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      {session && <ActivityTracker userId={session.user.id} />}
       <Suspense fallback={<AppLoader />}>
         <Routes>
           {!session ? (
