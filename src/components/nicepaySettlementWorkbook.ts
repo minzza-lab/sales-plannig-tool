@@ -292,6 +292,11 @@ export const buildSettlementWorkbook = (
     if (!byDate.has(date)) byDate.set(date, []);
   });
   const mappingEndRow = Math.max(6, 5 + mappings.length);
+  const exactMappingRows = new Map<string, number>();
+  mappings.forEach((rule, index) => {
+    const keyword = rule.keyword.trim().toLowerCase();
+    if (keyword) exactMappingRows.set(keyword, 6 + index);
+  });
   Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, dateRows], dateIndex) => {
     const [, month, day] = date.split("-");
     const sheet = workbook.addWorksheet(`${month}월${day}일`);
@@ -326,8 +331,12 @@ export const buildSettlementWorkbook = (
         toCellValue(getValue(row, ["TID"])), toCellValue(getValue(row, ["상태"])), toCellValue(getValue(row, ["원TID"])),
       ];
       const rowNumber = 4 + index;
+      const productName = String(getValue(row, ["상품명"])).trim();
+      const exactMappingRow = exactMappingRows.get(productName.toLowerCase());
       excelRow.getCell(24).value = {
-        formula: `IFERROR(LOOKUP(2,1/(ISNUMBER(SEARCH(매핑데이터!$C$6:$C$${mappingEndRow},S${rowNumber}))*(매핑데이터!$C$6:$C$${mappingEndRow}<>"")),매핑데이터!$D$6:$D$${mappingEndRow}),"미분류")`,
+        formula: exactMappingRow
+          ? `매핑데이터!$D$${exactMappingRow}`
+          : `IFERROR(LOOKUP(2,1/(ISNUMBER(SEARCH(매핑데이터!$C$6:$C$${mappingEndRow},S${rowNumber}))*(매핑데이터!$C$6:$C$${mappingEndRow}<>"")),매핑데이터!$D$6:$D$${mappingEndRow}),"미분류")`,
         result: row.__category,
       };
       excelRow.getCell(25).value = { formula: `N${rowNumber}`, result: row.__settlement };
