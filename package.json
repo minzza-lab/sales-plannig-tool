@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:nicepay-vat": "node --experimental-strip-types --test src/components/nicepayVatEngine.test.ts",
+    "verify:nicepay-vat-sample": "node --experimental-strip-types scripts/verify-nicepay-vat-sample.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
