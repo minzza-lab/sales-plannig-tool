@@ -1,7 +1,7 @@
 import XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "../src/components/nicepayVatDefaults.ts";
-import { buildVatSettlementWorkbook } from "../src/components/nicepayVatWorkbook.ts";
+import { buildVatSettlementWorkbook, REFERENCE_HIDDEN_REPORT_COLUMNS } from "../src/components/nicepayVatWorkbook.ts";
 import { isNicepayTargetMid, processVatSettlement, type RawRow } from "../src/components/nicepayVatEngine.ts";
 
 const sourcePath = process.argv[2];
@@ -19,4 +19,6 @@ const output = new ExcelJS.Workbook();
 buildVatSettlementWorkbook(output, rows, result, DEFAULT_CLASSIFICATION_RULES, DEFAULT_PACKAGE_COMPONENTS, DEFAULT_FACILITIES, true);
 const buffer = await output.xlsx.writeBuffer();
 if (!output.worksheets.some((sheet) => sheet.name === "2607월 부가세") || buffer.byteLength < 1000) throw new Error("보고서 Excel 생성 검증에 실패했습니다.");
+const report = output.getWorksheet("2607월 부가세");
+if (!report || REFERENCE_HIDDEN_REPORT_COLUMNS.some((column) => !report.getColumn(column).hidden)) throw new Error("기준 보고서 숨김 열 복제 검증에 실패했습니다.");
 console.log(JSON.stringify({ sourceRows: allRows.length, midExcluded: allRows.length - rows.length, inputRows: rows.length, processedRows: result.report.outputCount, classified: result.report.classifiedCount, unclassified: result.report.unclassifiedCount, allocationRows: result.summaries.length, feeBefore: result.report.feeBeforeAllocation, feeAfter: result.report.feeAfterAllocation, allocationDifferences: result.report.allocationDifferenceCount, outputSheets: output.worksheets.length, outputBytes: buffer.byteLength }, null, 2));

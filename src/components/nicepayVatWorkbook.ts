@@ -4,6 +4,8 @@ import { summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts
 
 const border = { top: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, left: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, bottom: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, right: { style: "thin" as const, color: { argb: "FF7F7F7F" } } };
 const moneyFormat = "#,##0;[Red]-#,##0;0";
+// Hidden columns copied from the supplied 2607월 부가세 reference sheet.
+export const REFERENCE_HIDDEN_REPORT_COLUMNS = ["D", "E", "F", "G", "H", "K", "L", "N", "P", "Q", "T", "U", "V", "W", "AH", "AI", "AJ", "AK", "AL", "AN", "AQ", "AR", "AS", "AT", "AV", "AY", "AZ", "BA", "BB", "BC", "BH"];
 const columnNumber = (column: string) => column.split("").reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
 const cellText = (row: RawRow, names: string[]) => String(valueByHeaders(row, names) ?? "");
 
@@ -150,6 +152,7 @@ export const buildVatSettlementWorkbook = (
   [8, 15, 12, 12, 12, 12, 16, 13, 14, 12, 12, 12, 11, 13, 14, 14, 18, 12, 42, 12, 31, 12, 31, 26, 13, 13].forEach((width, index) => { report.getColumn(index + 1).width = width; });
   report.getColumn("P").width = 18; report.getColumn("Q").width = 22; report.getColumn("U").width = 34;
   for (let column = 30; column <= 66; column += 1) report.getColumn(column).width = column === 30 ? 26 : 14;
+  REFERENCE_HIDDEN_REPORT_COLUMNS.forEach((column) => { report.getColumn(column).hidden = true; });
   report.views = [{ state: "frozen", ySplit: 3, xSplit: 2, showGridLines: true }];
   report.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 26 } };
 
