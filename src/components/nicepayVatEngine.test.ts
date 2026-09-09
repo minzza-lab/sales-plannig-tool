@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { processVatSettlement } from "./nicepayVatEngine.ts";
+import { isNicepayTargetMid, processVatSettlement } from "./nicepayVatEngine.ts";
 
 const facilities = [
   { id: "room", name: "객실료", excelColumn: "AE", displayOrder: 1, enabled: true },
@@ -16,6 +16,17 @@ const components = [
   { id: "room", packageName: "워터PKG", facilityName: "객실료", baseAmount: 93000, enabled: true },
   { id: "water", packageName: "워터PKG", facilityName: "워터파크", baseAmount: 40000, enabled: true },
 ];
+
+test("only configured Nicepay MID values are accepted", () => {
+  assert.equal(isNicepayTargetMid("1M"), true);
+  assert.equal(isNicepayTargetMid(" 4m "), true);
+  assert.equal(isNicepayTargetMid("5M"), true);
+  assert.equal(isNicepayTargetMid("shinanrs1m"), true);
+  assert.equal(isNicepayTargetMid("shinanrs4m"), true);
+  assert.equal(isNicepayTargetMid("2M"), false);
+  assert.equal(isNicepayTargetMid("shinanrs21m"), false);
+  assert.equal(isNicepayTargetMid(""), false);
+});
 
 test("highest priority and exclusion classify the correct package", () => {
   const result = processVatSettlement([

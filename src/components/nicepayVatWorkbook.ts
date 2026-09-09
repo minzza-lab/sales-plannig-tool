@@ -28,7 +28,7 @@ const styleTable = (sheet: Worksheet, fromRow: number, toRow: number, fromColumn
 
 const addRawSheet = (workbook: Workbook, rows: RawRow[]) => {
   const sheet = workbook.addWorksheet("원본 데이터");
-  const headers = rows[0] ? Object.keys(rows[0]) : [];
+  const headers = rows[0] ? Object.keys(rows[0]).filter((header) => !header.startsWith("__")) : [];
   sheet.addRow(headers);
   rows.forEach((row) => sheet.addRow(headers.map((header) => row[header] ?? "")));
   setHeader(sheet, 1, 1, Math.max(1, headers.length));

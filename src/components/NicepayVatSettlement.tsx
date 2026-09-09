@@ -4,7 +4,7 @@ import { CheckCircle2, Download, FileSpreadsheet, Plus, Save, Trash2, UploadClou
 import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
-import { type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
+import { isNicepayTargetMid, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 
 type Tab = "upload" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
@@ -25,13 +25,18 @@ const detectHeaderRow = (sheet: XLSX.WorkSheet) => {
   return best + 1;
 };
 
-const parseSheetRows = (workbook: XLSX.WorkBook, sheetName: string, headerRow: number): RawRow[] => {
+type ParsedSheetRows = { rows: RawRow[]; sourceRowCount: number; excludedMidCount: number };
+
+const parseSheetRows = (workbook: XLSX.WorkBook, sheetName: string, headerRow: number): ParsedSheetRows => {
   const sheet = workbook.Sheets[sheetName];
   const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
   const headerIndex = headerRow - 1;
   const headers = Array.from({ length: range.e.c + 1 }, (_, column) => String(sheet[XLSX.utils.encode_cell({ r: headerIndex, c: column })]?.v ?? `열${column + 1}`).trim());
+  const midHeader = headers.find((header) => header.replace(/[\n\r\s]/g, "").toUpperCase() === "MID");
   const identifiers = /승인번호|계좌번호|휴대폰번호|주문번호|TID|MID|원거래/i;
   const rows: RawRow[] = [];
+  let sourceRowCount = 0;
+  let excludedMidCount = 0;
   for (let row = headerIndex + 1; row <= range.e.r; row += 1) {
     const record: RawRow = {};
     let hasValue = false;
@@ -41,9 +46,15 @@ const parseSheetRows = (workbook: XLSX.WorkBook, sheetName: string, headerRow: n
       record[header] = value;
       if (value !== "" && value !== undefined && value !== null) hasValue = true;
     });
-    if (hasValue) rows.push(record);
+    if (hasValue) {
+      sourceRowCount += 1;
+      if (midHeader && isNicepayTargetMid(record[midHeader])) {
+        record.__sourceRowNumber = row + 1;
+        rows.push(record);
+      } else excludedMidCount += 1;
+    }
   }
-  return rows;
+  return { rows, sourceRowCount, excludedMidCount };
 };
 
 const NicepayVatSettlement = () => {
@@ -54,6 +65,8 @@ const NicepayVatSettlement = () => {
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState(3);
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
+  const [sourceRowCount, setSourceRowCount] = useState(0);
+  const [excludedMidCount, setExcludedMidCount] = useState(0);
   const [rules, setRules] = useState<ClassificationRule[]>(DEFAULT_CLASSIFICATION_RULES);
   const [components, setComponents] = useState<PackageComponent[]>(DEFAULT_PACKAGE_COMPONENTS);
   const [facilities, setFacilities] = useState<Facility[]>(DEFAULT_FACILITIES);
@@ -94,7 +107,7 @@ const NicepayVatSettlement = () => {
   useEffect(() => { localStorage.setItem("nicepay_vat_step3_settings_v1", JSON.stringify({ rules, components, facilities })); }, [rules, components, facilities]);
 
   const effectiveRules = useMemo(() => [
-    ...Object.entries(manualOverrides).map(([rowNumber, override]) => ({ id: `manual-${rowNumber}`, priority: -10000, includeKeywords: [String(valueByHeaders(rawRows[Number(rowNumber) - 4] || {}, ["원본 상품명", "상품명"]))], excludeKeywords: [], standardProductName: override.standardProductName, packageName: override.packageName, enabled: true, description: "사용자 수동 수정" })),
+    ...Object.entries(manualOverrides).map(([rowNumber, override]) => ({ id: `manual-${rowNumber}`, priority: -10000, includeKeywords: [String(valueByHeaders(rawRows.find((row) => Number(row.__sourceRowNumber) === Number(rowNumber)) || {}, ["원본 상품명", "상품명"]))], excludeKeywords: [], standardProductName: override.standardProductName, packageName: override.packageName, enabled: true, description: "사용자 수동 수정" })),
     ...rules,
   ], [manualOverrides, rawRows, rules]);
   const result = useMemo(() => processVatSettlement(rawRows, effectiveRules, components, facilities), [rawRows, effectiveRules, components, facilities]);
@@ -106,10 +119,11 @@ const NicepayVatSettlement = () => {
     const firstSheet = nextWorkbook.SheetNames[0] || "";
     setWorkbook(nextWorkbook); setFileName(file.name); setSheetName(firstSheet);
     const nextHeader = detectHeaderRow(nextWorkbook.Sheets[firstSheet]);
-    setHeaderRow(nextHeader); setRawRows(parseSheetRows(nextWorkbook, firstSheet, nextHeader)); setManualOverrides({});
-    setMessage(`${file.name}에서 ${nextWorkbook.SheetNames.length}개 시트를 확인했습니다. ${nextHeader}행 헤더 기준으로 데이터를 불러왔습니다.`);
+    const parsed = parseSheetRows(nextWorkbook, firstSheet, nextHeader);
+    setHeaderRow(nextHeader); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({});
+    setMessage(`${file.name}에서 ${nextWorkbook.SheetNames.length}개 시트를 확인했습니다. ${nextHeader}행 헤더 기준으로 MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 불러왔습니다. (${parsed.excludedMidCount.toLocaleString()}행 제외)`);
   };
-  const applySheet = () => { if (!workbook || !sheetName) return; setRawRows(parseSheetRows(workbook, sheetName, headerRow)); setManualOverrides({}); setMessage(`${sheetName} 시트 ${headerRow}행을 헤더로 적용했습니다.`); };
+  const applySheet = () => { if (!workbook || !sheetName) return; const parsed = parseSheetRows(workbook, sheetName, headerRow); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({}); setMessage(`${sheetName} 시트 ${headerRow}행을 헤더로 적용했습니다. MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 반영합니다.`); };
   const saveSettings = async () => {
     setIsSaving(true);
     const toRule = (item: ClassificationRule) => ({ priority: item.priority, include_keywords: item.includeKeywords, exclude_keywords: item.excludeKeywords, standard_product_name: item.standardProductName, package_name: item.packageName, enabled: item.enabled, description: item.description });
@@ -147,7 +161,7 @@ const NicepayVatSettlement = () => {
     <div className="vat-notice"><b>{settingsMode === "database" ? "공유 DB 설정 사용" : "브라우저 임시 설정"}</b><span>{message}</span></div>
     <nav className="vat-tabs">{tabs.map(([value, label]) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}</nav>
 
-    {tab === "upload" && <section className="vat-card"><h2>1. 로우데이터 업로드</h2><p>원본 파일은 수정하지 않습니다. 업로드 뒤 시트와 헤더 행을 변경해 전체 행을 다시 읽을 수 있습니다.</p><label className="vat-dropzone"><UploadCloud size={30} /><b>{fileName || "나이스페이 상세 거래일 파일 선택"}</b><small>.xls, .xlsx, .xlsm 지원</small><input ref={uploadRef} type="file" accept=".xls,.xlsx,.xlsm" onChange={(event) => event.target.files?.[0] && void loadFile(event.target.files[0])} /></label>{workbook && <div className="vat-upload-options"><label>시트<select value={sheetName} onChange={(event) => setSheetName(event.target.value)}>{workbook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label><label>헤더 행<input type="number" min="1" value={headerRow} onChange={(event) => setHeaderRow(Number(event.target.value) || 1)} /></label><button onClick={applySheet}>적용</button></div>}{rawRows.length > 0 && <><div className="vat-kpis"><b>입력 행 수 <strong>{result.report.inputCount.toLocaleString()}</strong></b><b>승인 <strong>{result.report.approvedCount.toLocaleString()}</strong></b><b>취소 <strong>{result.report.cancelledCount.toLocaleString()}</strong></b><b>미분류 <strong className={result.report.unclassifiedCount ? "bad" : ""}>{result.report.unclassifiedCount.toLocaleString()}</strong></b></div><div className="vat-preview"><table><thead><tr>{Object.keys(rawRows[0]).slice(0, 8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rawRows.slice(0, 8).map((row, index) => <tr key={index}>{Object.keys(rawRows[0]).slice(0, 8).map((header) => <td key={header}>{String(row[header] ?? "")}</td>)}</tr>)}</tbody></table></div></>}</section>}
+    {tab === "upload" && <section className="vat-card"><h2>1. 로우데이터 업로드</h2><p>원본 파일은 수정하지 않습니다. 업로드 뒤 시트와 헤더 행을 변경해 전체 행을 다시 읽을 수 있습니다. <b>MID 1M·4M·5M 외의 거래는 분류·집계·Excel 출력에서 제외됩니다.</b></p><label className="vat-dropzone"><UploadCloud size={30} /><b>{fileName || "나이스페이 상세 거래일 파일 선택"}</b><small>.xls, .xlsx, .xlsm 지원</small><input ref={uploadRef} type="file" accept=".xls,.xlsx,.xlsm" onChange={(event) => event.target.files?.[0] && void loadFile(event.target.files[0])} /></label>{workbook && <div className="vat-upload-options"><label>시트<select value={sheetName} onChange={(event) => setSheetName(event.target.value)}>{workbook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label><label>헤더 행<input type="number" min="1" value={headerRow} onChange={(event) => setHeaderRow(Number(event.target.value) || 1)} /></label><button onClick={applySheet}>적용</button></div>}{sourceRowCount > 0 && <><div className="vat-kpis"><b>원본 데이터 행 <strong>{sourceRowCount.toLocaleString()}</strong></b><b>MID 대상 행 <strong>{result.report.inputCount.toLocaleString()}</strong></b><b>MID 제외 <strong>{excludedMidCount.toLocaleString()}</strong></b><b>미분류 <strong className={result.report.unclassifiedCount ? "bad" : ""}>{result.report.unclassifiedCount.toLocaleString()}</strong></b></div>{rawRows.length > 0 && <div className="vat-preview"><table><thead><tr>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rawRows.slice(0, 8).map((row, index) => <tr key={index}>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <td key={header}>{String(row[header] ?? "")}</td>)}</tr>)}</tbody></table></div>}</>}</section>}
 
     {tab === "rules" && <section className="vat-card"><div className="vat-section-head"><div><h2>2. 상품 분류 기준</h2><p>작은 우선순위부터 적용됩니다. 포함 키워드는 모두 포함되어야 하고, 제외 키워드가 하나라도 있으면 제외됩니다.</p></div><button onClick={() => setRules((items) => [...items, { id: newId(), priority: (Math.max(0, ...items.map((item) => item.priority)) + 1), includeKeywords: [], excludeKeywords: [], standardProductName: "", packageName: "", enabled: true, description: "" }])}><Plus size={16} /> 규칙 추가</button></div><div className="vat-grid-table rules"><div className="row header"><span>우선순위</span><span>포함 키워드</span><span>제외 키워드</span><span>표준 상품명</span><span>PKG 분류명</span><span>사용</span><span>설명</span><span /></div>{rules.sort((a, b) => a.priority - b.priority).map((rule) => <div className="row" key={rule.id}><input type="number" value={rule.priority} onChange={(event) => updateRule(rule.id, { priority: Number(event.target.value) || 0 })} /><input value={rule.includeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { includeKeywords: splitKeywords(event.target.value) })} placeholder="워터, 조식" /><input value={rule.excludeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { excludeKeywords: splitKeywords(event.target.value) })} /><input value={rule.standardProductName} onChange={(event) => updateRule(rule.id, { standardProductName: event.target.value })} /><input value={rule.packageName} onChange={(event) => updateRule(rule.id, { packageName: event.target.value })} /><input type="checkbox" checked={rule.enabled} onChange={(event) => updateRule(rule.id, { enabled: event.target.checked })} /><input value={rule.description} onChange={(event) => updateRule(rule.id, { description: event.target.value })} /><button className="icon-danger" onClick={() => setRules((items) => items.filter((item) => item.id !== rule.id))}><Trash2 size={16} /></button></div>)}</div></section>}
 

@@ -108,6 +108,13 @@ export const money = (value: unknown): number => {
 
 export const text = (value: unknown) => String(value ?? "").trim();
 
+export const NICEPAY_TARGET_MIDS = ["1m", "4m", "5m"] as const;
+
+export const isNicepayTargetMid = (value: unknown) => {
+  const mid = text(value).replace(/\s/g, "").toLocaleLowerCase("en-US");
+  return NICEPAY_TARGET_MIDS.some((target) => mid === target || mid.endsWith(target) && !/\d/.test(mid.slice(0, -target.length).slice(-1)));
+};
+
 export const valueByHeaders = (row: RawRow, names: string[]) => {
   const keys = Object.keys(row);
   for (const name of names) {
@@ -158,7 +165,7 @@ export const toProcessedRows = (sourceRows: RawRow[], rules: ClassificationRule[
   const authenticationFee = money(valueByHeaders(source, ["인증수수료"]));
   const vat = money(valueByHeaders(source, ["VAT", "부가세"]));
   return {
-    rowNumber: index + 4,
+    rowNumber: Number(source.__sourceRowNumber) || index + 4,
     source,
     productName,
     standardProductName: result.standardProductName,
