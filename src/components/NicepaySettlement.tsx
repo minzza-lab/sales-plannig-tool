@@ -14,14 +14,17 @@ import {
   ReceiptText,
   RotateCcw,
   Settings2,
-  Split,
   Trash2,
   UploadCloud,
   XCircle,
 } from "lucide-react";
 import "./NicepaySettlement.css";
 import { NICEPAY_DEFAULT_MAPPINGS } from "./nicepayDefaultMappings";
-import { buildSettlementPrintHtml, buildSettlementWorkbook } from "./nicepaySettlementWorkbook";
+import {
+  buildSettlementPrintHtml,
+  buildSettlementWorkbook,
+  type SettlementManualAdjustment,
+} from "./nicepaySettlementWorkbook";
 
 type RawRow = Record<string, unknown>;
 type MappingRule = {
@@ -166,10 +169,11 @@ const classifyProduct = (productName: string, mappings: MappingRule[]) => {
   const sorted = [...mappings]
     .filter((rule) => rule.keyword.trim())
     .sort((a, b) => b.keyword.length - a.keyword.length);
-  return (
+  const mapped =
     sorted.find((rule) => target.includes(rule.keyword.trim().toLowerCase()))
-      ?.result || "미분류"
-  );
+      ?.result;
+  if (mapped) return mapped;
+  return /비씨|\bBC\b/i.test(productName) ? "패키지外" : "미분류";
 };
 
 const detectMappingCandidates = (rows: RawRow[], mappings: MappingRule[]) => {
@@ -660,16 +664,9 @@ const UploadBox = ({
   </label>
 );
 
-type NicepaySettlementProps = { mode?: "settlement" | "deposit" };
-
-const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
-  mode = "settlement",
-}) => {
-  const isDepositMode = mode === "deposit";
+const NicepaySettlement: React.FC = () => {
   const configInputRef = useRef<HTMLInputElement>(null);
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(
-    isDepositMode ? 1 : 2,
-  );
+  const [activeStep, setActiveStep] = useState<1 | 2>(1);
   const [mappings, setMappings] = useState<MappingRule[]>(() => {
     try {
       const stored = JSON.parse(
@@ -732,6 +729,8 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
 
   const [settlementFile, setSettlementFile] = useState<File>();
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([]);
+  const [manualAdjustments, setManualAdjustments] = useState<Record<string, SettlementManualAdjustment>>({});
+  const [mismatchOpen, setMismatchOpen] = useState(false);
 
   const [transactionFile, setTransactionFile] = useState<File>();
   const [allocatedRows, setAllocatedRows] = useState<AllocatedRow[]>([]);
@@ -784,6 +783,8 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     setBankFile(file);
     setReconciliation([]);
     setDepositMatches({});
+    setClassifiedRows([]);
+    setManualAdjustments({});
     try {
       const { meta } = await readBankWorkbook(file);
       const detectedDate = normalizeDate(meta.period);
@@ -896,6 +897,8 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
       .filter((row) => row.__date);
 
   const handleSettlementClassification = async () => {
+    if (reconciliation.length === 0)
+      return setMessage("STEP 1 입금 내역 검증을 먼저 완료해 주세요.");
     if (!settlementFile)
       return setMessage("정산일 기준 상세내역 파일을 선택해 주세요.");
     setIsProcessing(true);
@@ -914,9 +917,15 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
         "입금일",
       ], nextMappings);
       setClassifiedRows(rows);
+      const settlementByDate = new Map<string, number>();
+      rows.forEach((row) => settlementByDate.set(row.__date, (settlementByDate.get(row.__date) || 0) + row.__settlement));
+      const depositByDate = new Map(reconciliation.map((row) => [row.date, row.niceAmount]));
+      const mismatchCount = Array.from(new Set([...depositByDate.keys(), ...settlementByDate.keys()]))
+        .filter((date) => (depositByDate.get(date) || 0) !== (settlementByDate.get(date) || 0)).length;
+      setMismatchOpen(mismatchCount > 0);
       const unmapped = rows.filter((row) => row.__category === "미분류").length;
       setMessage(
-        `${rows.length.toLocaleString()}건을 정산일·상품별로 분류했습니다.${newlyDetected ? ` 새 상품 ${newlyDetected.toLocaleString()}건을 검토 목록에 추가했습니다.` : ""}${unmapped ? ` 미분류 ${unmapped.toLocaleString()}건을 확인해 주세요.` : ""}`,
+        `${rows.length.toLocaleString()}건을 정산일·상품별로 분류했습니다.${mismatchCount ? ` 입금액과 다른 날짜 ${mismatchCount.toLocaleString()}일은 보류 내역을 입력해 주세요.` : " 입금 합계와 정산 합계가 모두 일치합니다."}${newlyDetected ? ` 새 상품 ${newlyDetected.toLocaleString()}건을 검토 목록에 추가했습니다.` : ""}${unmapped ? ` 미분류 ${unmapped.toLocaleString()}건을 확인해 주세요.` : ""}`,
       );
     } catch (error) {
       setMessage(
@@ -1176,15 +1185,53 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     }
   };
 
-  const exportClassification = () =>
-    downloadWorkbook(
+  const settlementDateChecks = useMemo(() => {
+    const depositByDate = new Map(reconciliation.map((row) => [row.date, row.niceAmount]));
+    const settlementByDate = new Map<string, number>();
+    classifiedRows.forEach((row) => {
+      settlementByDate.set(row.__date, (settlementByDate.get(row.__date) || 0) + row.__settlement);
+    });
+    return Array.from(new Set([...depositByDate.keys(), ...settlementByDate.keys()]))
+      .sort()
+      .map((date) => {
+        const depositAmount = depositByDate.get(date) || 0;
+        const settlementAmount = settlementByDate.get(date) || 0;
+        const sourceDifference = depositAmount - settlementAmount;
+        const adjustment = manualAdjustments[date];
+        const adjustedDifference = sourceDifference
+          + (adjustment?.type === "보류해제" ? adjustment.amount : 0)
+          - (adjustment?.type === "지급보류" ? adjustment.amount : 0);
+        return { date, depositAmount, settlementAmount, sourceDifference, adjustment, adjustedDifference };
+      });
+  }, [classifiedRows, manualAdjustments, reconciliation]);
+  const mismatchedDates = settlementDateChecks.filter((row) => row.sourceDifference !== 0);
+  const unresolvedDates = mismatchedDates.filter(
+    (row) => !row.adjustment || row.adjustment.amount <= 0 || row.adjustedDifference !== 0,
+  );
+  const settlementDepositControls = Object.fromEntries(settlementDateChecks.map((row) => [
+    row.date,
+    { depositAmount: row.depositAmount, adjustment: row.adjustment },
+  ]));
+
+  const validateBeforeOutput = () => {
+    if (unresolvedDates.length === 0) return true;
+    setMismatchOpen(true);
+    setMessage("입금 합계와 정산 합계가 다른 날짜의 보류 내역을 먼저 입력해 주세요.");
+    return false;
+  };
+
+  const exportClassification = () => {
+    if (!validateBeforeOutput()) return;
+    void downloadWorkbook(
       `통합정산가공_${new Date().toISOString().slice(0, 10)}.xlsx`,
       (workbook) => {
-        buildSettlementWorkbook(workbook, classifiedRows, mappings);
+        buildSettlementWorkbook(workbook, classifiedRows, mappings, settlementDepositControls);
       },
     );
+  };
 
   const printAllSettlementVouchers = () => {
+    if (!validateBeforeOutput()) return;
     const printWindow = window.open("", "_blank", "width=1100,height=850");
     if (!printWindow) {
       setMessage("인쇄 창이 차단되었습니다. 브라우저의 팝업 허용 후 다시 눌러 주세요.");
@@ -1192,7 +1239,7 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     }
     printWindow.opener = null;
     printWindow.document.open();
-    printWindow.document.write(buildSettlementPrintHtml(classifiedRows));
+    printWindow.document.write(buildSettlementPrintHtml(classifiedRows, settlementDepositControls));
     printWindow.document.close();
   };
 
@@ -1233,7 +1280,7 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
             summary.addRow([date, category, target, ...value]);
           });
         [5, 6, 7, 8, 9, 10].forEach((column) => {
-          summary.getColumn(column).numFmt = "#,##0;[Red](#,##0);-";
+          summary.getColumn(column).numFmt = "#,##0;[Red]-#,##0;0";
         });
         styleWorksheet(summary, [14, 20, 20, 10, 16, 16, 14, 14, 14, 16]);
         const detail = workbook.addWorksheet("안분상세");
@@ -1273,7 +1320,7 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
         );
         detail.getColumn(7).numFmt = "0.0%";
         [8, 9, 10, 11, 12, 13].forEach((column) => {
-          detail.getColumn(column).numFmt = "#,##0;[Red](#,##0);-";
+          detail.getColumn(column).numFmt = "#,##0;[Red]-#,##0;0";
         });
         styleWorksheet(
           detail,
@@ -1355,24 +1402,21 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     done: 4,
   }[depositProgress.phase];
 
+  // 기존 안분 로직은 설정 파일 호환을 위해 유지하되 현재 2단계 화면에서는 노출하지 않습니다.
+  void setTransactionFile;
+  void handleAllocation;
+  void exportAllocation;
+  void allocationSummary;
+
   return (
     <div className="nicepay-container">
       <header className="nicepay-hero">
         <div>
-          <span>
-            {isDepositMode
-              ? "INTERNAL DEPOSIT VERIFICATION"
-              : "NICEPAY SETTLEMENT WORKFLOW"}
-          </span>
-          <h1>{isDepositMode ? "입금 내역 검증" : "나이스페이 정산 분리기"}</h1>
-          <p>
-            {isDepositMode
-              ? "회사 입금 내역과 나이스정보통신 정산액을 날짜별로 대조합니다."
-              : "날짜별 품목 분류부터 알로 안분, 수수료와 부가세 정리까지 처리합니다."}
-          </p>
+          <span>NICEPAY SETTLEMENT WORKFLOW</span>
+          <h1>나이스페이 정산</h1>
+          <p>입금 내역 검증 후 정산 상세를 날짜별 시트와 입금전표로 만듭니다.</p>
         </div>
-        {!isDepositMode && (
-          <div className="nicepay-hero-actions">
+        <div className="nicepay-hero-actions">
             <input ref={configInputRef} type="file" accept=".xlsx" hidden onChange={(event) => void importSettings(event.target.files?.[0])} />
             <button className="nicepay-utility-button" onClick={() => void exportSettings()}>
               <Download size={16} /> 설정 내보내기
@@ -1386,27 +1430,25 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
             >
               <Settings2 size={17} /> 매핑·안분 설정{reviewMappings.length > 0 && <b>{reviewMappings.length}</b>} <ChevronDown size={16} />
             </button>
-          </div>
-        )}
+        </div>
       </header>
 
-      {!isDepositMode && (
-        <div className="nicepay-stepper two-step">
+      <div className="nicepay-stepper two-step">
           {(
             [
               {
-                id: 2,
+                id: 1,
                 number: 1,
-                eyebrow: "SETTLEMENT DATE",
-                title: "날짜별 품목 분류",
-                icon: PackageSearch,
+                eyebrow: "DEPOSIT CHECK",
+                title: "입금 내역 검증",
+                icon: GitCompareArrows,
               },
               {
-                id: 3,
+                id: 2,
                 number: 2,
-                eyebrow: "TRANSACTION DATE",
-                title: "수수료·부가세",
-                icon: Split,
+                eyebrow: "SETTLEMENT DATE",
+                title: "정산내역 시트 분리",
+                icon: PackageSearch,
               },
             ] as const
           ).map((step, index) => {
@@ -1432,10 +1474,9 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
               </React.Fragment>
             );
           })}
-        </div>
-      )}
+      </div>
 
-      {!isDepositMode && settingsOpen && (
+      {settingsOpen && (
         <section className="nicepay-settings-panel">
           <div className="nicepay-settings-heading">
             <div>
@@ -1672,11 +1713,11 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
       )}
 
       <main className="nicepay-workspace">
-        {isDepositMode && activeStep === 1 && (
+        {activeStep === 1 && (
           <section className="nicepay-stage deposit-only">
             <div className="nicepay-stage-heading">
               <div>
-                <span>INTERNAL CHECK</span>
+                <span>STEP 01</span>
                 <h2>입금 내역 대사</h2>
                 <p>은행 입금액과 나이스페이 정산금액을 날짜별로 비교합니다.</p>
               </div>
@@ -1706,9 +1747,14 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
                 {isProcessing ? "스크린샷 판독·분리 중..." : "입금 내역 분리 실행"}
               </button>
               {reconciliation.length > 0 && (
-                <button onClick={exportReconciliation}>
-                  <Download size={17} /> 날짜별 입금내역 엑셀
-                </button>
+                <>
+                  <button onClick={exportReconciliation}>
+                    <Download size={17} /> 날짜별 입금내역 엑셀
+                  </button>
+                  <button onClick={() => { setActiveStep(2); setMessage(""); }}>
+                    STEP 2 정산내역 올리기 <ArrowRight size={17} />
+                  </button>
+                </>
               )}
             </div>
             {reconciliation.length > 0 && (
@@ -1769,11 +1815,11 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
           </section>
         )}
 
-        {!isDepositMode && activeStep === 2 && (
+        {activeStep === 2 && (
           <section className="nicepay-stage">
             <div className="nicepay-stage-heading">
               <div>
-                <span>STEP 01</span>
+                <span>STEP 02</span>
                 <h2>정산일별 품목 분류</h2>
                 <p>
                   정산일 기준 상세내역을 키워드 규칙으로 상품군에 연결합니다.
@@ -1826,71 +1872,79 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
           </section>
         )}
 
-        {!isDepositMode && activeStep === 3 && (
-          <section className="nicepay-stage">
-            <div className="nicepay-stage-heading">
-              <div>
-                <span>STEP 02</span>
-                <h2>알로 안분·수수료·부가세</h2>
-                <p>
-                  거래일 기준 상세내역에 상품별 안분 규칙을 적용하고 세무 내역을
-                  만듭니다.
-                </p>
-              </div>
-              <ReceiptText size={34} />
-            </div>
-            <div className="nicepay-allocation-alert">
-              <Settings2 size={17} />
-              <span>
-                안분 합계가 100%인 상품만 세부 항목으로 나뉩니다. 미설정 상품은
-                원분류에 100% 반영됩니다.
-              </span>
-              <button onClick={() => setSettingsOpen(true)}>
-                안분 설정 열기
-              </button>
-            </div>
-            <div className="nicepay-upload-grid">
-              <UploadBox
-                title="거래일 기준 상세내역"
-                description="승인일·거래일이 포함된 나이스페이 상세 파일"
-                file={transactionFile}
-                onFile={setTransactionFile}
-              />
-            </div>
-            <div className="nicepay-action-row">
-              <button
-                className="primary"
-                disabled={isProcessing}
-                onClick={handleAllocation}
-              >
-                <Split size={17} />{" "}
-                {isProcessing ? "계산 중..." : "안분·부가세 계산"}
-              </button>
-              {allocatedRows.length > 0 && (
-                <button onClick={exportAllocation}>
-                  <Download size={17} /> 수수료·부가세 엑셀
-                </button>
-              )}
-            </div>
-            {allocatedRows.length > 0 && (
-              <div className="nicepay-category-grid tax">
-                {allocationSummary.slice(0, 12).map(([target, value]) => (
-                  <article key={target}>
-                    <span>{target}</span>
-                    <strong>{formatWon(value.amount)}</strong>
-                    <em>
-                      매출VAT {formatWon(value.vat)} · 수수료{" "}
-                      {formatWon(value.fee)}
-                    </em>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
       </main>
 
-      {isDepositMode && depositProgress.open && (
+      {mismatchOpen && mismatchedDates.length > 0 && (
+        <div className="nicepay-mismatch-overlay" role="dialog" aria-modal="true" aria-labelledby="nicepay-mismatch-title">
+          <section className="nicepay-mismatch-modal">
+            <div className="nicepay-mismatch-heading">
+              <div>
+                <span>DOWNLOAD CHECK</span>
+                <h2 id="nicepay-mismatch-title">입금·정산 금액 불일치</h2>
+                <p>차이가 발생한 날짜마다 확인한 보류 구분과 금액을 직접 입력해 주세요.</p>
+              </div>
+              <b>{unresolvedDates.length}일 미완료</b>
+            </div>
+            <div className="nicepay-mismatch-table">
+              <table>
+                <thead><tr><th>날짜</th><th>1m+4m+5m 입금</th><th>정산 합계</th><th>원본 차이</th><th>수동 구분</th><th>금액</th><th>입력 후 차이</th></tr></thead>
+                <tbody>
+                  {mismatchedDates.map((row) => (
+                    <tr key={row.date} className={row.adjustedDifference === 0 ? "resolved" : "unresolved"}>
+                      <td>{row.date}</td>
+                      <td>{formatWon(row.depositAmount)}</td>
+                      <td>{formatWon(row.settlementAmount)}</td>
+                      <td>{formatWon(row.sourceDifference)}</td>
+                      <td>
+                        <select
+                          value={row.adjustment?.type || ""}
+                          onChange={(event) => {
+                            const type = event.target.value as SettlementManualAdjustment["type"];
+                            setManualAdjustments((previous) => type
+                              ? { ...previous, [row.date]: { type, amount: previous[row.date]?.amount || 0 } }
+                              : Object.fromEntries(Object.entries(previous).filter(([date]) => date !== row.date)));
+                          }}
+                        >
+                          <option value="">직접 선택</option>
+                          <option value="지급보류">지급보류</option>
+                          <option value="보류해제">보류해제</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          disabled={!row.adjustment?.type}
+                          value={row.adjustment?.amount || ""}
+                          onChange={(event) => {
+                            const amount = Math.max(0, Number(event.target.value) || 0);
+                            if (!row.adjustment?.type) return;
+                            setManualAdjustments((previous) => ({
+                              ...previous,
+                              [row.date]: { type: previous[row.date].type, amount },
+                            }));
+                          }}
+                        />
+                      </td>
+                      <td>{row.adjustedDifference === 0 ? "일치" : formatWon(row.adjustedDifference)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="nicepay-mismatch-actions">
+              <small>구분은 자동 결정하지 않습니다. 실제 보류 내역을 확인한 값만 입력하세요.</small>
+              <button onClick={() => setMismatchOpen(false)}>
+                {unresolvedDates.length === 0 ? "입력 완료" : "확인 후 닫기"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {depositProgress.open && (
         <div className="nicepay-progress-overlay" role="dialog" aria-modal="true" aria-live="polite">
           <section className={`nicepay-progress-modal ${depositProgress.phase === "done" ? "complete" : ""}`}>
             <div className="nicepay-progress-visual" aria-hidden="true">

@@ -21,7 +21,6 @@ const WaterParkSales = lazy(() => import('./components/WaterParkSales'))
 const WaterOperationsDashboard = lazy(() => import('./components/WaterOperationsDashboard'))
 const WaterOperationsAnalysis = lazy(() => import('./components/WaterOperationsAnalysis'))
 const NicepaySettlement = lazy(() => import('./components/NicepaySettlement'))
-const DepositReconciliation = lazy(() => import('./components/DepositReconciliation'))
 const Login = lazy(() => import('./components/Auth/Login'))
 const Approvals = lazy(() => import('./components/Approvals'))
 const ProductProposals = lazy(() => import('./components/ProductProposals'))
@@ -116,7 +115,7 @@ function App() {
                 <Route path="tools/water-operations" element={<WaterOperationsDashboard />} />
                 <Route path="tools/water-operations-analysis" element={<WaterOperationsAnalysis />} />
                 <Route path="tools/nicepay-settlement" element={<NicepaySettlement />} />
-                <Route path="tools/deposit-reconciliation" element={<DepositReconciliation />} />
+                <Route path="tools/deposit-reconciliation" element={<Navigate to="/tools/nicepay-settlement" replace />} />
                 <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
                 <Route path="tools/url-shortener" element={<URLShortener />} />
                 <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />

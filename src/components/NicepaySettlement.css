@@ -499,6 +499,26 @@
   color: #1e4da4;
   box-shadow: 0 8px 26px rgba(29, 78, 216, 0.14);
 }
+.nicepay-mismatch-overlay { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 22px; background: rgba(31,18,4,.68); backdrop-filter: blur(8px); }
+.nicepay-mismatch-modal { width: min(1120px,100%); max-height: min(780px,calc(100vh - 44px)); overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 30px 90px rgba(35,20,3,.38); }
+.nicepay-mismatch-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 24px 26px 18px; border-bottom: 1px solid #fed7aa; background: #fff7ed; }
+.nicepay-mismatch-heading span { color: #c2410c; font-size: 10px; font-weight: 900; letter-spacing: .14em; }
+.nicepay-mismatch-heading h2 { margin: 4px 0 5px; color: #7c2d12; }
+.nicepay-mismatch-heading p { margin: 0; color: #9a3412; font-size: 13px; }
+.nicepay-mismatch-heading > b { flex: 0 0 auto; padding: 7px 11px; border-radius: 99px; background: #dc2626; color: #fff; font-size: 12px; }
+.nicepay-mismatch-table { max-height: 520px; overflow: auto; padding: 18px 22px; }
+.nicepay-mismatch-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.nicepay-mismatch-table th,.nicepay-mismatch-table td { padding: 9px 8px; border: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
+.nicepay-mismatch-table th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #475569; text-align: center; }
+.nicepay-mismatch-table td:first-child,.nicepay-mismatch-table td:nth-child(5) { text-align: center; }
+.nicepay-mismatch-table tr.unresolved td:last-child { color: #dc2626; font-weight: 800; }
+.nicepay-mismatch-table tr.resolved { background: #f0fdf4; }
+.nicepay-mismatch-table select,.nicepay-mismatch-table input { width: 118px; padding: 8px 9px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+.nicepay-mismatch-table input { text-align: right; }
+.nicepay-mismatch-table input:disabled { background: #f1f5f9; cursor: not-allowed; }
+.nicepay-mismatch-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px 22px; border-top: 1px solid #e5e7eb; }
+.nicepay-mismatch-actions small { color: #64748b; }
+.nicepay-mismatch-actions button { flex: 0 0 auto; padding: 11px 18px; border: 0; border-radius: 10px; background: #1e3a8a; color: #fff; font-weight: 800; }
 .nicepay-progress-overlay {
   position: fixed;
   inset: 0;
@@ -702,6 +722,8 @@
   .nicepay-container {
     padding: 16px;
   }
+  .nicepay-mismatch-heading,.nicepay-mismatch-actions { align-items: flex-start; flex-direction: column; }
+  .nicepay-mismatch-actions button { width: 100%; }
   .nicepay-hero {
     padding: 26px;
     flex-direction: column;
