@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { callGeminiWithFallback } from "../utils/apiProxy";
 import {
@@ -20,9 +20,16 @@ import {
   XCircle,
 } from "lucide-react";
 import "./NicepaySettlement.css";
+import { NICEPAY_DEFAULT_MAPPINGS } from "./nicepayDefaultMappings";
+import { buildSettlementPrintHtml, buildSettlementWorkbook } from "./nicepaySettlementWorkbook";
 
 type RawRow = Record<string, unknown>;
-type MappingRule = { keyword: string; result: string };
+type MappingRule = {
+  keyword: string;
+  result: string;
+  suggestion?: string;
+  suggestedBy?: string;
+};
 type AllocationItem = { target: string; price: number };
 type AllocationRule = { basePrice: number; items: AllocationItem[] };
 type AllocationRules = Record<string, AllocationRule>;
@@ -97,12 +104,7 @@ type AllocatedRow = {
   validation: string;
 };
 
-const DEFAULT_MAPPINGS: MappingRule[] = [
-  { keyword: "리프트", result: "리프트" },
-  { keyword: "눈썰매", result: "눈썰매" },
-  { keyword: "시즌권", result: "스키시즌권" },
-  { keyword: "룸온리", result: "객실" },
-];
+const DEFAULT_MAPPINGS: MappingRule[] = NICEPAY_DEFAULT_MAPPINGS.map((rule) => ({ ...rule }));
 
 const createItems = () =>
   Array.from({ length: 6 }, () => ({ target: "", price: 0 }));
@@ -168,6 +170,39 @@ const classifyProduct = (productName: string, mappings: MappingRule[]) => {
     sorted.find((rule) => target.includes(rule.keyword.trim().toLowerCase()))
       ?.result || "미분류"
   );
+};
+
+const detectMappingCandidates = (rows: RawRow[], mappings: MappingRule[]) => {
+  const next = [...mappings];
+  const classifiedRules = [...mappings]
+    .filter((rule) => rule.result !== "미분류" && rule.keyword.trim())
+    .sort((a, b) => b.keyword.length - a.keyword.length);
+  const knownProducts = new Set(mappings.map((rule) => rule.keyword.trim().toLowerCase()));
+  const productNames = Array.from(
+    new Set(rows.map((row) => String(getValue(row, ["상품명"])).trim()).filter(Boolean)),
+  );
+
+  productNames.forEach((productName) => {
+    const normalized = productName.toLowerCase();
+    if (knownProducts.has(normalized)) return;
+    const matchedRule = classifiedRules.find((rule) =>
+      normalized.includes(rule.keyword.trim().toLowerCase()),
+    );
+    const complexProduct = matchedRule && (
+      /[+&/]|pkg|패키지|렌탈|장비/i.test(productName) ||
+      productName.length - matchedRule.keyword.length > 10
+    );
+    if (!matchedRule || complexProduct) {
+      next.unshift({
+        keyword: productName,
+        result: "미분류",
+        suggestion: matchedRule?.result,
+        suggestedBy: matchedRule?.keyword,
+      });
+      knownProducts.add(normalized);
+    }
+  });
+  return next;
 };
 
 const findHeaderIndex = (matrix: unknown[][]) => {
@@ -631,6 +666,7 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
   mode = "settlement",
 }) => {
   const isDepositMode = mode === "deposit";
+  const configInputRef = useRef<HTMLInputElement>(null);
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(
     isDepositMode ? 1 : 2,
   );
@@ -713,6 +749,10 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
             .filter((result) => result && result !== "미분류"),
         ),
       ).sort(),
+    [mappings],
+  );
+  const reviewMappings = useMemo(
+    () => mappings.filter((rule) => rule.result === "미분류"),
     [mappings],
   );
 
@@ -831,14 +871,18 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     }
   };
 
-  const buildClassifiedRows = (rows: RawRow[], dateNames: string[]) =>
+  const buildClassifiedRows = (
+    rows: RawRow[],
+    dateNames: string[],
+    effectiveMappings: MappingRule[] = mappings,
+  ) =>
     filterNiceRows(rows)
       .map((row) => {
         const productName = String(getValue(row, ["상품명"])).trim();
         return {
           ...row,
           __date: normalizeDate(getValue(row, dateNames)),
-          __category: classifyProduct(productName, mappings),
+          __category: classifyProduct(productName, effectiveMappings),
           __amount: parseMoney(getValue(row, ["거래금액", "결제금액"])),
           __settlement: parseMoney(getValue(row, ["정산금액", "지급금액"])),
           __fee: parseMoney(getValue(row, ["결제수수료", "수수료"])),
@@ -853,14 +897,22 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
     setIsProcessing(true);
     setMessage("");
     try {
-      const rows = buildClassifiedRows(await readWorkbook(settlementFile), [
+      const sourceRows = await readWorkbook(settlementFile);
+      const filteredSource = filterNiceRows(sourceRows);
+      const nextMappings = detectMappingCandidates(filteredSource, mappings);
+      const newlyDetected = nextMappings.length - mappings.length;
+      if (newlyDetected > 0) {
+        setMappings(nextMappings);
+        setSettingsOpen(true);
+      }
+      const rows = buildClassifiedRows(sourceRows, [
         "정산일",
         "입금일",
-      ]);
+      ], nextMappings);
       setClassifiedRows(rows);
       const unmapped = rows.filter((row) => row.__category === "미분류").length;
       setMessage(
-        `${rows.length.toLocaleString()}건을 정산일·상품별로 분류했습니다.${unmapped ? ` 미분류 ${unmapped.toLocaleString()}건을 확인해 주세요.` : ""}`,
+        `${rows.length.toLocaleString()}건을 정산일·상품별로 분류했습니다.${newlyDetected ? ` 새 상품 ${newlyDetected.toLocaleString()}건을 검토 목록에 추가했습니다.` : ""}${unmapped ? ` 미분류 ${unmapped.toLocaleString()}건을 확인해 주세요.` : ""}`,
       );
     } catch (error) {
       setMessage(
@@ -868,6 +920,85 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
       );
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const applyMappingResult = (keyword: string, result: string) => {
+    const normalizedResult = result.trim();
+    if (!normalizedResult) return;
+    setMappings((rules) => rules.map((rule) =>
+      rule.keyword === keyword
+        ? { keyword: rule.keyword, result: normalizedResult }
+        : rule,
+    ));
+    setClassifiedRows((rows) => rows.map((row) => {
+      const productName = String(getValue(row, ["상품명"])).trim();
+      return productName === keyword ? { ...row, __category: normalizedResult } : row;
+    }));
+  };
+
+  const exportSettings = () => downloadWorkbook(
+    "나이스페이_정산분리기_설정.xlsx",
+    (workbook) => {
+      const mappingSheet = workbook.addWorksheet("매핑설정");
+      mappingSheet.addRow(["keyword", "result"]);
+      mappings.forEach((rule) => mappingSheet.addRow([rule.keyword, rule.result]));
+      styleWorksheet(mappingSheet, [48, 24]);
+
+      const allocationSheet = workbook.addWorksheet("알로안분");
+      allocationSheet.addRow([
+        "cat", "base",
+        ...Array.from({ length: 6 }, (_, index) => [`t${index + 1}`, `p${index + 1}`]).flat(),
+      ]);
+      Object.entries(allocationRules).forEach(([category, rule]) => {
+        allocationSheet.addRow([
+          category,
+          rule.basePrice,
+          ...rule.items.flatMap((item) => [item.target, item.price]),
+        ]);
+      });
+      styleWorksheet(allocationSheet, [22, 16, ...Array.from({ length: 12 }, (_, index) => index % 2 === 0 ? 22 : 14)]);
+    },
+  );
+
+  const importSettings = async (file?: File) => {
+    if (!file) return;
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const mappingSheet = workbook.Sheets["매핑설정"];
+      const allocationSheet = workbook.Sheets["알로안분"] || workbook.Sheets["안분설정"];
+      if (!mappingSheet && !allocationSheet) throw new Error("매핑설정 또는 알로안분 시트를 찾을 수 없습니다.");
+
+      if (mappingSheet) {
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(mappingSheet, { defval: "" });
+        const importedMappings = rows
+          .map((row) => ({ keyword: String(row.keyword || "").trim(), result: String(row.result || "미분류").trim() || "미분류" }))
+          .filter((rule) => rule.keyword);
+        if (importedMappings.length > 0) setMappings(importedMappings);
+      }
+      if (allocationSheet) {
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(allocationSheet, { defval: "" });
+        const importedRules: AllocationRules = {};
+        rows.forEach((row) => {
+          const category = String(row.cat || row.category || "").trim();
+          if (!category) return;
+          const basePrice = parseMoney(row.base ?? row.basePrice);
+          importedRules[category] = {
+            basePrice,
+            items: Array.from({ length: 6 }, (_, index) => ({
+              target: String(row[`t${index + 1}`] || row[`target${index + 1}`] || "").trim(),
+              price: parseMoney(row[`p${index + 1}`] ?? row[`price${index + 1}`]),
+            })),
+          };
+        });
+        if (Object.keys(importedRules).length > 0) setAllocationRules(importedRules);
+      }
+      setMessage("매핑·안분 설정을 가져왔습니다.");
+      setSettingsOpen(true);
+    } catch (error) {
+      setMessage(`설정 가져오기 실패: ${error instanceof Error ? error.message : "파일 형식을 확인해 주세요."}`);
+    } finally {
+      if (configInputRef.current) configInputRef.current.value = "";
     }
   };
 
@@ -1043,89 +1174,23 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
 
   const exportClassification = () =>
     downloadWorkbook(
-      `정산일별_품목분류_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      `통합정산가공_${new Date().toISOString().slice(0, 10)}.xlsx`,
       (workbook) => {
-        const summary = workbook.addWorksheet("정산일별요약");
-        summary.addRow([
-          "정산일",
-          "상품 분류",
-          "건수",
-          "거래금액",
-          "수수료+VAT",
-          "정산금액",
-        ]);
-        const grouped = new Map<
-          string,
-          { count: number; amount: number; fee: number; settlement: number }
-        >();
-        classifiedRows.forEach((row) => {
-          const key = `${row.__date}|${row.__category}`;
-          const value = grouped.get(key) || {
-            count: 0,
-            amount: 0,
-            fee: 0,
-            settlement: 0,
-          };
-          value.count += 1;
-          value.amount += row.__amount;
-          value.fee += row.__fee + row.__vat;
-          value.settlement += row.__settlement;
-          grouped.set(key, value);
-        });
-        Array.from(grouped.entries())
-          .sort()
-          .forEach(([key, value]) => {
-            const [date, category] = key.split("|");
-            summary.addRow([
-              date,
-              category,
-              value.count,
-              value.amount,
-              value.fee,
-              value.settlement,
-            ]);
-          });
-        [4, 5, 6].forEach((column) => {
-          summary.getColumn(column).numFmt = "#,##0;[Red](#,##0);-";
-        });
-        styleWorksheet(summary, [14, 24, 12, 18, 18, 18]);
-        const detail = workbook.addWorksheet("분류상세");
-        detail.addRow([
-          "정산일",
-          "MID",
-          "상품 분류",
-          "상품명",
-          "거래금액",
-          "결제수수료",
-          "VAT",
-          "정산금액",
-          "TID",
-          "상태",
-        ]);
-        classifiedRows.forEach((row) =>
-          detail.addRow([
-            row.__date,
-            getValue(row, ["MID"]),
-            row.__category,
-            getValue(row, ["상품명"]),
-            row.__amount,
-            row.__fee,
-            row.__vat,
-            row.__settlement,
-            getValue(row, ["TID"]),
-            getValue(row, ["상태"]),
-          ]),
-        );
-        [5, 6, 7, 8].forEach((column) => {
-          detail.getColumn(column).numFmt = "#,##0;[Red](#,##0);-";
-        });
-        styleWorksheet(detail, [14, 16, 20, 44, 16, 14, 12, 16, 28, 12]);
-        const mapping = workbook.addWorksheet("매핑데이터");
-        mapping.addRow(["검색 키워드", "최종 분류"]);
-        mappings.forEach((rule) => mapping.addRow([rule.keyword, rule.result]));
-        styleWorksheet(mapping, [42, 24]);
+        buildSettlementWorkbook(workbook, classifiedRows, mappings);
       },
     );
+
+  const printAllSettlementVouchers = () => {
+    const printWindow = window.open("", "_blank", "width=1100,height=850");
+    if (!printWindow) {
+      setMessage("인쇄 창이 차단되었습니다. 브라우저의 팝업 허용 후 다시 눌러 주세요.");
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(buildSettlementPrintHtml(classifiedRows));
+    printWindow.document.close();
+  };
 
   const exportAllocation = () =>
     downloadWorkbook(
@@ -1295,7 +1360,7 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
               ? "INTERNAL DEPOSIT VERIFICATION"
               : "NICEPAY SETTLEMENT WORKFLOW"}
           </span>
-          <h1>{isDepositMode ? "입금 내역 검증" : "나이스페이 정산 자동화"}</h1>
+          <h1>{isDepositMode ? "입금 내역 검증" : "나이스페이 정산 분리기"}</h1>
           <p>
             {isDepositMode
               ? "회사 입금 내역과 나이스정보통신 정산액을 날짜별로 대조합니다."
@@ -1303,12 +1368,21 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
           </p>
         </div>
         {!isDepositMode && (
-          <button
-            className="nicepay-settings-button"
-            onClick={() => setSettingsOpen((open) => !open)}
-          >
-            <Settings2 size={17} /> 매핑·안분 설정 <ChevronDown size={16} />
-          </button>
+          <div className="nicepay-hero-actions">
+            <input ref={configInputRef} type="file" accept=".xlsx" hidden onChange={(event) => void importSettings(event.target.files?.[0])} />
+            <button className="nicepay-utility-button" onClick={() => void exportSettings()}>
+              <Download size={16} /> 설정 내보내기
+            </button>
+            <button className="nicepay-utility-button" onClick={() => configInputRef.current?.click()}>
+              <UploadCloud size={16} /> 설정 가져오기
+            </button>
+            <button
+              className="nicepay-settings-button"
+              onClick={() => setSettingsOpen((open) => !open)}
+            >
+              <Settings2 size={17} /> 매핑·안분 설정{reviewMappings.length > 0 && <b>{reviewMappings.length}</b>} <ChevronDown size={16} />
+            </button>
+          </div>
         )}
       </header>
 
@@ -1381,6 +1455,55 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
             />
             <small>쉼표로 구분합니다.</small>
           </label>
+          {reviewMappings.length > 0 && (
+            <section className="nicepay-review-panel">
+              <div className="nicepay-review-heading">
+                <div>
+                  <span>REVIEW REQUIRED</span>
+                  <h3>검토 필요 상품</h3>
+                </div>
+                <b>{reviewMappings.length}건</b>
+              </div>
+              <p>새로 발견되었거나 기존 키워드보다 구성이 복잡한 상품입니다. 추천 분류를 승인하거나 직접 입력해 주세요.</p>
+              <div className="nicepay-review-list">
+                {reviewMappings.map((rule) => (
+                  <form
+                    key={rule.keyword}
+                    className="nicepay-review-item"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const input = event.currentTarget.elements.namedItem("mappingResult") as HTMLInputElement | null;
+                      applyMappingResult(rule.keyword, input?.value || "");
+                    }}
+                  >
+                    <div>
+                      <strong>{rule.keyword}</strong>
+                      {rule.suggestion && <small>{rule.suggestedBy} 유사 · 추천 {rule.suggestion}</small>}
+                    </div>
+                    <input
+                      name="mappingResult"
+                      placeholder="분류 결과 입력"
+                      defaultValue=""
+                    />
+                    <button type="submit" className="apply">적용</button>
+                    {rule.suggestion && (
+                      <button type="button" onClick={() => applyMappingResult(rule.keyword, rule.suggestion!)}>
+                        승인: {rule.suggestion}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="remove"
+                      aria-label={`${rule.keyword} 매핑 삭제`}
+                      onClick={() => setMappings((rules) => rules.filter((item) => item.keyword !== rule.keyword))}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="nicepay-settings-grid">
             <div className="nicepay-mapping-editor">
               <h3>상품 키워드 매핑</h3>
@@ -1672,9 +1795,14 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
                 {isProcessing ? "분류 중..." : "품목 자동 분류"}
               </button>
               {classifiedRows.length > 0 && (
-                <button onClick={exportClassification}>
-                  <Download size={17} /> 정산일별 엑셀
-                </button>
+                <>
+                  <button onClick={exportClassification}>
+                    <Download size={17} /> 정산일별 엑셀
+                  </button>
+                  <button onClick={printAllSettlementVouchers}>
+                    <ReceiptText size={17} /> 전체 날짜 전표 인쇄
+                  </button>
+                </>
               )}
             </div>
             {classifiedRows.length > 0 && (

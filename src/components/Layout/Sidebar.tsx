@@ -135,7 +135,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
                 </li>
                 <li className="menu-highlight">
                   <NavLink to="/tools/nicepay-settlement" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">💳</span> 나이스페이 정산 자동화
+                    <span className="icon">💳</span> 나이스페이 정산 분리기
                   </NavLink>
                 </li>
                 <li>

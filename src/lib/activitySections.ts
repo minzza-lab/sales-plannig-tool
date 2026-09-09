@@ -17,7 +17,7 @@ export const activitySections: Record<string, string> = {
   "/tools/water-operations-analysis": "워터 권종·대여 분석",
   "/tools/room-state": "객실 투숙 현황",
   "/tools/sports-sales": "리조트 발권 현황",
-  "/tools/nicepay-settlement": "나이스페이 정산 자동화",
+  "/tools/nicepay-settlement": "나이스페이 정산 분리기",
   "/tools/deposit-reconciliation": "입금 내역 검증 (사내용)",
   "/tools/season-pass-tracker": "시즌권 주문 추적 관리",
   "/tools/package-sales": "패키지 판매 현황",
