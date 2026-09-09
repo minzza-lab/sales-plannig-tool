@@ -114,6 +114,12 @@ const createItems = () =>
 const pause = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 const formatWon = (value: number) => `${Math.round(value).toLocaleString()}원`;
+const escapePrintHtml = (value: unknown) => String(value ?? "")
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#039;");
 const normalizeHeader = (value: unknown) =>
   String(value ?? "")
     .replace(/[\n\r\s]/g, "")
@@ -634,6 +640,39 @@ const addLedgerTable = (
     orientation: "portrait",
     margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
   };
+};
+
+const buildDepositPrintHtml = (
+  reconciliation: ReconciliationRow[],
+  depositMatches: Record<string, DepositMatch[]>,
+  bankSource: RawRow[],
+  bankMeta: BankMeta,
+) => {
+  const headers = bankSource[0]
+    ? Object.keys(bankSource[0]).slice(0, 8)
+    : ["거래일자", "구분", "적요", "입금액", "출금액", "잔액", "거래시간", "거래점"];
+  const pages = reconciliation.map((result) => {
+    const rows = depositMatches[result.date] || [];
+    const scale = Math.max(0.48, Math.min(1, 19 / Math.max(19, rows.length + 7)));
+    return `<section class="deposit-print-page"><div class="page-content" style="--print-scale:${scale}">
+      <h1>${escapePrintHtml(bankMeta.title || "예금계좌조회")}</h1>
+      <table class="account-meta"><tbody>
+        <tr><th>계좌번호</th><td>${escapePrintHtml(bankMeta.accountNumber)}</td><th>예금종류</th><td>${escapePrintHtml(bankMeta.accountType)}</td><th>조회기간</th><td>${escapePrintHtml(bankMeta.period)}</td></tr>
+        <tr><th>현재잔액</th><td>${Math.round(bankMeta.balance).toLocaleString("ko-KR")}</td><th>인출가능금액</th><td>${Math.round(bankMeta.availableBalance).toLocaleString("ko-KR")}</td><th>입금일</th><td>${escapePrintHtml(result.date)}</td></tr>
+      </tbody></table>
+      <table class="bank-table"><thead><tr>${headers.map((header) => `<th>${escapePrintHtml(header)}</th>`).join("")}</tr></thead><tbody>
+        ${rows.map((item) => `<tr>${headers.map((header, index) => {
+          const raw = item.row[header];
+          const display = typeof raw === "number" ? raw.toLocaleString("ko-KR") : raw;
+          return `<td class="${index === 3 && item.matchedMid ? "matched" : ""}">${escapePrintHtml(display)}</td>`;
+        }).join("")}</tr>`).join("")}
+        <tr class="total"><td colspan="2"></td><td>합계</td><td>${Math.round(result.matchedAmount).toLocaleString("ko-KR")}</td><td colspan="4"></td></tr>
+      </tbody></table>
+    </div></section>`;
+  }).join("");
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>나이스페이 날짜별 입금내역</title><style>
+    @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}html,body{margin:0;color:#111;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}.deposit-print-page{height:281mm;overflow:hidden;break-after:page;page-break-after:always}.deposit-print-page:last-child{break-after:auto;page-break-after:auto}.page-content{zoom:var(--print-scale)}h1{margin:0 0 12px;text-align:center;font-size:16px}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}th,td{height:26px;padding:4px;border:1px solid #000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account-meta{margin-bottom:18px}.account-meta th,.bank-table th{background:#bfbfbf;text-align:center;font-weight:700}.account-meta td{text-align:center}.bank-table td:nth-child(4),.bank-table td:nth-child(5),.bank-table td:nth-child(6){text-align:right}.bank-table .matched,.bank-table .total td:nth-child(3),.bank-table .total td:nth-child(4){background:#ff0}.bank-table .total td:nth-child(3){text-align:center;font-weight:700}.bank-table .total td:nth-child(4){text-align:right;font-weight:700}@media screen{body{padding:20px;background:#e5e7eb}.deposit-print-page{width:210mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 4px 18px #0002}}@media print{.deposit-print-page{padding:0}}
+  </style></head><body>${pages}<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>`;
 };
 
 const UploadBox = ({
@@ -1181,6 +1220,18 @@ const NicepaySettlement: React.FC = () => {
       setIsProcessing(false);
       setDepositProgress((previous) => ({ ...previous, open: false }));
     }
+  };
+
+  const printAllDepositSheets = () => {
+    const printWindow = window.open("", "_blank", "width=1100,height=850");
+    if (!printWindow) {
+      setMessage("인쇄 창이 차단되었습니다. 브라우저의 팝업 허용 후 다시 눌러 주세요.");
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(buildDepositPrintHtml(reconciliation, depositMatches, bankSource, bankMeta));
+    printWindow.document.close();
   };
 
   const settlementDateChecks = useMemo(() => {
@@ -1748,6 +1799,9 @@ const NicepaySettlement: React.FC = () => {
                 <>
                   <button onClick={exportReconciliation}>
                     <Download size={17} /> 날짜별 입금내역 엑셀
+                  </button>
+                  <button onClick={printAllDepositSheets}>
+                    <ReceiptText size={17} /> 전체 날짜 입금내역 인쇄
                   </button>
                   <button onClick={() => { setActiveStep(2); setMessage(""); }}>
                     STEP 2 정산내역 올리기 <ArrowRight size={17} />
