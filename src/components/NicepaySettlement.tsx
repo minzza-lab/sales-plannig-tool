@@ -672,11 +672,15 @@ const NicepaySettlement: React.FC<NicepaySettlementProps> = ({
   );
   const [mappings, setMappings] = useState<MappingRule[]>(() => {
     try {
-      return (
-        JSON.parse(
-          localStorage.getItem("nicepay_mapping_master_v1") || "null",
-        ) || DEFAULT_MAPPINGS
-      );
+      const stored = JSON.parse(
+        localStorage.getItem("nicepay_mapping_master_v1") || "[]",
+      ) as MappingRule[];
+      if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_MAPPINGS;
+      const savedKeywords = new Set(stored.map((rule) => rule.keyword.trim().toLowerCase()));
+      return [
+        ...stored,
+        ...DEFAULT_MAPPINGS.filter((rule) => !savedKeywords.has(rule.keyword.trim().toLowerCase())),
+      ];
     } catch {
       return DEFAULT_MAPPINGS;
     }
