@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
+import { groupProductNames, isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
 
 const facilities = [
   { id: "room", name: "객실료", excelColumn: "AE", displayOrder: 1, enabled: true },
@@ -82,4 +82,17 @@ test("selected S column product names are mapped exactly to one X product", () =
   assert.equal(result.rows[0].standardProductName, "선베드");
   assert.equal(result.rows[1].standardProductName, "선베드");
   assert.equal(result.rows[2].classificationStatus, "미분류");
+});
+
+test("S column names with the same first five non-space characters are grouped together", () => {
+  const groups = groupProductNames([
+    { 상품명: "워터파크 종일권 성인" },
+    { 상품명: "워터 파크 종일권 소인" },
+    { 상품명: "객실 조식 패키지" },
+  ]);
+  const waterGroup = groups.find((group) => group.prefix === "워터파크종");
+  assert.ok(waterGroup);
+  assert.equal(waterGroup.names.length, 2);
+  assert.equal(waterGroup.count, 2);
+  assert.equal(groups.length, 2);
 });

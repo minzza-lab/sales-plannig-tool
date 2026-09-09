@@ -98,6 +98,7 @@ export type ProcessingResult = {
 
 export type ProductNameGroup = {
   id: string;
+  prefix: string;
   names: string[];
   count: number;
   suggestedKeywords: string[];
@@ -161,30 +162,26 @@ export const valueByHeaders = (row: RawRow, names: string[]) => {
   return "";
 };
 
-const PRODUCT_NAME_STOP_WORDS = new Set(["pkg", "package", "패키지", "상품", "이용권", "권", "특가", "예약"]);
+const productNamePrefix = (value: unknown) => text(value).replace(/\s+/g, "").slice(0, 5);
 
-const productNameTokens = (value: unknown) => text(value)
-  .toLocaleLowerCase("ko-KR")
-  .replace(/[()[\]{}<>]/g, " ")
-  .match(/[가-힣a-z0-9]+/g)?.filter((token) => token.length > 1 && !PRODUCT_NAME_STOP_WORDS.has(token)) || [];
-
-/** Groups only conservative variants: exact product names or names with the same meaningful token set. */
+/** Groups actual S-column product names by their first five non-space characters. */
 export const groupProductNames = (rows: RawRow[]): ProductNameGroup[] => {
-  const grouped = new Map<string, { names: Map<string, number>; tokens: string[] }>();
+  const grouped = new Map<string, { names: Map<string, number>; prefix: string }>();
   rows.forEach((row) => {
     const name = text(valueByHeaders(row, ["원본 상품명", "상품명"]));
     if (!name) return;
-    const tokens = productNameTokens(name);
-    const key = tokens.length ? [...new Set(tokens)].sort().join("|") : name.toLocaleLowerCase("ko-KR").replace(/\s/g, "");
-    const current = grouped.get(key) || { names: new Map<string, number>(), tokens };
+    const prefix = productNamePrefix(name);
+    const key = prefix || name;
+    const current = grouped.get(key) || { names: new Map<string, number>(), prefix: prefix || name };
     current.names.set(name, (current.names.get(name) || 0) + 1);
     grouped.set(key, current);
   });
   return [...grouped.entries()].map(([key, group]) => ({
     id: key,
+    prefix: group.prefix,
     names: [...group.names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).map(([name]) => name),
     count: [...group.names.values()].reduce((total, value) => total + value, 0),
-    suggestedKeywords: group.tokens.slice(0, 4),
+    suggestedKeywords: [group.prefix],
   })).sort((a, b) => b.count - a.count || a.names[0].localeCompare(b.names[0], "ko"));
 };
 
