@@ -519,7 +519,7 @@
 .nicepay-mismatch-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .nicepay-mismatch-table th,.nicepay-mismatch-table td { padding: 9px 8px; border: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
 .nicepay-mismatch-table th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #475569; text-align: center; }
-.nicepay-mismatch-table td:first-child,.nicepay-mismatch-table td:nth-child(5) { text-align: center; }
+.nicepay-mismatch-table td:first-child,.nicepay-mismatch-table td:nth-child(5),.nicepay-mismatch-table td:nth-child(6) { text-align: center; }
 .nicepay-mismatch-table tr.unresolved td:last-child { color: #dc2626; font-weight: 800; }
 .nicepay-mismatch-table tr.resolved { background: #f0fdf4; }
 .nicepay-mismatch-table select,.nicepay-mismatch-table input { width: 118px; padding: 8px 9px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }

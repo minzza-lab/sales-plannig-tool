@@ -37,7 +37,8 @@ type AllocationItem = { target: string; price: number };
 type AllocationRule = { basePrice: number; items: AllocationItem[] };
 type AllocationRules = Record<string, AllocationRule>;
 type ManualAdjustmentDraft = {
-  type: SettlementManualAdjustment["type"];
+  type?: SettlementManualAdjustment["type"];
+  side?: SettlementManualAdjustment["side"];
   amount: number | string;
 };
 
@@ -1247,21 +1248,21 @@ const NicepaySettlement: React.FC = () => {
         const adjustment = manualAdjustments[date];
         const adjustmentAmount = parseMoney(adjustment?.amount);
         const adjustedDifference = sourceDifference
-          + (adjustment?.type === "보류해제" ? adjustmentAmount : 0)
-          - (adjustment?.type === "지급보류" ? adjustmentAmount : 0);
+          + (adjustment?.side === "차변" ? adjustmentAmount : 0)
+          - (adjustment?.side === "대변" ? adjustmentAmount : 0);
         return { date, depositAmount, settlementAmount, sourceDifference, adjustment, adjustedDifference };
       });
   }, [classifiedRows, manualAdjustments, reconciliation]);
   const mismatchedDates = settlementDateChecks.filter((row) => row.sourceDifference !== 0);
   const unresolvedDates = mismatchedDates.filter(
-    (row) => !row.adjustment || parseMoney(row.adjustment.amount) === 0 || row.adjustedDifference !== 0,
+    (row) => !row.adjustment?.type || !row.adjustment.side || parseMoney(row.adjustment.amount) === 0 || row.adjustedDifference !== 0,
   );
   const settlementDepositControls = Object.fromEntries(settlementDateChecks.map((row) => [
     row.date,
     {
       depositAmount: row.depositAmount,
-      adjustment: row.adjustment
-        ? { type: row.adjustment.type, amount: parseMoney(row.adjustment.amount) }
+      adjustment: row.adjustment?.type && row.adjustment.side
+        ? { type: row.adjustment.type, side: row.adjustment.side, amount: parseMoney(row.adjustment.amount) }
         : undefined,
     },
   ]));
@@ -1829,7 +1830,7 @@ const NicepaySettlement: React.FC = () => {
             </div>
             <div className="nicepay-mismatch-table">
               <table>
-                <thead><tr><th>날짜</th><th>1m+4m+5m 입금</th><th>정산 합계</th><th>원본 차이</th><th>수동 구분</th><th>금액</th><th>입력 후 차이</th></tr></thead>
+                <thead><tr><th>날짜</th><th>1m+4m+5m 입금</th><th>정산 합계</th><th>원본 차이</th><th>보류 구분</th><th>차·대변</th><th>금액</th><th>입력 후 차이</th></tr></thead>
                 <tbody>
                   {mismatchedDates.map((row) => (
                     <tr key={row.date} className={row.adjustedDifference === 0 ? "resolved" : "unresolved"}>
@@ -1843,7 +1844,7 @@ const NicepaySettlement: React.FC = () => {
                           onChange={(event) => {
                             const type = event.target.value as SettlementManualAdjustment["type"];
                             setManualAdjustments((previous) => type
-                              ? { ...previous, [row.date]: { type, amount: previous[row.date]?.amount || 0 } }
+                              ? { ...previous, [row.date]: { ...previous[row.date], type, amount: previous[row.date]?.amount ?? "" } }
                               : Object.fromEntries(Object.entries(previous).filter(([date]) => date !== row.date)));
                           }}
                         >
@@ -1853,19 +1854,34 @@ const NicepaySettlement: React.FC = () => {
                         </select>
                       </td>
                       <td>
+                        <select
+                          value={row.adjustment?.side || ""}
+                          onChange={(event) => {
+                            const side = event.target.value as SettlementManualAdjustment["side"];
+                            setManualAdjustments((previous) => side
+                              ? { ...previous, [row.date]: { ...previous[row.date], side, amount: previous[row.date]?.amount ?? "" } }
+                              : { ...previous, [row.date]: { ...previous[row.date], side: undefined, amount: previous[row.date]?.amount ?? "" } });
+                          }}
+                        >
+                          <option value="">직접 선택</option>
+                          <option value="차변">차변</option>
+                          <option value="대변">대변</option>
+                        </select>
+                      </td>
+                      <td>
                         <input
                           type="text"
                           inputMode="numeric"
                           placeholder="0"
-                          disabled={!row.adjustment?.type}
+                          disabled={!row.adjustment?.type || !row.adjustment.side}
                           value={row.adjustment?.amount ?? ""}
                           onChange={(event) => {
                             const amount = event.target.value.replaceAll(",", "");
                             if (!/^-?\d*$/.test(amount)) return;
-                            if (!row.adjustment?.type) return;
+                            if (!row.adjustment?.type || !row.adjustment.side) return;
                             setManualAdjustments((previous) => ({
                               ...previous,
-                              [row.date]: { type: previous[row.date].type, amount },
+                              [row.date]: { ...previous[row.date], amount },
                             }));
                           }}
                         />

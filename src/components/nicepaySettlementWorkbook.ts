@@ -26,6 +26,7 @@ const MONEY_FORMAT = "#,##0;[Red]-#,##0;0";
 
 export type SettlementManualAdjustment = {
   type: "지급보류" | "보류해제";
+  side: "차변" | "대변";
   amount: number;
 };
 
@@ -209,28 +210,29 @@ const addSummaryAndVoucher = (
   mergeAndSet(sheet, `M${voucherHeader}:O${voucherHeader}`, "대변");
   const settlementTotal = deposits.reduce((sum, item) => sum + item[2], 0);
   const cashDeposit = depositControl?.depositAmount ?? settlementTotal;
-  const holdAmount = depositControl?.adjustment?.type === "지급보류" ? depositControl.adjustment.amount : 0;
-  const releaseAmount = depositControl?.adjustment?.type === "보류해제" ? depositControl.adjustment.amount : 0;
+  const adjustment = depositControl?.adjustment;
+  const adjustmentDebit = adjustment?.side === "차변" ? adjustment.amount : 0;
+  const adjustmentCredit = adjustment?.side === "대변" ? adjustment.amount : 0;
   const voucherRows: Array<[number, string, string, number, number]> = [
     [11110311, "현금 및 현금등가물", "패키지代外", cashDeposit, 0],
-    [21130199, "미지급금", "지급보류(대변)", 0, holdAmount],
-    [21130199, "미지급금", "보류해제(차변)", releaseAmount, 0],
+    [21130199, "미지급금", "지급보류", adjustment?.type === "지급보류" ? adjustmentDebit : 0, adjustment?.type === "지급보류" ? adjustmentCredit : 0],
+    [21130199, "미지급금", "보류해제", adjustment?.type === "보류해제" ? adjustmentDebit : 0, adjustment?.type === "보류해제" ? adjustmentCredit : 0],
     [21140107, "패키지", "패키지代外", 0, deposits[2][2]],
     [21140114, "워터파크", "워터파크입장권代外", 0, deposits[1][2]],
     [21140106, "시즌권", "워터파크시즌패스代", 0, deposits[0][2]],
     [21159999, "기타", "국순당행사참가비", 0, 0],
     [21159999, "기타", "숲체원행사참가비", 0, 0],
   ];
-  voucherRows.forEach(([account, division, description, , credit], index) => {
+  voucherRows.forEach(([account, division, description, debit, credit], index) => {
     const row = voucherHeader + 1 + index;
     sheet.getCell(`B${row}`).value = account;
     mergeAndSet(sheet, `C${row}:H${row}`, division);
     sheet.getCell(`I${row}`).value = description;
-    mergeAndSet(sheet, `J${row}:L${row}`, index === 0 ? cashDeposit : index === 2 ? releaseAmount : 0);
-    mergeAndSet(sheet, `M${row}:O${row}`, index === 1 ? holdAmount : index >= 3 && index <= 5 ? {
+    mergeAndSet(sheet, `J${row}:L${row}`, debit);
+    mergeAndSet(sheet, `M${row}:O${row}`, index >= 3 && index <= 5 ? {
       formula: index === 3 ? `I${depositHeader + 3}` : index === 4 ? `I${depositHeader + 2}` : `I${depositHeader + 1}`,
       result: credit,
-    } : 0);
+    } : credit);
     sheet.getCell(`J${row}`).numFmt = MONEY_FORMAT;
     sheet.getCell(`M${row}`).numFmt = MONEY_FORMAT;
   });
@@ -238,11 +240,11 @@ const addSummaryAndVoucher = (
   mergeAndSet(sheet, `B${validationRow}:I${validationRow}`, "검 증");
   mergeAndSet(sheet, `J${validationRow}:L${validationRow}`, {
     formula: `SUM(J${voucherHeader + 1}:J${voucherHeader + 8})`,
-    result: cashDeposit + releaseAmount,
+    result: cashDeposit + adjustmentDebit,
   });
   mergeAndSet(sheet, `M${validationRow}:O${validationRow}`, {
     formula: `SUM(M${voucherHeader + 1}:M${voucherHeader + 8})`,
-    result: settlementTotal + holdAmount,
+    result: settlementTotal + adjustmentCredit,
   });
   sheet.getCell(`J${validationRow}`).numFmt = MONEY_FORMAT;
   sheet.getCell(`M${validationRow}`).numFmt = MONEY_FORMAT;
@@ -400,15 +402,15 @@ export const buildSettlementPrintHtml = (
     const total = waterSeason + waterAdmission + packageAmount;
     const cashDeposit = depositControls[date]?.depositAmount ?? total;
     const adjustment = depositControls[date]?.adjustment;
-    const holdAmount = adjustment?.type === "지급보류" ? adjustment.amount : 0;
-    const releaseAmount = adjustment?.type === "보류해제" ? adjustment.amount : 0;
+    const adjustmentDebit = adjustment?.side === "차변" ? adjustment.amount : 0;
+    const adjustmentCredit = adjustment?.side === "대변" ? adjustment.amount : 0;
     const voucherRows: Array<[string, number]> = [
       ["워터시즌권代", waterSeason], ["워터입장권代", waterAdmission], ["패키지代外", packageAmount], ["계", total],
     ];
     const ledgerRows: Array<[string, string, string, number, number]> = [
       ["11110311", "현금 및 현금등가물", "패키지代外", cashDeposit, 0],
-      ["21130199", "미지급금", "지급보류(대변)", 0, holdAmount],
-      ["21130199", "미지급금", "보류해제(차변)", releaseAmount, 0],
+      ["21130199", "미지급금", "지급보류", adjustment?.type === "지급보류" ? adjustmentDebit : 0, adjustment?.type === "지급보류" ? adjustmentCredit : 0],
+      ["21130199", "미지급금", "보류해제", adjustment?.type === "보류해제" ? adjustmentDebit : 0, adjustment?.type === "보류해제" ? adjustmentCredit : 0],
       ["21140107", "패키지", "패키지代外", 0, packageAmount],
       ["21140114", "워터파크", "워터파크입장권代外", 0, waterAdmission],
       ["21140106", "시즌권", "워터파크시즌패스代", 0, waterSeason],
@@ -422,7 +424,7 @@ export const buildSettlementPrintHtml = (
       </tbody></table>
       <table class="ledger"><thead><tr><th>계정</th><th>구분</th><th>적요</th><th>차변</th><th>대변</th></tr></thead><tbody>
         ${ledgerRows.map(([account, division, description, debit, credit]) => `<tr><td>${account}</td><td>${escapeHtml(division)}</td><td>${escapeHtml(description)}</td><td>${formatPrintMoney(debit)}</td><td>${formatPrintMoney(credit)}</td></tr>`).join("")}
-        <tr class="validation"><td colspan="3">검 증</td><td>${formatPrintMoney(cashDeposit + releaseAmount)}</td><td>${formatPrintMoney(total + holdAmount)}</td></tr>
+        <tr class="validation"><td colspan="3">검 증</td><td>${formatPrintMoney(cashDeposit + adjustmentDebit)}</td><td>${formatPrintMoney(total + adjustmentCredit)}</td></tr>
       </tbody></table>
     </section>`;
   }).join("");
