@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isNicepayTargetMid, processVatSettlement } from "./nicepayVatEngine.ts";
+import { isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
 
 const facilities = [
   { id: "room", name: "객실료", excelColumn: "AE", displayOrder: 1, enabled: true },
@@ -57,4 +57,17 @@ test("negative cancelled fees retain their sign through allocation", () => {
   assert.equal(summary.feeTotal, -110);
   assert.equal(summary.allocatedTotal, -110);
   assert.equal(summary.cancelledCount, 1);
+});
+
+test("standard product summary combines transaction and fee amounts", () => {
+  const processed = processVatSettlement([
+    { 상품명: "워터 PKG A", 거래금액: 10000, 결제수수료: 100, VAT: 10, 정산금액: 9890 },
+    { 상품명: "워터 PKG B", 거래금액: 20000, 결제수수료: 200, VAT: 20, 정산금액: 19780 },
+  ], rules, components, facilities);
+  const total = summarizeStandardProducts(processed.rows).find((item) => item.standardProductName === "워터PKG");
+  assert.ok(total);
+  assert.equal(total.transactionCount, 2);
+  assert.equal(total.transactionAmount, 30000);
+  assert.equal(total.feeTotal, 330);
+  assert.equal(total.settlementAmount, 29670);
 });

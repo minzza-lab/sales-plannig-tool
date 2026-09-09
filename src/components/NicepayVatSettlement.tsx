@@ -4,10 +4,11 @@ import { CheckCircle2, Download, FileSpreadsheet, Plus, Save, Trash2, UploadClou
 import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
-import { isNicepayTargetMid, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
+import NicepayProductGrouping from "./NicepayProductGrouping";
+import { isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 
-type Tab = "upload" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
+type Tab = "upload" | "group" | "summary" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
 type ManualOverride = { standardProductName: string; packageName: string };
 const newId = () => globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
@@ -111,6 +112,7 @@ const NicepayVatSettlement = () => {
     ...rules,
   ], [manualOverrides, rawRows, rules]);
   const result = useMemo(() => processVatSettlement(rawRows, effectiveRules, components, facilities), [rawRows, effectiveRules, components, facilities]);
+  const productAmountSummaries = useMemo(() => summarizeStandardProducts(result.rows), [result.rows]);
   const activeFacilities = useMemo(() => facilities.filter((item) => item.enabled).sort((a, b) => a.displayOrder - b.displayOrder), [facilities]);
   const componentsByPackage = useMemo(() => Array.from(new Set(components.map((item) => item.packageName))).sort((a, b) => a.localeCompare(b, "ko")), [components]);
 
@@ -120,7 +122,7 @@ const NicepayVatSettlement = () => {
     setWorkbook(nextWorkbook); setFileName(file.name); setSheetName(firstSheet);
     const nextHeader = detectHeaderRow(nextWorkbook.Sheets[firstSheet]);
     const parsed = parseSheetRows(nextWorkbook, firstSheet, nextHeader);
-    setHeaderRow(nextHeader); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({});
+    setHeaderRow(nextHeader); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({}); setTab("group");
     setMessage(`${file.name}에서 ${nextWorkbook.SheetNames.length}개 시트를 확인했습니다. ${nextHeader}행 헤더 기준으로 MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 불러왔습니다. (${parsed.excludedMidCount.toLocaleString()}행 제외)`);
   };
   const applySheet = () => { if (!workbook || !sheetName) return; const parsed = parseSheetRows(workbook, sheetName, headerRow); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({}); setMessage(`${sheetName} 시트 ${headerRow}행을 헤더로 적용했습니다. MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 반영합니다.`); };
@@ -152,9 +154,10 @@ const NicepayVatSettlement = () => {
   };
 
   const updateRule = (id: string, patch: Partial<ClassificationRule>) => setRules((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const upsertRule = (rule: ClassificationRule) => setRules((items) => items.some((item) => item.id === rule.id) ? items.map((item) => item.id === rule.id ? rule : item) : [...items, rule]);
   const updateComponent = (id: string, patch: Partial<PackageComponent>) => setComponents((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const updateFacility = (id: string, patch: Partial<Facility>) => setFacilities((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
-  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["rules", "상품 분류 기준"], ["components", "PKG 구성 관리"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
+  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["rules", "고급 규칙"], ["components", "PKG 구성 관리"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
 
   return <div className="vat-step3">
     <header className="vat-hero"><div><span>NICEPAY VAT SETTLEMENT · STEP 3</span><h1>상품 분류·수수료 배분</h1><p>원본 거래 파일은 이 브라우저 안에서만 계산하고 저장하지 않습니다.</p></div><button onClick={() => void saveSettings()} disabled={isSaving}><Save size={17} /> {isSaving ? "저장 중" : "설정 저장"}</button></header>
@@ -162,6 +165,10 @@ const NicepayVatSettlement = () => {
     <nav className="vat-tabs">{tabs.map(([value, label]) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}</nav>
 
     {tab === "upload" && <section className="vat-card"><h2>1. 로우데이터 업로드</h2><p>원본 파일은 수정하지 않습니다. 업로드 뒤 시트와 헤더 행을 변경해 전체 행을 다시 읽을 수 있습니다. <b>MID 1M·4M·5M 외의 거래는 분류·집계·Excel 출력에서 제외됩니다.</b></p><label className="vat-dropzone"><UploadCloud size={30} /><b>{fileName || "나이스페이 상세 거래일 파일 선택"}</b><small>.xls, .xlsx, .xlsm 지원</small><input ref={uploadRef} type="file" accept=".xls,.xlsx,.xlsm" onChange={(event) => event.target.files?.[0] && void loadFile(event.target.files[0])} /></label>{workbook && <div className="vat-upload-options"><label>시트<select value={sheetName} onChange={(event) => setSheetName(event.target.value)}>{workbook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label><label>헤더 행<input type="number" min="1" value={headerRow} onChange={(event) => setHeaderRow(Number(event.target.value) || 1)} /></label><button onClick={applySheet}>적용</button></div>}{sourceRowCount > 0 && <><div className="vat-kpis"><b>원본 데이터 행 <strong>{sourceRowCount.toLocaleString()}</strong></b><b>MID 대상 행 <strong>{result.report.inputCount.toLocaleString()}</strong></b><b>MID 제외 <strong>{excludedMidCount.toLocaleString()}</strong></b><b>미분류 <strong className={result.report.unclassifiedCount ? "bad" : ""}>{result.report.unclassifiedCount.toLocaleString()}</strong></b></div>{rawRows.length > 0 && <div className="vat-preview"><table><thead><tr>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rawRows.slice(0, 8).map((row, index) => <tr key={index}>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <td key={header}>{String(row[header] ?? "")}</td>)}</tr>)}</tbody></table></div>}</>}</section>}
+
+    {tab === "group" && <NicepayProductGrouping rows={rawRows} rules={rules} onUpsertRule={upsertRule} />}
+
+    {tab === "summary" && <section className="vat-card"><div className="vat-section-head"><div><h2>3. 키워드별 상품 금액 합계</h2><p>S열 상품명을 X열 표준 상품명으로 묶은 뒤, 거래금액·수수료·VAT·수수료계·실입금액을 합산합니다.</p></div><b className="group-count">{productAmountSummaries.length.toLocaleString()}개 상품</b></div>{productAmountSummaries.length ? <div className="vat-table-scroll"><table><thead><tr><th>분류 키워드</th><th>X열 표준 상품명</th><th>거래 건수</th><th>거래금액</th><th>결제수수료</th><th>VAT</th><th>수수료계</th><th>실입금액</th></tr></thead><tbody>{productAmountSummaries.map((item) => <tr key={item.standardProductName} className={item.standardProductName === "미분류" ? "error-row" : ""}><td>{item.keywords}</td><td>{item.standardProductName}</td><td>{item.transactionCount.toLocaleString()}</td><td>{won(item.transactionAmount)}</td><td>{won(item.paymentFee)}</td><td>{won(item.vat)}</td><td>{won(item.feeTotal)}</td><td>{won(item.settlementAmount)}</td></tr>)}<tr><td>합계</td><td>-</td><td>{productAmountSummaries.reduce((sum, item) => sum + item.transactionCount, 0).toLocaleString()}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.transactionAmount, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.paymentFee, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.vat, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.feeTotal, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.settlementAmount, 0))}</td></tr></tbody></table></div> : <p>먼저 S열 묶음에서 X열 표준 상품명을 지정하세요.</p>}</section>}
 
     {tab === "rules" && <section className="vat-card"><div className="vat-section-head"><div><h2>2. 상품 분류 기준</h2><p>작은 우선순위부터 적용됩니다. 포함 키워드는 모두 포함되어야 하고, 제외 키워드가 하나라도 있으면 제외됩니다.</p></div><button onClick={() => setRules((items) => [...items, { id: newId(), priority: (Math.max(0, ...items.map((item) => item.priority)) + 1), includeKeywords: [], excludeKeywords: [], standardProductName: "", packageName: "", enabled: true, description: "" }])}><Plus size={16} /> 규칙 추가</button></div><div className="vat-grid-table rules"><div className="row header"><span>우선순위</span><span>포함 키워드</span><span>제외 키워드</span><span>표준 상품명</span><span>PKG 분류명</span><span>사용</span><span>설명</span><span /></div>{rules.sort((a, b) => a.priority - b.priority).map((rule) => <div className="row" key={rule.id}><input type="number" value={rule.priority} onChange={(event) => updateRule(rule.id, { priority: Number(event.target.value) || 0 })} /><input value={rule.includeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { includeKeywords: splitKeywords(event.target.value) })} placeholder="워터, 조식" /><input value={rule.excludeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { excludeKeywords: splitKeywords(event.target.value) })} /><input value={rule.standardProductName} onChange={(event) => updateRule(rule.id, { standardProductName: event.target.value })} /><input value={rule.packageName} onChange={(event) => updateRule(rule.id, { packageName: event.target.value })} /><input type="checkbox" checked={rule.enabled} onChange={(event) => updateRule(rule.id, { enabled: event.target.checked })} /><input value={rule.description} onChange={(event) => updateRule(rule.id, { description: event.target.value })} /><button className="icon-danger" onClick={() => setRules((items) => items.filter((item) => item.id !== rule.id))}><Trash2 size={16} /></button></div>)}</div></section>}
 

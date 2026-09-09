@@ -95,6 +95,24 @@ export type ProcessingResult = {
   };
 };
 
+export type ProductNameGroup = {
+  id: string;
+  names: string[];
+  count: number;
+  suggestedKeywords: string[];
+};
+
+export type ProductAmountSummary = {
+  standardProductName: string;
+  keywords: string;
+  transactionCount: number;
+  transactionAmount: number;
+  paymentFee: number;
+  vat: number;
+  feeTotal: number;
+  settlementAmount: number;
+};
+
 const normalizeHeader = (value: unknown) => String(value ?? "")
   .replace(/[\n\r\s]/g, "")
   .toLowerCase();
@@ -125,6 +143,51 @@ export const valueByHeaders = (row: RawRow, names: string[]) => {
     if (partial && row[partial] !== "" && row[partial] !== undefined && row[partial] !== null) return row[partial];
   }
   return "";
+};
+
+const PRODUCT_NAME_STOP_WORDS = new Set(["pkg", "package", "패키지", "상품", "이용권", "권", "특가", "예약"]);
+
+const productNameTokens = (value: unknown) => text(value)
+  .toLocaleLowerCase("ko-KR")
+  .replace(/[()[\]{}<>]/g, " ")
+  .match(/[가-힣a-z0-9]+/g)?.filter((token) => token.length > 1 && !PRODUCT_NAME_STOP_WORDS.has(token)) || [];
+
+/** Groups only conservative variants: exact product names or names with the same meaningful token set. */
+export const groupProductNames = (rows: RawRow[]): ProductNameGroup[] => {
+  const grouped = new Map<string, { names: Map<string, number>; tokens: string[] }>();
+  rows.forEach((row) => {
+    const name = text(valueByHeaders(row, ["원본 상품명", "상품명"]));
+    if (!name) return;
+    const tokens = productNameTokens(name);
+    const key = tokens.length ? [...new Set(tokens)].sort().join("|") : name.toLocaleLowerCase("ko-KR").replace(/\s/g, "");
+    const current = grouped.get(key) || { names: new Map<string, number>(), tokens };
+    current.names.set(name, (current.names.get(name) || 0) + 1);
+    grouped.set(key, current);
+  });
+  return [...grouped.entries()].map(([key, group]) => ({
+    id: key,
+    names: [...group.names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).map(([name]) => name),
+    count: [...group.names.values()].reduce((total, value) => total + value, 0),
+    suggestedKeywords: group.tokens.slice(0, 4),
+  })).sort((a, b) => b.count - a.count || a.names[0].localeCompare(b.names[0], "ko"));
+};
+
+export const summarizeStandardProducts = (rows: ProcessedRow[]): ProductAmountSummary[] => {
+  const summary = new Map<string, ProductAmountSummary & { keywordSet: Set<string> }>();
+  rows.forEach((row) => {
+    const key = row.standardProductName || "미분류";
+    const current = summary.get(key) || { standardProductName: key, keywords: "", keywordSet: new Set<string>(), transactionCount: 0, transactionAmount: 0, paymentFee: 0, vat: 0, feeTotal: 0, settlementAmount: 0 };
+    if (row.appliedKeywords) current.keywordSet.add(row.appliedKeywords);
+    current.transactionCount += 1;
+    current.transactionAmount += row.transactionAmount;
+    current.paymentFee += row.paymentFee;
+    current.vat += row.vat;
+    current.feeTotal += row.feeTotal;
+    current.settlementAmount += row.settlementAmount;
+    summary.set(key, current);
+  });
+  return [...summary.values()].map(({ keywordSet, ...row }) => ({ ...row, keywords: [...keywordSet].join(" / ") || "-" }))
+    .sort((a, b) => b.transactionAmount - a.transactionAmount || a.standardProductName.localeCompare(b.standardProductName, "ko"));
 };
 
 export const normalizeDate = (value: unknown): string => {

@@ -1,6 +1,6 @@
 import type { Workbook, Worksheet } from "exceljs";
 import type { ClassificationRule, Facility, PackageComponent, ProcessingResult, RawRow } from "./nicepayVatEngine.ts";
-import { valueByHeaders } from "./nicepayVatEngine.ts";
+import { summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
 
 const border = { top: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, left: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, bottom: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, right: { style: "thin" as const, color: { argb: "FF7F7F7F" } } };
 const moneyFormat = "#,##0;[Red]-#,##0;0";
@@ -59,6 +59,19 @@ export const buildVatSettlementWorkbook = (
   [1, 6, 7, 8, 9, 10, 11, 12].forEach((column) => { classified.getColumn(column).width = 16; });
   classified.getColumn(6).numFmt = moneyFormat;
   classified.views = [{ state: "frozen", ySplit: 1 }];
+
+  const productSummary = workbook.addWorksheet("상품별 금액 합계");
+  const productSummaryHeaders = ["분류 키워드", "X열 표준 상품명", "거래 건수", "거래금액", "결제수수료", "VAT", "수수료계", "실입금액"];
+  productSummary.addRow(productSummaryHeaders);
+  const standardProductTotals = summarizeStandardProducts(result.rows);
+  standardProductTotals.forEach((item) => productSummary.addRow([item.keywords, item.standardProductName, item.transactionCount, item.transactionAmount, item.paymentFee, item.vat, item.feeTotal, item.settlementAmount]));
+  productSummary.addRow(["합계", "", standardProductTotals.reduce((sum, item) => sum + item.transactionCount, 0), standardProductTotals.reduce((sum, item) => sum + item.transactionAmount, 0), standardProductTotals.reduce((sum, item) => sum + item.paymentFee, 0), standardProductTotals.reduce((sum, item) => sum + item.vat, 0), standardProductTotals.reduce((sum, item) => sum + item.feeTotal, 0), standardProductTotals.reduce((sum, item) => sum + item.settlementAmount, 0)]);
+  setHeader(productSummary, 1, 1, productSummaryHeaders.length);
+  styleTable(productSummary, 2, Math.max(2, standardProductTotals.length + 2), 1, productSummaryHeaders.length);
+  [26, 28, 14, 18, 18, 18, 18, 18].forEach((width, index) => { productSummary.getColumn(index + 1).width = width; });
+  for (let column = 4; column <= 8; column += 1) productSummary.getColumn(column).numFmt = moneyFormat;
+  productSummary.getRow(standardProductTotals.length + 2).font = { name: "맑은 고딕", size: 9, bold: true };
+  productSummary.views = [{ state: "frozen", ySplit: 1 }];
 
   const allocation = workbook.addWorksheet("PKG 집계 및 업장별 배분");
   const facilityList = facilities.filter((item) => item.enabled).sort((a, b) => a.displayOrder - b.displayOrder);
