@@ -816,6 +816,14 @@ const NicepaySettlement: React.FC = () => {
         return keyword && currentProducts.some((product) => product.includes(keyword));
       });
   }, [classifiedRows, mappings]);
+  const mappingGroups = useMemo(() => {
+    const grouped = new Map<string, Array<{ rule: MappingRule; index: number }>>();
+    visibleMappingEntries.forEach((entry) => {
+      const category = entry.rule.result || "미분류";
+      grouped.set(category, [...(grouped.get(category) || []), entry]);
+    });
+    return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b, "ko"));
+  }, [visibleMappingEntries]);
 
   useEffect(() => {
     localStorage.setItem("nicepay_mapping_master_v1", JSON.stringify(mappings));
@@ -1016,19 +1024,6 @@ const NicepaySettlement: React.FC = () => {
       mappings.forEach((rule) => mappingSheet.addRow([rule.keyword, rule.result]));
       styleWorksheet(mappingSheet, [48, 24]);
 
-      const allocationSheet = workbook.addWorksheet("알로안분");
-      allocationSheet.addRow([
-        "cat", "base",
-        ...Array.from({ length: 6 }, (_, index) => [`t${index + 1}`, `p${index + 1}`]).flat(),
-      ]);
-      Object.entries(allocationRules).forEach(([category, rule]) => {
-        allocationSheet.addRow([
-          category,
-          rule.basePrice,
-          ...rule.items.flatMap((item) => [item.target, item.price]),
-        ]);
-      });
-      styleWorksheet(allocationSheet, [22, 16, ...Array.from({ length: 12 }, (_, index) => index % 2 === 0 ? 22 : 14)]);
     },
   );
 
@@ -1037,8 +1032,7 @@ const NicepaySettlement: React.FC = () => {
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const mappingSheet = workbook.Sheets["매핑설정"];
-      const allocationSheet = workbook.Sheets["알로안분"] || workbook.Sheets["안분설정"];
-      if (!mappingSheet && !allocationSheet) throw new Error("매핑설정 또는 알로안분 시트를 찾을 수 없습니다.");
+      if (!mappingSheet) throw new Error("매핑설정 시트를 찾을 수 없습니다.");
 
       if (mappingSheet) {
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(mappingSheet, { defval: "" });
@@ -1047,24 +1041,7 @@ const NicepaySettlement: React.FC = () => {
           .filter((rule) => rule.keyword);
         if (importedMappings.length > 0) setMappings(importedMappings);
       }
-      if (allocationSheet) {
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(allocationSheet, { defval: "" });
-        const importedRules: AllocationRules = {};
-        rows.forEach((row) => {
-          const category = String(row.cat || row.category || "").trim();
-          if (!category) return;
-          const basePrice = parseMoney(row.base ?? row.basePrice);
-          importedRules[category] = {
-            basePrice,
-            items: Array.from({ length: 6 }, (_, index) => ({
-              target: String(row[`t${index + 1}`] || row[`target${index + 1}`] || "").trim(),
-              price: parseMoney(row[`p${index + 1}`] ?? row[`price${index + 1}`]),
-            })),
-          };
-        });
-        if (Object.keys(importedRules).length > 0) setAllocationRules(importedRules);
-      }
-      setMessage("매핑·안분 설정을 가져왔습니다.");
+      setMessage("상품 키워드 매핑 설정을 가져왔습니다.");
       setSettingsOpen(true);
     } catch (error) {
       setMessage(`설정 가져오기 실패: ${error instanceof Error ? error.message : "파일 형식을 확인해 주세요."}`);
@@ -1450,15 +1427,6 @@ const NicepaySettlement: React.FC = () => {
     return Object.entries(result).sort((a, b) => b[1].amount - a[1].amount);
   }, [allocatedRows]);
 
-  const updateAllocation = (category: string, patch: Partial<AllocationRule>) =>
-    setAllocationRules((previous) => ({
-      ...previous,
-      [category]: {
-        ...(previous[category] || { basePrice: 0, items: createItems() }),
-        ...patch,
-      },
-    }));
-
   const updateDepositAmount = (date: string, mid: CalendarMid, amount: number) => {
     setCalendarAmounts((previous) => {
       const next = {
@@ -1507,7 +1475,7 @@ const NicepaySettlement: React.FC = () => {
               className="nicepay-settings-button"
               onClick={() => setSettingsOpen((open) => !open)}
             >
-              <Settings2 size={17} /> 매핑·안분 설정{reviewMappings.length > 0 && <b>{reviewMappings.length}</b>} <ChevronDown size={16} />
+              <Settings2 size={17} /> 상품 키워드 매핑{reviewMappings.length > 0 && <b>{reviewMappings.length}</b>} <ChevronDown size={16} />
             </button>
         </div>
       </header>
@@ -1560,12 +1528,11 @@ const NicepaySettlement: React.FC = () => {
           <div className="nicepay-settings-heading">
             <div>
               <span>SHARED RULES</span>
-              <h2>상품 매핑과 알로 안분 설정</h2>
+              <h2>상품 키워드 매핑 설정</h2>
             </div>
             <button
               onClick={() => {
                 setMappings(DEFAULT_MAPPINGS);
-                setAllocationRules({});
               }}
             >
               <RotateCcw size={15} /> 기본값 초기화
@@ -1659,135 +1626,25 @@ const NicepaySettlement: React.FC = () => {
                   <Plus size={15} /> 추가
                 </button>
               </div>
-              <div className="nicepay-rule-list">
+              <div className="nicepay-mapping-groups">
                 {classifiedRows.length > 0 && visibleMappingEntries.length === 0 && (
                   <p>현재 1m · 4m · 5m 상품에 적용되는 매핑 규칙이 없습니다.</p>
                 )}
-                {visibleMappingEntries.map(({ rule, index }) => (
-                  <div key={`${rule.keyword}-${index}`}>
-                    <input
-                      value={rule.keyword}
-                      onChange={(event) =>
-                        setMappings((rules) =>
-                          rules.map((item, i) =>
-                            i === index
-                              ? { ...item, keyword: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                    <span>→</span>
-                    <input
-                      value={rule.result}
-                      onChange={(event) =>
-                        setMappings((rules) =>
-                          rules.map((item, i) =>
-                            i === index
-                              ? { ...item, result: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                    <button
-                      onClick={() =>
-                        setMappings((rules) =>
-                          rules.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                {mappingGroups.map(([category, entries]) => (
+                  <details key={category} className="nicepay-mapping-group">
+                    <summary><b>{category}</b><span>{entries.length.toLocaleString()}개 규칙</span><ChevronDown size={16} /></summary>
+                    <div className="nicepay-rule-list">
+                      {entries.map(({ rule, index }) => (
+                        <div key={`${rule.keyword}-${index}`}>
+                          <input value={rule.keyword} onChange={(event) => setMappings((rules) => rules.map((item, i) => i === index ? { ...item, keyword: event.target.value } : item))} />
+                          <span>→</span>
+                          <input value={rule.result} onChange={(event) => setMappings((rules) => rules.map((item, i) => i === index ? { ...item, result: event.target.value } : item))} />
+                          <button onClick={() => setMappings((rules) => rules.filter((_, i) => i !== index))}><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 ))}
-              </div>
-            </div>
-            <div className="nicepay-allocation-editor">
-              <h3>알로 안분 규칙</h3>
-              <div className="nicepay-allocation-list">
-                {categories.map((category) => {
-                  const rule = allocationRules[category] || {
-                    basePrice: 0,
-                    items: createItems(),
-                  };
-                  const rate =
-                    rule.basePrice > 0
-                      ? rule.items.reduce((sum, item) => sum + item.price, 0) /
-                        rule.basePrice
-                      : 0;
-                  return (
-                    <details key={category}>
-                      <summary>
-                        <b>{category}</b>
-                        <span
-                          className={
-                            Math.abs(rate - 1) <= 0.005 ? "valid" : "invalid"
-                          }
-                        >
-                          {(rate * 100).toFixed(1)}%
-                        </span>
-                      </summary>
-                      <label>
-                        <span>상품 최저가</span>
-                        <input
-                          type="number"
-                          value={rule.basePrice || ""}
-                          onChange={(event) =>
-                            updateAllocation(category, {
-                              basePrice: Number(event.target.value) || 0,
-                            })
-                          }
-                        />
-                      </label>
-                      <div className="nicepay-allocation-items">
-                        {rule.items.map((item, index) => (
-                          <div key={index}>
-                            <input
-                              placeholder={`안분 ${index + 1} 항목`}
-                              value={item.target}
-                              onChange={(event) =>
-                                updateAllocation(category, {
-                                  items: rule.items.map((current, i) =>
-                                    i === index
-                                      ? {
-                                          ...current,
-                                          target: event.target.value,
-                                        }
-                                      : current,
-                                  ),
-                                })
-                              }
-                            />
-                            <input
-                              type="number"
-                              placeholder="기준금액"
-                              value={item.price || ""}
-                              onChange={(event) =>
-                                updateAllocation(category, {
-                                  items: rule.items.map((current, i) =>
-                                    i === index
-                                      ? {
-                                          ...current,
-                                          price:
-                                            Number(event.target.value) || 0,
-                                        }
-                                      : current,
-                                  ),
-                                })
-                              }
-                            />
-                            <em>
-                              {rule.basePrice > 0
-                                ? `${((item.price / rule.basePrice) * 100).toFixed(1)}%`
-                                : "-"}
-                            </em>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  );
-                })}
               </div>
             </div>
           </div>
