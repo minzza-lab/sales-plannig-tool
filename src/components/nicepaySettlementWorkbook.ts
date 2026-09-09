@@ -13,7 +13,8 @@ export type SettlementWorkbookRow = RawRow & {
 
 export type SettlementMapping = { keyword: string; result: string };
 
-const BLUE = "FF4472C4";
+const BLUE = "FF4E73DF";
+const DETAIL_HEADER_FILL = "FFD9E1F2";
 const YELLOW = "FFFFFF00";
 const BORDER = {
   top: { style: "thin" as const, color: { argb: "FF7F7F7F" } },
@@ -23,6 +24,8 @@ const BORDER = {
 };
 const MONEY_FORMAT = "#,##0;[Red](#,##0);0";
 const FIXED_CATEGORIES = ["스마트예약", "워터시즌권", "패키지外"];
+const HIDDEN_DETAIL_COLUMNS = ["D", "E", "F", "G", "H", "K", "L", "N", "P", "Q", "T", "U", "V", "W"];
+const DATE_TAB_COLORS = ["FFD5E8D4", "FFE1D5E7", "FFFCE4D6", "FFFFF2CC", "FFD9E1F2", "FFE2EFDA", "FFF8CECC"];
 
 const normalizeHeader = (value: unknown) =>
   String(value ?? "").replace(/[\n\r\s]/g, "").toLowerCase();
@@ -98,6 +101,9 @@ const addSummaryAndVoucher = (
   });
   styleRange(sheet, sumRow, sumRow, 1, 26);
   sheet.getRow(sumRow).font = { name: "맑은 고딕", size: 9, bold: true };
+  for (let column = 9; column <= 26; column += 1) {
+    sheet.getCell(sumRow, column).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  }
 
   const summaryHeader = sumRow + 2;
   const categoryRows = FIXED_CATEGORIES.map((category, index) => ({
@@ -109,7 +115,7 @@ const addSummaryAndVoucher = (
   const summaryColumns = [
     ["B", "C", "구분"], ["D", "E", "건수"], ["F", "I", "거래금액"],
     ["J", "M", "결제수수료"], ["N", "Q", "VAT"], ["R", "U", "정산금액"],
-    ["V", "Y", "검증"],
+    ["V", "Y", "수수료+VAT"],
   ] as const;
   summaryColumns.forEach(([from, to, label]) => {
     mergeAndSet(sheet, `${from}${summaryHeader}:${to}${summaryHeader}`, label);
@@ -123,7 +129,7 @@ const addSummaryAndVoucher = (
     const metrics: Array<[string, string, string, number]> = [
       ["F", "I", "I", values.amount], ["J", "M", "J", values.fee],
       ["N", "Q", "M", values.vat], ["R", "U", "N", values.settlement],
-      ["V", "Y", "Y", values.settlement],
+      ["V", "Y", "Z", values.fee + values.vat],
     ];
     metrics.forEach(([from, to, source, result]) => {
       mergeAndSet(sheet, `${from}${row}:${to}${row}`, {
@@ -138,16 +144,24 @@ const addSummaryAndVoucher = (
     formula: `SUM(R${summaryHeader + 1}:R${summaryHeader + 3})`, result: categoryRows.reduce((sum, item) => sum + item.values.settlement, 0),
   });
   mergeAndSet(sheet, `V${summaryTotalRow}:Y${summaryTotalRow}`, {
-    formula: `R${summaryTotalRow}-SUM(V${summaryHeader + 1}:V${summaryHeader + 3})`, result: 0,
+    formula: `SUM(V${summaryHeader + 1}:V${summaryHeader + 3})`, result: categoryRows.reduce((sum, item) => sum + item.values.fee + item.values.vat, 0),
   });
   sheet.getCell(`R${summaryTotalRow}`).numFmt = MONEY_FORMAT;
   sheet.getCell(`V${summaryTotalRow}`).numFmt = MONEY_FORMAT;
   styleRange(sheet, summaryHeader, summaryTotalRow, 2, 25);
+  for (let row = summaryHeader + 1; row < summaryTotalRow; row += 1) {
+    for (let column = 2; column <= 25; column += 1) {
+      sheet.getCell(row, column).font = { name: "Calibri", size: 11, color: { argb: "FF000000" } };
+    }
+  }
   for (let column = 2; column <= 25; column += 1) {
     sheet.getCell(summaryHeader, column).fill = { type: "pattern", pattern: "solid", fgColor: { argb: BLUE } };
     sheet.getCell(summaryHeader, column).font = { name: "맑은 고딕", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
   }
   sheet.getRow(summaryTotalRow).font = { name: "맑은 고딕", size: 9, bold: true };
+  for (let column = 2; column <= 25; column += 1) {
+    sheet.getCell(summaryTotalRow, column).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+  }
 
   const depositHeader = summaryTotalRow + 3;
   mergeAndSet(sheet, `B${depositHeader}:H${depositHeader}`, "구 분");
@@ -232,41 +246,47 @@ export const buildSettlementWorkbook = (
   mappings: SettlementMapping[],
 ) => {
   const mappingSheet = workbook.addWorksheet("매핑데이터");
-  mappingSheet.mergeCells("A1:C1");
-  mappingSheet.getCell("A1").value = "⚙️ 상품 매핑 규칙 마스터";
-  mappingSheet.getCell("A1").font = { name: "맑은 고딕", size: 14, bold: true };
-  mappingSheet.getCell("B4").value = "검색 키워드";
-  mappingSheet.getCell("C4").value = "최종 분류 결과";
+  mappingSheet.getCell("B2").value = "⚙️ 상품 매핑 규칙 마스터";
+  mappingSheet.getCell("B2").font = { name: "맑은 고딕", size: 14, bold: true, color: { argb: BLUE } };
+  mappingSheet.getCell("C5").value = "검색 키워드";
+  mappingSheet.getCell("D5").value = "최종 분류 결과";
   mappings.forEach((rule, index) => {
-    mappingSheet.getCell(5 + index, 2).value = rule.keyword;
-    mappingSheet.getCell(5 + index, 3).value = rule.result;
+    mappingSheet.getCell(6 + index, 3).value = rule.keyword;
+    mappingSheet.getCell(6 + index, 4).value = rule.result;
   });
-  styleRange(mappingSheet, 4, Math.max(4, 4 + mappings.length), 2, 3);
-  ["B4", "C4"].forEach((address) => {
+  styleRange(mappingSheet, 5, Math.max(5, 5 + mappings.length), 3, 4);
+  for (let row = 6; row <= 5 + mappings.length; row += 1) {
+    [3, 4].forEach((column) => {
+      mappingSheet.getCell(row, column).font = { name: "Calibri", size: 11, color: { argb: "FF000000" } };
+    });
+  }
+  ["C5", "D5"].forEach((address) => {
     mappingSheet.getCell(address).fill = { type: "pattern", pattern: "solid", fgColor: { argb: BLUE } };
     mappingSheet.getCell(address).font = { name: "맑은 고딕", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
   });
-  mappingSheet.getColumn("A").width = 4;
-  mappingSheet.getColumn("B").width = 48;
-  mappingSheet.getColumn("C").width = 22;
+  mappingSheet.getColumn("C").width = 40;
+  mappingSheet.getColumn("D").width = 30;
+  mappingSheet.views = [{ showGridLines: false, zoomScale: 100 }];
 
   const byDate = new Map<string, SettlementWorkbookRow[]>();
   rows.forEach((row) => byDate.set(row.__date, [...(byDate.get(row.__date) || []), row]));
-  Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, dateRows]) => {
+  const mappingEndRow = Math.max(6, 5 + mappings.length);
+  Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, dateRows], dateIndex) => {
     const [, month, day] = date.split("-");
     const sheet = workbook.addWorksheet(`${month}월${day}일`);
-    sheet.views = [{ state: "frozen", ySplit: 3, zoomScale: 90 }];
+    sheet.views = [{ state: "normal", showGridLines: true, zoomScale: 90 }];
+    sheet.properties.tabColor = { argb: DATE_TAB_COLORS[dateIndex % DATE_TAB_COLORS.length] };
     sheet.mergeCells("A1:Z1");
     sheet.getCell("A1").value = `■ 나이스페이 정산_${month}.${day}`;
     sheet.getCell("A1").font = { name: "맑은 고딕", size: 14, bold: true };
-    sheet.getCell("A1").alignment = { vertical: "middle", horizontal: "left" };
+    sheet.getCell("A1").alignment = { vertical: "middle", horizontal: "center" };
     sheet.getRow(1).height = 25;
     const headers = ["NO.", "결제 서비스명", "정산일", "승인일", "매입요청일", "취소일", "상 호", "MID", "거래금액", "결제수수료", "에스크로수수료", "인증수수료", "VAT", "정산금액", "카드사", "승인번호", "주문번호", "구매자", "상품명", "거래구분", "TID", "상태", "원TID", "변환결과(X)", "정산금액(Y)", "수수료+VAT(Z)"];
     sheet.getRow(3).values = headers;
     sheet.getRow(3).height = 30;
     sheet.getRow(3).eachCell((cell) => {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BLUE } };
-      cell.font = { name: "맑은 고딕", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DETAIL_HEADER_FILL } };
+      cell.font = { name: "맑은 고딕", size: 9, bold: true, color: { argb: "FF000000" } };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
       cell.border = BORDER;
     });
@@ -283,12 +303,20 @@ export const buildSettlementWorkbook = (
         toCellValue(getValue(row, ["카드사"])), toCellValue(getValue(row, ["승인번호"])), toCellValue(getValue(row, ["주문번호"])),
         toCellValue(getValue(row, ["구매자"])), toCellValue(getValue(row, ["상품명"])), toCellValue(getValue(row, ["거래구분"])),
         toCellValue(getValue(row, ["TID"])), toCellValue(getValue(row, ["상태"])), toCellValue(getValue(row, ["원TID"])),
-        row.__category, row.__settlement, feeVat,
       ];
-      excelRow.font = { name: "맑은 고딕", size: 8 };
+      const rowNumber = 4 + index;
+      excelRow.getCell(24).value = {
+        formula: `IFERROR(LOOKUP(2,1/(ISNUMBER(SEARCH(매핑데이터!$C$6:$C$${mappingEndRow},S${rowNumber}))*(매핑데이터!$C$6:$C$${mappingEndRow}<>"")),매핑데이터!$D$6:$D$${mappingEndRow}),"미분류")`,
+        result: row.__category,
+      };
+      excelRow.getCell(25).value = { formula: `N${rowNumber}`, result: row.__settlement };
+      excelRow.getCell(26).value = { formula: `J${rowNumber}+M${rowNumber}`, result: feeVat };
+      excelRow.font = { name: "맑은 고딕", size: 9, ...(row.__amount < 0 ? { color: { argb: "FFFF0000" } } : {}) };
       excelRow.alignment = { vertical: "middle", horizontal: "center" };
       excelRow.eachCell((cell) => { cell.border = BORDER; });
       [9, 10, 11, 12, 13, 14, 25, 26].forEach((column) => { excelRow.getCell(column).numFmt = MONEY_FORMAT; });
+      [9, 10, 11, 12, 13, 14, 25, 26].forEach((column) => { excelRow.getCell(column).alignment = { vertical: "middle", horizontal: "right" }; });
+      excelRow.getCell(19).alignment = { vertical: "middle", horizontal: "left" };
       const value = totals[row.__category] || { count: 0, amount: 0, fee: 0, vat: 0, settlement: 0 };
       value.count += 1;
       value.amount += row.__amount;
@@ -297,9 +325,23 @@ export const buildSettlementWorkbook = (
       value.settlement += row.__settlement;
       totals[row.__category] = value;
     });
-    const { depositHeader, validationRow } = addSummaryAndVoucher(sheet, 4, 3 + dateRows.length, totals);
-    [7, 12, 12, 12, 12, 12, 12, 16, 14, 14, 14, 14, 12, 15, 14, 15, 22, 12, 46, 12, 26, 12, 26, 18, 16, 16].forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
-    sheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: `B${depositHeader}:O${validationRow}` };
+    const detailEndRow = 3 + dateRows.length;
+    sheet.addConditionalFormatting({
+      ref: `X4:X${detailEndRow}`,
+      rules: [
+        ["미분류", "FFFF0000", "FFFFFFFF"], ["패키지外", "FFE2EFDA", "FF333333"],
+        ["스마트예약", "FFD9E1F2", "FF333333"], ["워터시즌권", "FFFFF2CC", "FF333333"],
+        ["체험행사", "FFFCE4D6", "FF333333"], ["스키시즌권", "FFE1D5E7", "FF333333"],
+      ].map(([label, fill, font], index) => ({
+        type: "cellIs" as const, operator: "equal" as const, priority: index + 1,
+        formulae: [`"${label}"`],
+        style: { fill: { type: "pattern" as const, pattern: "solid" as const, bgColor: { argb: fill } }, font: { color: { argb: font } } },
+      })),
+    });
+    const { depositHeader, validationRow } = addSummaryAndVoucher(sheet, 4, detailEndRow, totals);
+    [6, 15, 12, 12, 12, 12, 12, 12, 13, 11, 10, 10, 11, 12, 16, 12, 15, 11, 32, 12, 12, 12, 12, 16, 13, 13].forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
+    HIDDEN_DETAIL_COLUMNS.forEach((column) => { sheet.getColumn(column).hidden = true; });
+    sheet.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: `B${depositHeader}:O${validationRow}` };
   });
 };
 
@@ -349,6 +391,6 @@ export const buildSettlementPrintHtml = (rows: SettlementWorkbookRow[]) => {
     </section>`;
   }).join("");
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>나이스페이 전체 날짜 전표</title><style>
-    @page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}.voucher-page{page-break-after:always;break-after:page}.voucher-page:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 12px;font-size:17px}table{border-collapse:collapse;font-size:11px;text-align:center}th,td{border:1px solid #666;height:25px;padding:4px 8px}th{background:#ff0;font-weight:700}.deposit{width:48%;margin-bottom:18px}.deposit th:first-child{width:72%}.deposit td:last-child,.ledger td:nth-child(4),.ledger td:nth-child(5){text-align:right}.total,.validation{font-weight:700}.ledger{width:82%}.ledger th:nth-child(1){width:14%}.ledger th:nth-child(2){width:27%}.ledger th:nth-child(3){width:27%}.ledger th:nth-child(4),.ledger th:nth-child(5){width:16%}@media screen{body{background:#e5e7eb;padding:20px}.voucher-page{max-width:1100px;margin:0 auto 20px;padding:28px;background:#fff;box-shadow:0 4px 18px #0002}}@media print{.voucher-page{padding:0}}
+    @page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}.voucher-page{page-break-after:always;break-after:page}.voucher-page:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 12px;font-size:17px}table{border-collapse:collapse;font-size:10px;text-align:center}th,td{border:1px solid #666;height:25px;padding:4px 6px}th{background:#ff0;font-weight:700}.deposit{width:68%;margin-bottom:18px}.deposit th:first-child{width:72%}.deposit td:last-child,.ledger td:nth-child(4),.ledger td:nth-child(5){text-align:right}.total,.validation{font-weight:700}.ledger{width:100%}.ledger th:nth-child(1){width:14%}.ledger th:nth-child(2){width:27%}.ledger th:nth-child(3){width:27%}.ledger th:nth-child(4),.ledger th:nth-child(5){width:16%}@media screen{body{background:#e5e7eb;padding:20px}.voucher-page{max-width:760px;margin:0 auto 20px;padding:28px;background:#fff;box-shadow:0 4px 18px #0002}}@media print{.voucher-page{padding:0}}
   </style></head><body>${pages}<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>`;
 };
