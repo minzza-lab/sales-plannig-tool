@@ -36,6 +36,10 @@ type MappingRule = {
 type AllocationItem = { target: string; price: number };
 type AllocationRule = { basePrice: number; items: AllocationItem[] };
 type AllocationRules = Record<string, AllocationRule>;
+type ManualAdjustmentDraft = {
+  type: SettlementManualAdjustment["type"];
+  amount: number | string;
+};
 
 type ReconciliationRow = {
   date: string;
@@ -764,7 +768,7 @@ const NicepaySettlement: React.FC = () => {
 
   const [settlementFile, setSettlementFile] = useState<File>();
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([]);
-  const [manualAdjustments, setManualAdjustments] = useState<Record<string, SettlementManualAdjustment>>({});
+  const [manualAdjustments, setManualAdjustments] = useState<Record<string, ManualAdjustmentDraft>>({});
   const [mismatchOpen, setMismatchOpen] = useState(false);
 
   const [transactionFile, setTransactionFile] = useState<File>();
@@ -1264,19 +1268,25 @@ const NicepaySettlement: React.FC = () => {
         const settlementAmount = settlementByDate.get(date) || 0;
         const sourceDifference = depositAmount - settlementAmount;
         const adjustment = manualAdjustments[date];
+        const adjustmentAmount = parseMoney(adjustment?.amount);
         const adjustedDifference = sourceDifference
-          + (adjustment?.type === "보류해제" ? adjustment.amount : 0)
-          - (adjustment?.type === "지급보류" ? adjustment.amount : 0);
+          + (adjustment?.type === "보류해제" ? adjustmentAmount : 0)
+          - (adjustment?.type === "지급보류" ? adjustmentAmount : 0);
         return { date, depositAmount, settlementAmount, sourceDifference, adjustment, adjustedDifference };
       });
   }, [classifiedRows, manualAdjustments, reconciliation]);
   const mismatchedDates = settlementDateChecks.filter((row) => row.sourceDifference !== 0);
   const unresolvedDates = mismatchedDates.filter(
-    (row) => !row.adjustment || row.adjustment.amount <= 0 || row.adjustedDifference !== 0,
+    (row) => !row.adjustment || parseMoney(row.adjustment.amount) === 0 || row.adjustedDifference !== 0,
   );
   const settlementDepositControls = Object.fromEntries(settlementDateChecks.map((row) => [
     row.date,
-    { depositAmount: row.depositAmount, adjustment: row.adjustment },
+    {
+      depositAmount: row.depositAmount,
+      adjustment: row.adjustment
+        ? { type: row.adjustment.type, amount: parseMoney(row.adjustment.amount) }
+        : undefined,
+    },
   ]));
   const activeExportMappings = visibleMappingEntries
     .map(({ rule }) => rule)
@@ -1987,14 +1997,14 @@ const NicepaySettlement: React.FC = () => {
                       </td>
                       <td>
                         <input
-                          type="number"
-                          min="0"
-                          step="1"
+                          type="text"
+                          inputMode="numeric"
                           placeholder="0"
                           disabled={!row.adjustment?.type}
-                          value={row.adjustment?.amount || ""}
+                          value={row.adjustment?.amount ?? ""}
                           onChange={(event) => {
-                            const amount = Math.max(0, Number(event.target.value) || 0);
+                            const amount = event.target.value.replaceAll(",", "");
+                            if (!/^-?\d*$/.test(amount)) return;
                             if (!row.adjustment?.type) return;
                             setManualAdjustments((previous) => ({
                               ...previous,
