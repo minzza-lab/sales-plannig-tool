@@ -693,9 +693,7 @@ const NicepaySettlement: React.FC = () => {
       }
     },
   );
-  const [midText, setMidText] = useState(
-    "shinanrs1m, shinanrs3m, shinanrs4m, shinanrs5m",
-  );
+  const midText = "shinanrs1m, shinanrs4m, shinanrs5m";
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
   const [newResult, setNewResult] = useState("");
@@ -1496,9 +1494,9 @@ const NicepaySettlement: React.FC = () => {
             <span>분석 대상 MID</span>
             <input
               value={midText}
-              onChange={(event) => setMidText(event.target.value)}
+              readOnly
             />
-            <small>쉼표로 구분합니다.</small>
+            <small>1m · 4m · 5m만 정산 대상에 포함합니다.</small>
           </label>
           {reviewMappings.length > 0 && (
             <section className="nicepay-review-panel">
