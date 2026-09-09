@@ -173,7 +173,7 @@ const normalizeDate = (value: unknown) => {
 const classifyProduct = (productName: string, mappings: MappingRule[]) => {
   const target = productName.toLowerCase();
   const sorted = [...mappings]
-    .filter((rule) => rule.keyword.trim())
+    .filter((rule) => rule.keyword.trim() && rule.result !== "미분류")
     .sort((a, b) => b.keyword.length - a.keyword.length);
   const mapped =
     sorted.find((rule) => target.includes(rule.keyword.trim().toLowerCase()))
@@ -187,7 +187,11 @@ const detectMappingCandidates = (rows: RawRow[], mappings: MappingRule[]) => {
   const classifiedRules = [...mappings]
     .filter((rule) => rule.result !== "미분류" && rule.keyword.trim())
     .sort((a, b) => b.keyword.length - a.keyword.length);
-  const knownProducts = new Set(mappings.map((rule) => rule.keyword.trim().toLowerCase()));
+  const knownProducts = new Set(
+    mappings
+      .filter((rule) => rule.result === "미분류")
+      .map((rule) => rule.keyword.trim().toLowerCase()),
+  );
   const productNames = Array.from(
     new Set(rows.map((row) => String(getValue(row, ["상품명"])).trim()).filter(Boolean)),
   );
@@ -198,16 +202,10 @@ const detectMappingCandidates = (rows: RawRow[], mappings: MappingRule[]) => {
     const matchedRule = classifiedRules.find((rule) =>
       normalized.includes(rule.keyword.trim().toLowerCase()),
     );
-    const complexProduct = matchedRule && (
-      /[+&/]|pkg|패키지|렌탈|장비/i.test(productName) ||
-      productName.length - matchedRule.keyword.length > 10
-    );
-    if (!matchedRule || complexProduct) {
+    if (!matchedRule && !/비씨|\bBC\b/i.test(productName)) {
       next.unshift({
         keyword: productName,
         result: "미분류",
-        suggestion: matchedRule?.result,
-        suggestedBy: matchedRule?.keyword,
       });
       knownProducts.add(normalized);
     }
@@ -792,9 +790,28 @@ const NicepaySettlement: React.FC = () => {
     [mappings],
   );
   const reviewMappings = useMemo(
-    () => mappings.filter((rule) => rule.result === "미분류"),
-    [mappings],
+    () => {
+      const currentUnmappedProducts = new Set(
+        classifiedRows
+          .filter((row) => row.__category === "미분류")
+          .map((row) => String(getValue(row, ["상품명"])).trim().toLowerCase()),
+      );
+      return mappings.filter(
+        (rule) => rule.result === "미분류" && currentUnmappedProducts.has(rule.keyword.trim().toLowerCase()),
+      );
+    },
+    [classifiedRows, mappings],
   );
+  const visibleMappingEntries = useMemo(() => {
+    if (classifiedRows.length === 0) return mappings.map((rule, index) => ({ rule, index }));
+    const currentProducts = classifiedRows.map((row) => String(getValue(row, ["상품명"])).trim().toLowerCase());
+    return mappings
+      .map((rule, index) => ({ rule, index }))
+      .filter(({ rule }) => {
+        const keyword = rule.keyword.trim().toLowerCase();
+        return keyword && currentProducts.some((product) => product.includes(keyword));
+      });
+  }, [classifiedRows, mappings]);
 
   useEffect(() => {
     localStorage.setItem("nicepay_mapping_master_v1", JSON.stringify(mappings));
@@ -834,8 +851,8 @@ const NicepaySettlement: React.FC = () => {
 
   const filterNiceRows = (rows: RawRow[]) =>
     rows.filter((row) => {
-      const mid = String(getValue(row, ["MID"])).trim();
-      return mids.length === 0 || mids.includes(mid);
+      const mid = String(getValue(row, ["MID"])).trim().toLowerCase();
+      return mids.includes(mid);
     });
 
   const handleReconciliation = async () => {
@@ -1261,6 +1278,9 @@ const NicepaySettlement: React.FC = () => {
     row.date,
     { depositAmount: row.depositAmount, adjustment: row.adjustment },
   ]));
+  const activeExportMappings = visibleMappingEntries
+    .map(({ rule }) => rule)
+    .filter((rule) => rule.result !== "미분류");
 
   const validateBeforeOutput = () => {
     if (unresolvedDates.length === 0) return true;
@@ -1274,7 +1294,7 @@ const NicepaySettlement: React.FC = () => {
     void downloadWorkbook(
       `통합정산가공_${new Date().toISOString().slice(0, 10)}.xlsx`,
       (workbook) => {
-        buildSettlementWorkbook(workbook, classifiedRows, mappings, settlementDepositControls);
+        buildSettlementWorkbook(workbook, classifiedRows, activeExportMappings, settlementDepositControls);
       },
     );
   };
@@ -1558,7 +1578,7 @@ const NicepaySettlement: React.FC = () => {
                 </div>
                 <b>{reviewMappings.length}건</b>
               </div>
-              <p>새로 발견되었거나 기존 키워드보다 구성이 복잡한 상품입니다. 추천 분류를 승인하거나 직접 입력해 주세요.</p>
+              <p>현재 업로드한 1m · 4m · 5m 데이터에서 기존 키워드로 분류되지 않은 상품만 표시합니다.</p>
               <div className="nicepay-review-list">
                 {reviewMappings.map((rule) => (
                   <form
@@ -1630,7 +1650,10 @@ const NicepaySettlement: React.FC = () => {
                 </button>
               </div>
               <div className="nicepay-rule-list">
-                {mappings.map((rule, index) => (
+                {classifiedRows.length > 0 && visibleMappingEntries.length === 0 && (
+                  <p>현재 1m · 4m · 5m 상품에 적용되는 매핑 규칙이 없습니다.</p>
+                )}
+                {visibleMappingEntries.map(({ rule, index }) => (
                   <div key={`${rule.keyword}-${index}`}>
                     <input
                       value={rule.keyword}
