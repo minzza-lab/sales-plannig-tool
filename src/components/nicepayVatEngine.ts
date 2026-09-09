@@ -9,6 +9,7 @@ export type ClassificationRule = {
   packageName: string;
   enabled: boolean;
   description: string;
+  exactProductNames?: string[];
 };
 
 export type PackageComponent = {
@@ -126,6 +127,21 @@ export const money = (value: unknown): number => {
 
 export const text = (value: unknown) => String(value ?? "").trim();
 
+const EXACT_PRODUCT_MAPPING_PREFIX = "[STEP3_EXACT_PRODUCTS]";
+
+export const exactProductNamesFromRule = (rule: ClassificationRule) => {
+  if (rule.exactProductNames?.length) return rule.exactProductNames;
+  if (!rule.description.startsWith(EXACT_PRODUCT_MAPPING_PREFIX)) return [];
+  try {
+    const parsed = JSON.parse(rule.description.slice(EXACT_PRODUCT_MAPPING_PREFIX.length));
+    return Array.isArray(parsed) ? parsed.map(text).filter(Boolean) : [];
+  } catch { return []; }
+};
+
+export const exactProductMappingDescription = (names: string[]) => `${EXACT_PRODUCT_MAPPING_PREFIX}${JSON.stringify(names.map(text).filter(Boolean))}`;
+
+const normalizedProductName = (value: unknown) => text(value).toLocaleLowerCase("ko-KR").replace(/[\s\-_/()[\]{}]/g, "");
+
 export const NICEPAY_TARGET_MIDS = ["1m", "4m", "5m"] as const;
 
 export const isNicepayTargetMid = (value: unknown) => {
@@ -199,6 +215,8 @@ export const normalizeDate = (value: unknown): string => {
 
 const matchesRule = (productName: string, rule: ClassificationRule) => {
   if (!rule.enabled || !rule.packageName.trim()) return false;
+  const exactNames = exactProductNamesFromRule(rule);
+  if (exactNames.length) return exactNames.some((name) => normalizedProductName(name) === normalizedProductName(productName));
   const target = productName.toLocaleLowerCase("ko-KR");
   const includes = rule.includeKeywords.map(text).filter(Boolean);
   const excludes = rule.excludeKeywords.map(text).filter(Boolean);

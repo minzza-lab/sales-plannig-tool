@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
 import NicepayProductGrouping from "./NicepayProductGrouping";
-import { isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
+import { exactProductMappingDescription, exactProductNamesFromRule, isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 
 type Tab = "upload" | "group" | "summary" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
@@ -96,7 +96,7 @@ const NicepayVatSettlement = () => {
         return;
       }
       if (rulesResult.data?.length || componentsResult.data?.length || facilitiesResult.data?.length) {
-        if (rulesResult.data?.length) setRules(rulesResult.data.map((item) => ({ id: item.id, priority: item.priority, includeKeywords: item.include_keywords || [], excludeKeywords: item.exclude_keywords || [], standardProductName: item.standard_product_name, packageName: item.package_name, enabled: item.enabled, description: item.description || "" })));
+        if (rulesResult.data?.length) setRules(rulesResult.data.map((item) => { const rule = { id: item.id, priority: item.priority, includeKeywords: item.include_keywords || [], excludeKeywords: item.exclude_keywords || [], standardProductName: item.standard_product_name, packageName: item.package_name, enabled: item.enabled, description: item.description || "" }; return { ...rule, exactProductNames: exactProductNamesFromRule(rule) }; }));
         if (componentsResult.data?.length) setComponents(componentsResult.data.map((item) => ({ id: item.id, packageName: item.package_name, facilityName: item.facility_name, baseAmount: Number(item.base_amount), startDate: toDateValue(item.start_date), endDate: toDateValue(item.end_date), enabled: item.enabled })));
         if (facilitiesResult.data?.length) setFacilities(facilitiesResult.data.map((item) => ({ id: item.id, name: item.name, excelColumn: item.excel_column, displayOrder: item.display_order, enabled: item.enabled })));
         setSettingsMode("database"); setMessage("공유 설정표를 불러왔습니다.");
@@ -128,7 +128,7 @@ const NicepayVatSettlement = () => {
   const applySheet = () => { if (!workbook || !sheetName) return; const parsed = parseSheetRows(workbook, sheetName, headerRow); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({}); setMessage(`${sheetName} 시트 ${headerRow}행을 헤더로 적용했습니다. MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 반영합니다.`); };
   const saveSettings = async () => {
     setIsSaving(true);
-    const toRule = (item: ClassificationRule) => ({ priority: item.priority, include_keywords: item.includeKeywords, exclude_keywords: item.excludeKeywords, standard_product_name: item.standardProductName, package_name: item.packageName, enabled: item.enabled, description: item.description });
+    const toRule = (item: ClassificationRule) => ({ priority: item.priority, include_keywords: item.includeKeywords, exclude_keywords: item.excludeKeywords, standard_product_name: item.standardProductName, package_name: item.packageName, enabled: item.enabled, description: item.exactProductNames?.length ? exactProductMappingDescription(item.exactProductNames) : item.description });
     const toFacility = (item: Facility) => ({ name: item.name, excel_column: item.excelColumn, display_order: item.displayOrder, enabled: item.enabled });
     const toComponent = (item: PackageComponent) => ({ package_name: item.packageName, facility_name: item.facilityName, base_amount: item.baseAmount, start_date: item.startDate || null, end_date: item.endDate || null, enabled: item.enabled });
     const failed = await supabase.from("nicepay_vat_package_components").delete().neq("id", "00000000-0000-0000-0000-000000000000");
@@ -154,7 +154,17 @@ const NicepayVatSettlement = () => {
   };
 
   const updateRule = (id: string, patch: Partial<ClassificationRule>) => setRules((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
-  const upsertRule = (rule: ClassificationRule) => setRules((items) => items.some((item) => item.id === rule.id) ? items.map((item) => item.id === rule.id ? rule : item) : [...items, rule]);
+  const assignExactProducts = (productNames: string[], standardProductName: string) => {
+    const selected = new Set(productNames);
+    const remainingRules = rules.flatMap((rule) => {
+      const exactNames = exactProductNamesFromRule(rule);
+      if (!exactNames.length) return [rule];
+      const remaining = exactNames.filter((name) => !selected.has(name));
+      return remaining.length ? [{ ...rule, exactProductNames: remaining, includeKeywords: remaining }] : [];
+    });
+    setRules([...remainingRules, { id: `exact-${Date.now()}`, priority: -2000, includeKeywords: productNames, excludeKeywords: [], exactProductNames: productNames, standardProductName, packageName: standardProductName, enabled: true, description: exactProductMappingDescription(productNames) }]);
+    setMessage(`${productNames.length}개 실제 상품명을 X열 ‘${standardProductName}’으로 묶었습니다.`);
+  };
   const updateComponent = (id: string, patch: Partial<PackageComponent>) => setComponents((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const updateFacility = (id: string, patch: Partial<Facility>) => setFacilities((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["rules", "고급 규칙"], ["components", "PKG 구성 관리"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
@@ -166,7 +176,7 @@ const NicepayVatSettlement = () => {
 
     {tab === "upload" && <section className="vat-card"><h2>1. 로우데이터 업로드</h2><p>원본 파일은 수정하지 않습니다. 업로드 뒤 시트와 헤더 행을 변경해 전체 행을 다시 읽을 수 있습니다. <b>MID 1M·4M·5M 외의 거래는 분류·집계·Excel 출력에서 제외됩니다.</b></p><label className="vat-dropzone"><UploadCloud size={30} /><b>{fileName || "나이스페이 상세 거래일 파일 선택"}</b><small>.xls, .xlsx, .xlsm 지원</small><input ref={uploadRef} type="file" accept=".xls,.xlsx,.xlsm" onChange={(event) => event.target.files?.[0] && void loadFile(event.target.files[0])} /></label>{workbook && <div className="vat-upload-options"><label>시트<select value={sheetName} onChange={(event) => setSheetName(event.target.value)}>{workbook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label><label>헤더 행<input type="number" min="1" value={headerRow} onChange={(event) => setHeaderRow(Number(event.target.value) || 1)} /></label><button onClick={applySheet}>적용</button></div>}{sourceRowCount > 0 && <><div className="vat-kpis"><b>원본 데이터 행 <strong>{sourceRowCount.toLocaleString()}</strong></b><b>MID 대상 행 <strong>{result.report.inputCount.toLocaleString()}</strong></b><b>MID 제외 <strong>{excludedMidCount.toLocaleString()}</strong></b><b>미분류 <strong className={result.report.unclassifiedCount ? "bad" : ""}>{result.report.unclassifiedCount.toLocaleString()}</strong></b></div>{rawRows.length > 0 && <div className="vat-preview"><table><thead><tr>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rawRows.slice(0, 8).map((row, index) => <tr key={index}>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <td key={header}>{String(row[header] ?? "")}</td>)}</tr>)}</tbody></table></div>}</>}</section>}
 
-    {tab === "group" && <NicepayProductGrouping rows={rawRows} rules={rules} onUpsertRule={upsertRule} />}
+    {tab === "group" && <NicepayProductGrouping rows={rawRows} rules={rules} onAssignExactProducts={assignExactProducts} />}
 
     {tab === "summary" && <section className="vat-card"><div className="vat-section-head"><div><h2>3. 키워드별 상품 금액 합계</h2><p>S열 상품명을 X열 표준 상품명으로 묶은 뒤, 거래금액·수수료·VAT·수수료계·실입금액을 합산합니다.</p></div><b className="group-count">{productAmountSummaries.length.toLocaleString()}개 상품</b></div>{productAmountSummaries.length ? <div className="vat-table-scroll"><table><thead><tr><th>분류 키워드</th><th>X열 표준 상품명</th><th>거래 건수</th><th>거래금액</th><th>결제수수료</th><th>VAT</th><th>수수료계</th><th>실입금액</th></tr></thead><tbody>{productAmountSummaries.map((item) => <tr key={item.standardProductName} className={item.standardProductName === "미분류" ? "error-row" : ""}><td>{item.keywords}</td><td>{item.standardProductName}</td><td>{item.transactionCount.toLocaleString()}</td><td>{won(item.transactionAmount)}</td><td>{won(item.paymentFee)}</td><td>{won(item.vat)}</td><td>{won(item.feeTotal)}</td><td>{won(item.settlementAmount)}</td></tr>)}<tr><td>합계</td><td>-</td><td>{productAmountSummaries.reduce((sum, item) => sum + item.transactionCount, 0).toLocaleString()}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.transactionAmount, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.paymentFee, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.vat, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.feeTotal, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.settlementAmount, 0))}</td></tr></tbody></table></div> : <p>먼저 S열 묶음에서 X열 표준 상품명을 지정하세요.</p>}</section>}
 

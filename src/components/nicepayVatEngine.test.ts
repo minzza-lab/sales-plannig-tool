@@ -71,3 +71,15 @@ test("standard product summary combines transaction and fee amounts", () => {
   assert.equal(total.feeTotal, 330);
   assert.equal(total.settlementAmount, 29670);
 });
+
+test("selected S column product names are mapped exactly to one X product", () => {
+  const exactRule = { id: "actual-names", priority: -2000, includeKeywords: ["워터파크 선베드"], excludeKeywords: [], exactProductNames: ["워터파크 선베드", "VIP 선베드"], standardProductName: "선베드", packageName: "선베드", enabled: true, description: "" };
+  const result = processVatSettlement([
+    { 상품명: "워터파크 선베드", 결제수수료: 100 },
+    { 상품명: "VIP 선베드", 결제수수료: 200 },
+    { 상품명: "선베드 추가", 결제수수료: 300 },
+  ], [exactRule], [], facilities);
+  assert.equal(result.rows[0].standardProductName, "선베드");
+  assert.equal(result.rows[1].standardProductName, "선베드");
+  assert.equal(result.rows[2].classificationStatus, "미분류");
+});
