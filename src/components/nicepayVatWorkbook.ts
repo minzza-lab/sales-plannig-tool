@@ -148,7 +148,26 @@ export const buildVatSettlementWorkbook = (
     report.getCell(rowNumber, 66).value = { formula: `BK${rowNumber}-BL${rowNumber}`, result: summary.difference };
     [63, 64, 66].forEach((column) => { report.getCell(rowNumber, column).numFmt = moneyFormat; });
   });
-  styleTable(report, summaryRow + 1, Math.max(summaryRow + 1, summaryRow + result.summaries.length), 30, 66);
+  const allocationFirstRow = summaryRow + 1;
+  const allocationLastRow = summaryRow + result.summaries.length;
+  const allocationTotalRow = allocationLastRow + 1;
+  const hasAllocationRows = result.summaries.length > 0;
+  report.getCell(allocationTotalRow, 30).value = "합계";
+  facilityList.forEach((facility) => {
+    const column = columnNumber(facility.excelColumn);
+    const letter = report.getColumn(column).letter;
+    report.getCell(allocationTotalRow, column).value = hasAllocationRows
+      ? { formula: `SUM(${letter}${allocationFirstRow}:${letter}${allocationLastRow})`, result: result.report.facilityTotals[facility.name] || 0 }
+      : 0;
+    report.getCell(allocationTotalRow, column).numFmt = moneyFormat;
+  });
+  report.getCell(allocationTotalRow, 63).value = hasAllocationRows ? { formula: `SUM(BK${allocationFirstRow}:BK${allocationLastRow})`, result: result.report.feeAfterAllocation } : 0;
+  report.getCell(allocationTotalRow, 64).value = hasAllocationRows ? { formula: `SUM(BL${allocationFirstRow}:BL${allocationLastRow})`, result: result.report.feeBeforeAllocation } : 0;
+  report.getCell(allocationTotalRow, 65).value = result.report.feeAfterAllocation === result.report.feeBeforeAllocation ? "정상" : "오류";
+  report.getCell(allocationTotalRow, 66).value = { formula: `BK${allocationTotalRow}-BL${allocationTotalRow}`, result: result.report.feeAfterAllocation - result.report.feeBeforeAllocation };
+  [63, 64, 66].forEach((column) => { report.getCell(allocationTotalRow, column).numFmt = moneyFormat; });
+  styleTable(report, allocationFirstRow, allocationTotalRow, 30, 66);
+  report.getRow(allocationTotalRow).font = { name: "맑은 고딕", size: 9, bold: true };
   [8, 15, 12, 12, 12, 12, 16, 13, 14, 12, 12, 12, 11, 13, 14, 14, 18, 12, 42, 12, 31, 12, 31, 26, 13, 13].forEach((width, index) => { report.getColumn(index + 1).width = width; });
   report.getColumn("P").width = 18; report.getColumn("Q").width = 22; report.getColumn("U").width = 34;
   for (let column = 30; column <= 66; column += 1) report.getColumn(column).width = column === 30 ? 26 : 14;

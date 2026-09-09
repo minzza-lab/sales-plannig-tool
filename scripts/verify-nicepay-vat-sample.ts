@@ -21,4 +21,16 @@ const buffer = await output.xlsx.writeBuffer();
 if (!output.worksheets.some((sheet) => sheet.name === "2607월 부가세") || buffer.byteLength < 1000) throw new Error("보고서 Excel 생성 검증에 실패했습니다.");
 const report = output.getWorksheet("2607월 부가세");
 if (!report || REFERENCE_HIDDEN_REPORT_COLUMNS.some((column) => !report.getColumn(column).hidden)) throw new Error("기준 보고서 숨김 열 복제 검증에 실패했습니다.");
+const allocationHeaderRow = result.rows.length + 9;
+const allocationTotalRow = allocationHeaderRow + result.summaries.length + 1;
+if (report.getCell(allocationTotalRow, 30).value !== "합계") throw new Error("업장별 배분표의 세로 합계 행이 없습니다.");
+const totalFormula = report.getCell(allocationTotalRow, 63).value as { formula?: string; result?: number };
+const differenceFormula = report.getCell(allocationTotalRow, 66).value as { formula?: string; result?: number };
+if (!totalFormula.formula?.startsWith("SUM(BK") || totalFormula.result !== result.report.feeAfterAllocation) throw new Error("업장별 배분 합계 검증 수식이 올바르지 않습니다.");
+if (differenceFormula.formula !== `BK${allocationTotalRow}-BL${allocationTotalRow}` || result.report.feeAfterAllocation - result.report.feeBeforeAllocation !== 0) throw new Error("최종 배분 차이 검증 수식이 올바르지 않습니다.");
+DEFAULT_FACILITIES.filter((facility) => facility.enabled).forEach((facility) => {
+  const expected = result.report.facilityTotals[facility.name] || 0;
+  const cell = report.getCell(`${facility.excelColumn}${allocationTotalRow}`).value as { formula?: string; result?: number };
+  if (!cell.formula?.startsWith(`SUM(${facility.excelColumn}`) || (expected !== 0 && cell.result !== expected)) throw new Error(`업장별 합계가 맞지 않습니다: ${facility.name}`);
+});
 console.log(JSON.stringify({ sourceRows: allRows.length, midExcluded: allRows.length - rows.length, inputRows: rows.length, processedRows: result.report.outputCount, classified: result.report.classifiedCount, unclassified: result.report.unclassifiedCount, allocationRows: result.summaries.length, feeBefore: result.report.feeBeforeAllocation, feeAfter: result.report.feeAfterAllocation, allocationDifferences: result.report.allocationDifferenceCount, outputSheets: output.worksheets.length, outputBytes: buffer.byteLength }, null, 2));
