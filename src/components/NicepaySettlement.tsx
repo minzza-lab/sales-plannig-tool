@@ -1266,9 +1266,19 @@ const NicepaySettlement: React.FC = () => {
         : undefined,
     },
   ]));
-  const activeExportMappings = visibleMappingEntries
-    .map(({ rule }) => rule)
-    .filter((rule) => rule.result !== "미분류");
+  const exactProductMappings = new Map<string, string>();
+  classifiedRows.forEach((row) => {
+    const productName = String(getValue(row, ["상품명"])).trim();
+    if (productName && row.__category !== "미분류") {
+      exactProductMappings.set(productName, row.__category);
+    }
+  });
+  const activeExportMappings = [
+    ...visibleMappingEntries
+      .map(({ rule }) => rule)
+      .filter((rule) => rule.result !== "미분류"),
+    ...Array.from(exactProductMappings, ([keyword, result]) => ({ keyword, result })),
+  ];
 
   const validateBeforeOutput = () => {
     if (unresolvedDates.length === 0) return true;
