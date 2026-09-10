@@ -20,7 +20,7 @@ type Result = {
 const URL_HEADERS = ['url', '조회url', '링크', '주소', '단축url']
 const BARCODE_HEADERS = ['바코드', 'barcordno', '쿠폰번호', '쿠폰코드', 'barcode']
 const RESULT_HEADERS = ['조회방식', '조회상태', '조회된바코드', '상품명', '사용여부', '판정근거', '오류사유']
-const MAX_ROWS = 500
+const MAX_ROWS = 10_000
 
 function normalizedHeader(value: unknown) {
   return String(value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '')
