@@ -1,0 +1,20 @@
+.vat-print-builder { margin: 0 0 22px; padding: 16px; border: 1px solid #b9d2ea; border-radius: 13px; background: linear-gradient(135deg, #f7fbff, #edf5ff); }
+.vat-print-builder-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.vat-print-builder-head > div { display: grid; gap: 4px; }
+.vat-print-builder-head small { color: #64748b; }
+.vat-print-button { background: #1f4e78 !important; }
+.vat-print-button:disabled { opacity: .45; cursor: not-allowed; }
+.vat-print-columns { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 8px; margin: 14px 0; }
+.vat-print-columns label { display: grid; grid-template-columns: 20px 38px 1fr; align-items: center; gap: 5px; padding: 10px; border: 1px solid #dbe5ef; border-radius: 9px; background: #fff; cursor: pointer; font-size: 12px; }
+.vat-print-columns label.selected { border-color: #1f4e78; background: #eaf3fb; box-shadow: inset 3px 0 #1f4e78; }
+.vat-print-columns input { margin: 0; }
+.vat-print-columns b { color: #1f4e78; }
+.vat-print-order { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding-top: 11px; border-top: 1px solid #d5e3f0; }
+.vat-print-order > span { margin-right: 3px; color: #52657d; font-size: 12px; font-weight: 800; }
+.vat-print-order button { display: flex; align-items: center; gap: 3px; padding: 7px 9px; border: 1px solid #aac4dc !important; background: #fff !important; color: #1f4e78 !important; cursor: grab; font-size: 11px; }
+.vat-print-preview { display: flex; justify-content: space-between; margin: 14px 0 7px; font-size: 12px; }
+.vat-print-preview span { color: #1f4e78; font-weight: 800; }
+.vat-print-preview-table { background: #fff; }
+.vat-print-preview-table small { display: block; padding: 8px 10px; color: #64748b; }
+@media (max-width: 900px) { .vat-print-columns { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
+@media (max-width: 640px) { .vat-print-builder-head { align-items: stretch; flex-direction: column; } .vat-print-columns { grid-template-columns: 1fr; } }
