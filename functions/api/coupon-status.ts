@@ -190,36 +190,72 @@ export function parseTicketDetails(payload: unknown): TicketDetail[] {
   }).filter((row) => row.barcode || row.productName || row.used !== null);
 }
 
-function apiRequestUrl(finalUrl: URL): { url: URL; body: URLSearchParams; ticketType: 'ONE_TICKET' | 'ALL_TICKET' } {
+function pageValue(html: string, name: string): string {
+  const patterns = [
+    new RegExp(`${name}\\s*:\\s*['"]([^'"]*)['"]`, 'i'),
+    new RegExp(`name=['"]${name}['"][^>]*value=['"]([^'"]*)['"]`, 'i'),
+  ];
+  return patterns.map((pattern) => html.match(pattern)?.[1] || '').find(Boolean) || '';
+}
+
+function apiRequestUrl(finalUrl: URL, pageHtml: string): { url: URL; body: URLSearchParams; ticketType: 'ONE_TICKET' | 'ALL_TICKET' } {
   const ticketType = finalUrl.searchParams.get('command') === 'reservedMainRsInfo' ? 'ALL_TICKET' : 'ONE_TICKET';
-  const url = new URL(finalUrl);
-  const body = new URLSearchParams(url.searchParams);
+  const url = new URL('/rsInfo.do', finalUrl.origin);
+  const body = new URLSearchParams();
   body.set('command', 'getConfirmedMobileTicketInfo');
-  body.set('ticket_type', ticketType);
-  body.set('ticketType', ticketType);
-  url.search = '';
+  body.set('mainRsSeqInspect', pageValue(pageHtml, 'mainRsSeqInspect') || finalUrl.searchParams.get('rs_seq') || '');
+  body.set('rsSeqInspect', pageValue(pageHtml, 'rsSeqInspect'));
+  body.set('prodSeq', pageValue(pageHtml, 'prodSeq'));
+  body.set('callType', ticketType);
+  body.set('rs_chk', pageValue(pageHtml, 'rs_chk') || finalUrl.searchParams.get('rs_chk') || '');
   return { url, body, ticketType };
 }
 
-async function apiLookup(finalUrl: URL, expectedBarcode: string, hosts: Set<string>, timeoutMs: number, maxRedirects: number): Promise<LookupResult> {
+async function apiLookup(finalUrl: URL, pageHtml: string, expectedBarcode: string, hosts: Set<string>, timeoutMs: number, maxRedirects: number): Promise<LookupResult> {
   if (finalUrl.hostname.toLowerCase() !== 'www.ticketchannelmanager.com') throw new Error('티켓채널 최종 URL을 확인하지 못했습니다.');
-  const request = apiRequestUrl(finalUrl);
-  const { response } = await fetchLimited(request.url, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json, text/plain, */*',
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      Referer: finalUrl.toString(),
-      'User-Agent': 'Mozilla/5.0 (compatible; WHP-CouponLookup/1.0)',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: request.body.toString(),
-  }, hosts, timeoutMs, maxRedirects);
-  if (!response.ok) throw new Error(`티켓채널 API 응답 오류 (${response.status})`);
-  const raw = await safeResponseText(response);
-  let payload: unknown;
-  try { payload = JSON.parse(raw); } catch { throw new Error('티켓채널 API 응답 형식을 확인할 수 없습니다.'); }
-  const details = parseTicketDetails(payload);
+  const request = apiRequestUrl(finalUrl, pageHtml);
+  if (!request.body.get('mainRsSeqInspect') || !request.body.get('rs_chk')) throw new Error('모바일 티켓 조회에 필요한 예약 정보를 찾지 못했습니다.');
+  const postJson = async (body: URLSearchParams) => {
+    const { response } = await fetchLimited(request.url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        Referer: finalUrl.toString(),
+        'User-Agent': 'Mozilla/5.0 (compatible; WHP-CouponLookup/1.0)',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: body.toString(),
+    }, hosts, timeoutMs, maxRedirects);
+    if (!response.ok) throw new Error(`티켓채널 API 응답 오류 (${response.status})`);
+    try { return JSON.parse(await safeResponseText(response)) as unknown; }
+    catch { throw new Error('티켓채널 API 응답 형식을 확인할 수 없습니다.'); }
+  };
+
+  let reservationSeqs = [request.body.get('rsSeqInspect') || ''];
+  if (request.ticketType === 'ONE_TICKET') {
+    const listBody = new URLSearchParams({
+      command: 'rsConfirmRdList',
+      rs_seq: request.body.get('mainRsSeqInspect') || '',
+      rs_chk: request.body.get('rs_chk') || '',
+    });
+    const listPayload = await postJson(listBody) as { list?: Array<Record<string, unknown>> };
+    const listed = Array.isArray(listPayload?.list) ? listPayload.list : [];
+    reservationSeqs = listed
+      .filter((row) => String(row.rs_status_cd || '') !== 'D' && String(row.mobile_ticket_active_check_code || '') !== '0001')
+      .map((row) => String(row.rs_seq_inspect || '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (!reservationSeqs.length) reservationSeqs = [''];
+  }
+
+  const allDetails: TicketDetail[] = [];
+  for (const reservationSeq of reservationSeqs) {
+    const ticketBody = new URLSearchParams(request.body);
+    ticketBody.set('rsSeqInspect', reservationSeq);
+    allDetails.push(...parseTicketDetails(await postJson(ticketBody)));
+  }
+  const details = allDetails.filter((detail, index, list) => !detail.barcode || list.findIndex((candidate) => candidate.barcode === detail.barcode) === index);
   if (!details.length) throw new Error('티켓채널 API에 바코드 정보가 없습니다.');
   const selected = expectedBarcode ? details.find((row) => row.barcode === expectedBarcode) : details[0];
   if (!selected) {
@@ -237,8 +273,9 @@ export async function lookupCoupon(input: { url: string; barcode: string; mode: 
   const resolved = await fetchLimited(initialUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WHP-CouponLookup/1.0)' } }, hosts, timeoutMs, maxRedirects);
   const finalUrl = resolved.finalUrl;
   if (input.mode === 'url') return directLookup(finalUrl, input.barcode, hosts, timeoutMs, maxRedirects);
+  const pageHtml = await safeResponseText(resolved.response);
   try {
-    return await apiLookup(finalUrl, input.barcode, hosts, timeoutMs, maxRedirects);
+    return await apiLookup(finalUrl, pageHtml, input.barcode, hosts, timeoutMs, maxRedirects);
   } catch (apiError) {
     if (input.mode === 'api') throw apiError;
     try {

@@ -31,13 +31,14 @@ test('reservedMainRsInfo uses ALL_TICKET and parses API response', async (t) => 
     const url = String(input)
     calls.push({ url, init })
     if (url.startsWith('https://tket.me/')) return new Response(null, { status: 302, headers: { location: 'https://www.ticketchannelmanager.com/mobile?command=reservedMainRsInfo&rsNo=7' } })
-    if (!init?.method || init.method === 'GET') return new Response('<html>ticket</html>', { status: 200 })
+    if (!init?.method || init.method === 'GET') return new Response("<script>const x={mainRsSeqInspect:'7',prodSeq:'37884',rs_chk:'CHECK7'}</script>", { status: 200 })
     return Response.json({ mobileTicketList: [{ barcode: 'B7', barcode_name: '스노우파크', barcode_use_yn: 'N' }] })
   }) as typeof fetch
   const result = await lookupCoupon({ url: 'https://tket.me/sample', barcode: 'B7', mode: 'api' }, {})
   assert.equal(result.method, 'API')
   assert.equal(result.status, 'unused')
-  assert.match(String(calls.at(-1)?.init?.body), /ticket_type=ALL_TICKET/)
+  assert.match(String(calls.at(-1)?.init?.body), /callType=ALL_TICKET/)
+  assert.match(String(calls.at(-1)?.init?.body), /mainRsSeqInspect=7/)
   assert.match(String(calls.at(-1)?.init?.body), /command=getConfirmedMobileTicketInfo/)
 })
 
@@ -50,14 +51,34 @@ test('ordinary confirmation URL uses ONE_TICKET', async (t) => {
     calls += 1
     if (init?.method === 'POST') {
       bodies.push(String(init.body))
+      if (String(init.body).includes('command=rsConfirmRdList')) return Response.json({ list: [{ rs_seq_inspect: 'S1', rs_status_cd: 'C' }] })
       return Response.json({ mobileTicketList: [{ barcode: 'ONE1', barcode_name: '예약권', barcode_use_yn: 'Y' }] })
     }
-    return new Response('<html>confirmation</html>', { status: 200 })
+    return new Response("<script>const x={mainRsSeqInspect:'1',prodSeq:'2',rs_chk:'C1'}</script>", { status: 200 })
   }) as typeof fetch
   const result = await lookupCoupon({ url: 'https://www.ticketchannelmanager.com/mobile?reservation=1', barcode: 'ONE1', mode: 'api' }, {})
   assert.equal(result.status, 'used')
-  assert.equal(calls, 2)
-  assert.match(bodies[0], /ticket_type=ONE_TICKET/)
+  assert.equal(calls, 3)
+  assert.match(bodies[1], /callType=ONE_TICKET/)
+  assert.match(bodies[1], /rsSeqInspect=S1/)
+})
+
+test('multiple mobile-ticket buttons are all queried and combined', async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    if (!init?.method || init.method === 'GET') return new Response("<script>const x={mainRsSeqInspect:'11',prodSeq:'22',rs_chk:'CC'}</script>")
+    const body = String(init.body)
+    if (body.includes('command=rsConfirmRdList')) return Response.json({ list: [
+      { rs_seq_inspect: 'DAY1', rs_status_cd: 'C' },
+      { rs_seq_inspect: 'DAY2', rs_status_cd: 'C' },
+    ] })
+    const suffix = body.includes('DAY1') ? '1' : '2'
+    return Response.json({ mobileTicketList: [{ barcode: `T${suffix}`, barcode_name: `티켓${suffix}`, barcode_use_yn: suffix === '1' ? 'Y' : 'N' }] })
+  }) as typeof fetch
+  const result = await lookupCoupon({ url: 'https://www.ticketchannelmanager.com/rsInfo.do?command=reservedConfirmMainRsInfo&rs_seq=11&rs_chk=CC', barcode: '', mode: 'api' }, {})
+  assert.equal(result.details.length, 2)
+  assert.deepEqual(result.details.map((detail) => detail.barcode), ['T1', 'T2'])
 })
 
 test('auto mode falls back to direct wording when API is incomplete', async (t) => {
@@ -67,8 +88,9 @@ test('auto mode falls back to direct wording when API is incomplete', async (t) 
   globalThis.fetch = (async () => {
     ticketCalls += 1
     if (ticketCalls === 1) return new Response(null, { status: 302, headers: { location: 'https://www.ticketchannelmanager.com/mobile?id=9' } })
-    if (ticketCalls === 2) return new Response('<p>landing</p>', { status: 200 })
-    if (ticketCalls === 3) return Response.json({ mobileTicketList: [] })
+    if (ticketCalls === 2) return new Response("<script>const x={mainRsSeqInspect:'9',prodSeq:'2',rs_chk:'C9'}</script>", { status: 200 })
+    if (ticketCalls === 3) return Response.json({ list: [{ rs_seq_inspect: 'A9', rs_status_cd: 'C' }] })
+    if (ticketCalls === 4) return Response.json({ mobileTicketList: [] })
     return new Response('<p>쿠폰번호 C9 사용 가능</p>', { status: 200 })
   }) as typeof fetch
   const result = await lookupCoupon({ url: 'https://tket.me/auto', barcode: 'C9', mode: 'auto' }, {})
