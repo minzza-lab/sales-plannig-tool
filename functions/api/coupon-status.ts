@@ -154,6 +154,18 @@ async function directLookup(finalUrl: URL, expectedBarcode: string, hosts: Set<s
   }, hosts, timeoutMs, maxRedirects);
   if (!response.ok) throw new Error(`조회 페이지 응답 오류 (${response.status})`);
   const raw = await safeResponseText(response);
+  if (/모바일\s*티켓\s*보기|getConfirmedMobileTicketInfo|mobileTicketList/i.test(raw)) {
+    try {
+      const ticketResult = await apiLookup(finalUrl, raw, expectedBarcode, hosts, timeoutMs, maxRedirects);
+      return {
+        ...ticketResult,
+        method: 'URL 직접조회',
+        reason: `모바일 티켓 보기 조회 · ${ticketResult.reason}`,
+      };
+    } catch {
+      // 모바일 티켓 조회가 불가능한 페이지는 기존 화면 문구 판정으로 계속 처리한다.
+    }
+  }
   const plain = textOnly(raw);
   const judged = judgeDirectText(raw);
   const foundBarcode = findBarcodeInText(plain, expectedBarcode);

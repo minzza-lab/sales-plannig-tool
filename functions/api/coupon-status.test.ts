@@ -81,6 +81,27 @@ test('multiple mobile-ticket buttons are all queried and combined', async (t) =>
   assert.deepEqual(result.details.map((detail) => detail.barcode), ['T1', 'T2'])
 })
 
+test('URL direct mode opens mobile-ticket data before wording fallback', async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  let getCount = 0
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    if (!init?.method || init.method === 'GET') {
+      getCount += 1
+      return new Response("<button>모바일 티켓 보기</button><script>const x={mainRsSeqInspect:'31',prodSeq:'41',rs_chk:'DIRECT'}</script>")
+    }
+    const body = String(init.body)
+    if (body.includes('command=rsConfirmRdList')) return Response.json({ list: [{ rs_seq_inspect: 'CARD1', rs_status_cd: 'C' }] })
+    return Response.json({ mobileTicketList: [{ barcode: 'DIRECT1', barcode_name: '직접조회권', barcode_use_yn: 'N' }] })
+  }) as typeof fetch
+  const result = await lookupCoupon({ url: 'https://www.ticketchannelmanager.com/rsInfo.do?command=reservedConfirmMainRsInfo&rs_seq=31&rs_chk=DIRECT', barcode: 'DIRECT1', mode: 'url' }, {})
+  assert.equal(getCount, 2)
+  assert.equal(result.method, 'URL 직접조회')
+  assert.equal(result.status, 'unused')
+  assert.equal(result.productName, '직접조회권')
+  assert.match(result.reason, /모바일 티켓 보기 조회/)
+})
+
 test('auto mode falls back to direct wording when API is incomplete', async (t) => {
   const originalFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = originalFetch })
