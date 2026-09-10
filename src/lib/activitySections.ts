@@ -30,6 +30,7 @@ export const activitySections: Record<string, string> = {
   "/tools/qr-verifier": "대체업장 조회 도구",
   "/tools/url-shortener": "URL 단축기",
   "/tools/barcode-generator": "바코드 생성기",
+  "/tools/coupon-status": "쿠폰/바코드 사용조회",
   "/tools/admin": "관리자 페이지",
   "/ai-studio": "AI 스튜디오"
 }

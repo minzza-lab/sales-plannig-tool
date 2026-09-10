@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:nicepay-vat": "node --experimental-strip-types --test src/components/nicepayVatEngine.test.ts",
+    "test:coupon-status": "node --experimental-strip-types --test functions/api/coupon-status.test.ts",
     "verify:nicepay-vat-sample": "node --experimental-strip-types scripts/verify-nicepay-vat-sample.ts"
   },
   "dependencies": {

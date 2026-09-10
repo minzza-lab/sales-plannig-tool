@@ -13,6 +13,7 @@ const AccessPending = lazy(() => import('./components/AccessPending'))
 const QRCodeGenerator = lazy(() => import('./components/QRCodeGenerator'))
 const URLShortener = lazy(() => import('./components/URLShortener'))
 const BarcodeGenerator = lazy(() => import('./components/BarcodeGenerator'))
+const CouponStatusLookup = lazy(() => import('./components/CouponStatusLookup'))
 const VOCAssistant = lazy(() => import('./components/VOCAssistant'))
 const FieldSketchWriter = lazy(() => import('./components/FieldSketchWriter'))
 const ManualTips = lazy(() => import('./components/ManualTips'))
@@ -121,6 +122,7 @@ function App() {
                 <Route path="tools/qr-generator" element={<QRCodeGenerator />} />
                 <Route path="tools/url-shortener" element={<URLShortener />} />
                 <Route path="tools/barcode-generator" element={<BarcodeGenerator />} />
+                <Route path="tools/coupon-status" element={<CouponStatusLookup />} />
                 <Route path="tools/voc-assistant" element={<VOCAssistant />} />
                 <Route path="tools/field-sketch" element={<FieldSketchWriter />} />
                 <Route path="tools/knowledge-base" element={<ManualTips />} />

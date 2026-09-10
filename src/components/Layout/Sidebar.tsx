@@ -224,6 +224,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
                     <span className="icon">📊</span> 바코드 생성기
                   </NavLink>
                 </li>
+                <li>
+                  <NavLink to="/tools/coupon-status" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
+                    <span className="icon">🎫</span> 쿠폰/바코드 사용조회
+                  </NavLink>
+                </li>
               </ul>
             )}
           </li>
