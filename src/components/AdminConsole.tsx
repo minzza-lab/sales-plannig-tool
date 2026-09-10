@@ -69,13 +69,11 @@ export default function AdminConsole() {
     const accessToken = sessionData.session?.access_token
     if (!accessToken) { setError('로그인 정보가 만료되었습니다. 다시 로그인해주세요.'); setSaving(null); return }
     try {
-      const response = await fetch('/api/admin-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action, userId: user.user_id, ...(action === 'reset_password' ? { password: newPassword } : {}) }),
+      const { data: result, error: invokeError } = await supabase.functions.invoke('admin-users', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: { action, userId: user.user_id, ...(action === 'reset_password' ? { password: newPassword } : {}) },
       })
-      const result = await response.json().catch(() => ({})) as { error?: string }
-      if (!response.ok) throw new Error(result.error || '계정 관리 요청에 실패했습니다.')
+      if (invokeError || result?.error) throw new Error(result?.error || '계정 관리 요청에 실패했습니다.')
       setMessage(action === 'delete_user' ? `${user.full_name || user.email} 계정을 삭제했습니다.` : `${user.full_name || user.email}의 비밀번호를 변경했습니다.`)
       setPasswordUser(null); setNewPassword(''); await load()
     } catch (manageError) {
