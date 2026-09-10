@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { supabase } from '../lib/supabase'
 import './CouponStatusLookup.css'
 
@@ -23,7 +24,7 @@ const RESULT_HEADERS = ['조회방식', '조회상태', '조회된바코드', '�
 const MAX_ROWS = 10_000
 
 function normalizedHeader(value: unknown) {
-  return String(value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '')
+  return cellText(value).toLowerCase().replace(/[\s_-]+/g, '')
 }
 
 function findColumn(headers: unknown[], candidates: string[]) {
@@ -32,7 +33,34 @@ function findColumn(headers: unknown[], candidates: string[]) {
 }
 
 function cellText(value: unknown) {
+  if (value && typeof value === 'object' && 'richText' in value) {
+    return ((value as { richText?: Array<{ text?: string }> }).richText || []).map((part) => part.text || '').join('').trim()
+  }
   return value == null ? '' : String(value).trim()
+}
+
+function detectHeaderRow(parsed: unknown[][]) {
+  let bestIndex = 0
+  let bestScore = -1
+  parsed.slice(0, 20).forEach((row, index) => {
+    const combined = combinedHeaders(parsed, index)
+    const score = (findColumn(combined, URL_HEADERS) >= 0 ? 2 : 0)
+      + (findColumn(combined, BARCODE_HEADERS) >= 0 ? 2 : 0)
+      + Math.min(row.filter((cell) => cellText(cell)).length / 100, 0.5)
+    if (score > bestScore) { bestScore = score; bestIndex = index }
+  })
+  return bestIndex
+}
+
+function combinedHeaders(parsed: unknown[][], headerRowIndex: number) {
+  const width = Math.max(0, ...parsed.slice(0, headerRowIndex + 1).map((row) => row.length))
+  return Array.from({ length: width }, (_, column) => {
+    for (let row = headerRowIndex; row >= 0; row -= 1) {
+      const value = cellText(parsed[row]?.[column])
+      if (value) return value
+    }
+    return ''
+  })
 }
 
 function maskUrl(value: string) {
@@ -49,11 +77,24 @@ function statusLabel(status: Status) {
   return status === 'used' ? '사용' : status === 'unused' ? '미사용' : '오류'
 }
 
+function styleHeaderCell(cell: ExcelJS.Cell) {
+  cell.font = { name: '맑은 고딕', size: 9, bold: true, color: { argb: 'FFFFFFFF' } }
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }
+  cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  cell.border = {
+    top: { style: 'thin', color: { argb: 'FFD9E2F3' } },
+    left: { style: 'thin', color: { argb: 'FFD9E2F3' } },
+    bottom: { style: 'thin', color: { argb: 'FFD9E2F3' } },
+    right: { style: 'thin', color: { argb: 'FFD9E2F3' } },
+  }
+}
+
 export default function CouponStatusLookup() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null)
   const [fileName, setFileName] = useState('')
   const [sheetName, setSheetName] = useState('')
   const [rows, setRows] = useState<unknown[][]>([])
+  const [headerRowIndex, setHeaderRowIndex] = useState(0)
   const [urlColumn, setUrlColumn] = useState(-1)
   const [barcodeColumn, setBarcodeColumn] = useState(-1)
   const [mode, setMode] = useState<Mode>('auto')
@@ -65,20 +106,21 @@ export default function CouponStatusLookup() {
   const [message, setMessage] = useState('')
   const abortRef = useRef<AbortController | null>(null)
 
-  const headers = rows[0] || []
-  const dataRows = rows.slice(1)
+  const headers = useMemo(() => combinedHeaders(rows, headerRowIndex), [rows, headerRowIndex])
+  const dataRows = rows.slice(headerRowIndex + 1)
 
   const loadSheet = (book: XLSX.WorkBook, nextSheet: string) => {
     const sheet = book.Sheets[nextSheet]
     const parsed = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' })
-    const safeRows = parsed.filter((row, index) => index === 0 || row.some((cell) => cellText(cell)))
-    const nextHeaders = safeRows[0] || []
+    const nextHeaderRowIndex = detectHeaderRow(parsed)
+    const nextHeaders = combinedHeaders(parsed, nextHeaderRowIndex)
     setSheetName(nextSheet)
-    setRows(safeRows)
+    setRows(parsed)
+    setHeaderRowIndex(nextHeaderRowIndex)
     setUrlColumn(findColumn(nextHeaders, URL_HEADERS))
     setBarcodeColumn(findColumn(nextHeaders, BARCODE_HEADERS))
     setResults(new Map())
-    setMessage(safeRows.length - 1 > MAX_ROWS ? `최대 ${MAX_ROWS.toLocaleString()}행까지만 조회할 수 있습니다.` : '')
+    setMessage(parsed.length - nextHeaderRowIndex - 1 > MAX_ROWS ? `최대 ${MAX_ROWS.toLocaleString()}행까지만 조회할 수 있습니다.` : '')
   }
 
   const handleFile = async (file?: File) => {
@@ -174,22 +216,67 @@ export default function CouponStatusLookup() {
     XLSX.writeFile(csvBook, `${fileName.replace(/\.[^.]+$/, '') || '쿠폰조회'}_결과.csv`, { bookType: 'csv' })
   }
 
-  const downloadXlsx = () => {
-    const output = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(output, XLSX.utils.aoa_to_sheet([[...headers, ...RESULT_HEADERS], ...dataRows.map(appendResult)]), '원본_결과')
-    const details: unknown[][] = [['원본 행 번호', '원본 바코드/쿠폰번호', '조회된 바코드', '상품명', '사용여부', '조회방식']]
-    results.forEach((result, index) => {
-      const originalBarcode = barcodeColumn >= 0 ? cellText(dataRows[index][barcodeColumn]) : ''
-      const ticketRows = result.details.length ? result.details : [{ barcode: result.barcode, productName: result.productName, used: result.status === 'error' ? null : result.status === 'used' }]
-      ticketRows.forEach((detail) => details.push([index + 2, originalBarcode, detail.barcode, detail.productName, detail.used == null ? '오류' : detail.used ? '사용' : '미사용', result.method]))
+  const downloadXlsx = async () => {
+    const output = new ExcelJS.Workbook()
+    output.creator = 'WHP Sales Planning'
+    const source = output.addWorksheet((sheetName || '상세내역_바코드').slice(0, 31), { views: [{ showGridLines: false }] })
+    rows.forEach((row, index) => source.addRow(index === headerRowIndex ? [...row.map(cellText), ...RESULT_HEADERS] : row.map(cellText)))
+    if (headerRowIndex > 0) {
+      const start = headers.length + 1
+      source.mergeCells(1, start, 1, start + RESULT_HEADERS.length - 1)
+      source.getCell(1, start).value = '조회결과'
+    }
+    const sourceHeader = source.getRow(headerRowIndex + 1)
+    sourceHeader.height = 24
+    sourceHeader.eachCell((cell) => styleHeaderCell(cell))
+    dataRows.forEach((_row, index) => {
+      const result = results.get(index)
+      if (!result) return
+      const target = source.getRow(headerRowIndex + index + 2)
+      ;[result.method, statusLabel(result.status), result.barcode, result.productName, statusLabel(result.status), result.reason, result.error]
+        .forEach((value, offset) => { target.getCell(headers.length + offset + 1).value = value })
     })
-    XLSX.utils.book_append_sheet(output, XLSX.utils.aoa_to_sheet(details), '바코드_상세')
-    const errors: unknown[][] = [['원본 행 번호', '조회 URL', '원본 바코드/쿠폰번호', '오류사유', '판정근거']]
-    results.forEach((result, index) => {
-      if (result.status === 'error') errors.push([index + 2, cellText(dataRows[index][urlColumn]), barcodeColumn >= 0 ? cellText(dataRows[index][barcodeColumn]) : '', result.error, result.reason])
+    source.columns.forEach((column, index) => {
+      column.width = index < headers.length
+        ? Math.min(Math.max(cellText(headers[index]).length + 4, 11), 42)
+        : [14, 12, 20, 32, 12, 48, 40][index - headers.length]
     })
-    XLSX.utils.book_append_sheet(output, XLSX.utils.aoa_to_sheet(errors), '조회_오류')
-    XLSX.writeFile(output, `${fileName.replace(/\.[^.]+$/, '') || '쿠폰조회'}_결과.xlsx`)
+    source.autoFilter = { from: { row: headerRowIndex + 1, column: 1 }, to: { row: headerRowIndex + 1, column: headers.length + RESULT_HEADERS.length } }
+
+    const detailSheet = output.addWorksheet('바코드_상세', { views: [{ showGridLines: false, state: 'frozen', ySplit: 1 }] })
+    const baseColumnCount = Math.max(urlColumn, 0)
+    detailSheet.addRow([...headers.slice(0, baseColumnCount).map(cellText), '단축URL', 'URL 내 티켓순번', '티켓명', '이용여부', '바코드 난수'])
+    results.forEach((result, index) => {
+      const detailRows = result.details.length
+        ? result.details
+        : [{ barcode: result.barcode, productName: result.productName, used: result.status === 'error' ? null : result.status === 'used' }]
+      detailRows.forEach((detail, ticketIndex) => detailSheet.addRow([
+        ...dataRows[index].slice(0, baseColumnCount).map(cellText),
+        cellText(dataRows[index][urlColumn]), ticketIndex + 1, detail.productName,
+        detail.used == null ? '오류' : detail.used ? '사용' : '미사용', detail.barcode,
+      ]))
+    })
+
+    const errorSheet = output.addWorksheet('추출_오류', { views: [{ showGridLines: false, state: 'frozen', ySplit: 1 }] })
+    errorSheet.addRow(['원본 행번호', 'URL', '오류 내용'])
+    results.forEach((result, index) => {
+      if (result.status === 'error') errorSheet.addRow([index + headerRowIndex + 2, cellText(dataRows[index][urlColumn]), result.error || result.reason])
+    })
+    ;[detailSheet, errorSheet].forEach((sheet) => {
+      sheet.getRow(1).height = 24
+      sheet.getRow(1).eachCell((cell) => styleHeaderCell(cell))
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columnCount } }
+      sheet.columns.forEach((column, index) => {
+        column.width = index === sheet.columnCount - 1 ? 20 : index === sheet.columnCount - 3 ? 34 : index === 1 ? 24 : 14
+      })
+    })
+    const buffer = await output.xlsx.writeBuffer()
+    const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${fileName.replace(/\.[^.]+$/, '') || '쿠폰조회'}_결과.xlsx`
+    link.click()
+    URL.revokeObjectURL(link.href)
   }
 
   const progress = dataRows.length ? Math.round(results.size / dataRows.length * 100) : 0
@@ -212,7 +299,7 @@ export default function CouponStatusLookup() {
       <div className="progress"><span style={{ width: `${progress}%` }} /><em>{progress}%</em></div>
 
       <section className="lookup-panel results-panel"><div className="result-toolbar"><div><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>전체</button><button className={filter === 'used' ? 'active' : ''} onClick={() => setFilter('used')}>사용</button><button className={filter === 'unused' ? 'active' : ''} onClick={() => setFilter('unused')}>미사용</button><button className={filter === 'error' ? 'active' : ''} onClick={() => setFilter('error')}>오류</button></div><input placeholder="바코드, 상품명, 판정근거 검색" value={search} onChange={(event) => setSearch(event.target.value)} /><div><button disabled={!results.size} onClick={downloadCsv}>CSV 다운로드</button><button disabled={!results.size} onClick={downloadXlsx}>XLSX 다운로드</button></div></div>
-        <div className="table-wrap"><table><thead><tr><th>원본 행</th><th>조회 URL</th><th>원본 바코드</th><th>조회된 바코드</th><th>상품명</th><th>사용 상태</th><th>조회 방식</th><th>판정 근거 / 오류</th></tr></thead><tbody>{visibleRows.map(({ row, index, result }) => <tr key={index}><td>{index + 2}</td><td>{maskUrl(cellText(row[urlColumn]))}</td><td>{barcodeColumn >= 0 ? cellText(row[barcodeColumn]) : '-'}</td><td>{result?.barcode || '-'}</td><td>{result?.productName || '-'}</td><td><span className={`status ${result?.status || 'pending'}`}>{result ? statusLabel(result.status) : '대기'}</span></td><td>{result?.method || '-'}</td><td title={result?.reason}>{result?.reason || '-'}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>원본 행</th><th>조회 URL</th><th>원본 바코드</th><th>조회된 바코드</th><th>상품명</th><th>사용 상태</th><th>조회 방식</th><th>판정 근거 / 오류</th></tr></thead><tbody>{visibleRows.map(({ row, index, result }) => <tr key={index}><td>{index + headerRowIndex + 2}</td><td>{maskUrl(cellText(row[urlColumn]))}</td><td>{barcodeColumn >= 0 ? cellText(row[barcodeColumn]) : '-'}</td><td>{result?.barcode || '-'}</td><td>{result?.productName || '-'}</td><td><span className={`status ${result?.status || 'pending'}`}>{result ? statusLabel(result.status) : '대기'}</span></td><td>{result?.method || '-'}</td><td title={result?.reason}>{result?.reason || '-'}</td></tr>)}</tbody></table></div>
       </section>
     </div>
   )
