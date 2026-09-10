@@ -4,14 +4,14 @@ import { CheckCircle2, Download, FileSpreadsheet, GripVertical, Plus, Printer, S
 import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
-import { buildVatSummaryPrintHtml, VAT_SUMMARY_PRINT_COLUMNS, type VatSummaryColumnKey } from "./nicepayVatPrint";
+import { buildVatCombinedPrintHtml, buildVatSummaryPrintHtml, VAT_SUMMARY_PRINT_COLUMNS, type VatSummaryColumnKey, type VatTaxInvoiceRow } from "./nicepayVatPrint";
 import NicepayProductGrouping from "./NicepayProductGrouping";
 import NicepayAllocationSetup from "./NicepayAllocationSetup";
 import { exactProductMappingDescription, exactProductNamesFromRule, isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 import "./NicepayVatPrint.css";
 
-type Tab = "upload" | "group" | "summary" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
+type Tab = "upload" | "group" | "summary" | "print" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
 type ManualOverride = { standardProductName: string; packageName: string };
 const newId = () => globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
@@ -81,6 +81,11 @@ const NicepayVatSettlement = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [printColumnKeys, setPrintColumnKeys] = useState<VatSummaryColumnKey[]>(["keywords", "standardProductName", "settlementAmount"]);
   const [draggedPrintColumn, setDraggedPrintColumn] = useState<VatSummaryColumnKey | null>(null);
+  const [resultPrintKeys, setResultPrintKeys] = useState<string[]>(["packageName", "feeTotal", "allocatedTotal"]);
+  const [includeTaxInvoice, setIncludeTaxInvoice] = useState(true);
+  const [taxInvoiceRows, setTaxInvoiceRows] = useState<VatTaxInvoiceRow[]>(() => {
+    try { return JSON.parse(localStorage.getItem("nicepay_vat_tax_invoice_v1") || "") as VatTaxInvoiceRow[]; } catch { return ["1M", "4M", "5M"].map((category) => ({ category, supplyAmount: 0, taxAmount: 0, totalAmount: 0 })); }
+  });
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -111,6 +116,7 @@ const NicepayVatSettlement = () => {
   }, []);
 
   useEffect(() => { localStorage.setItem("nicepay_vat_step3_settings_v1", JSON.stringify({ rules, components, facilities })); }, [rules, components, facilities]);
+  useEffect(() => { localStorage.setItem("nicepay_vat_tax_invoice_v1", JSON.stringify(taxInvoiceRows)); }, [taxInvoiceRows]);
 
   const effectiveRules = useMemo(() => [
     ...Object.entries(manualOverrides).map(([rowNumber, override]) => ({ id: `manual-${rowNumber}`, priority: -10000, includeKeywords: [String(valueByHeaders(rawRows.find((row) => Number(row.__sourceRowNumber) === Number(rowNumber)) || {}, ["원본 상품명", "상품명"]))], excludeKeywords: [], standardProductName: override.standardProductName, packageName: override.packageName, enabled: true, description: "사용자 수동 수정" })),
@@ -176,6 +182,25 @@ const NicepayVatSettlement = () => {
     popup.document.open(); popup.document.write(buildVatSummaryPrintHtml(productAmountSummaries, selectedPrintColumns, fileName)); popup.document.close();
     setMessage(`${selectedPrintColumns.map((column) => column.excelColumn).join("·")}열로 인쇄용 시트를 만들었습니다.`);
   };
+  const resultPrintColumns = useMemo(() => [
+    { key: "packageName", label: "PKG명" }, { key: "transactionCount", label: "거래" }, { key: "approvedCount", label: "승인" }, { key: "cancelledCount", label: "취소" }, { key: "feeTotal", label: "수수료계" },
+    ...activeFacilities.map((facility) => ({ key: `facility:${facility.name}`, label: facility.name })),
+    { key: "allocatedTotal", label: "배분 합계" }, { key: "difference", label: "차이" }, { key: "validation", label: "검증" },
+  ], [activeFacilities]);
+  const toggleResultPrintColumn = (key: string) => setResultPrintKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
+  const updateTaxInvoice = (category: string, key: "supplyAmount" | "taxAmount" | "totalAmount", value: number) => setTaxInvoiceRows((rows) => rows.map((row) => row.category === category ? { ...row, [key]: Number.isFinite(value) ? value : 0 } : row));
+  const printCombinedSheet = () => {
+    const summaryColumns = selectedPrintColumns;
+    const allocationColumns = resultPrintKeys.map((key) => resultPrintColumns.find((column) => column.key === key)).filter((column): column is { key: string; label: string } => Boolean(column));
+    const tables = [];
+    if (summaryColumns.length && productAmountSummaries.length) tables.push({ title: "상품별 금액 합계", headers: summaryColumns.map((column) => `${column.excelColumn}열 · ${column.label}`), rows: productAmountSummaries.map((row) => summaryColumns.map((column) => column.key === "transactionCount" ? row[column.key].toLocaleString("ko-KR") : column.numeric ? won(Number(row[column.key])) : String(row[column.key]))), totals: summaryColumns.map((column, index) => !column.numeric ? index === 0 ? "합계" : "-" : column.key === "transactionCount" ? productAmountSummaries.reduce((sum, row) => sum + row.transactionCount, 0).toLocaleString("ko-KR") : won(productAmountSummaries.reduce((sum, row) => sum + Number(row[column.key]), 0))) });
+    if (allocationColumns.length && result.summaries.length) tables.push({ title: "집계 및 배분 결과", headers: allocationColumns.map((column) => column.label), rows: result.summaries.map((summary) => { const allocation = Object.fromEntries(summary.allocations.map((item) => [item.facilityName, item.allocatedFee])); return allocationColumns.map((column) => column.key.startsWith("facility:") ? won(allocation[column.key.slice(9)] || 0) : ["feeTotal", "allocatedTotal", "difference"].includes(column.key) ? won(Number(summary[column.key as "feeTotal" | "allocatedTotal" | "difference"])) : String(summary[column.key as "packageName" | "transactionCount" | "approvedCount" | "cancelledCount" | "validation"])); }) });
+    if (!tables.length && !includeTaxInvoice) { setMessage("인쇄할 시트나 세금계산서를 하나 이상 선택하세요."); return; }
+    const popup = window.open("", "_blank", "width=900,height=1100");
+    if (!popup) { setMessage("인쇄 창이 차단되었습니다. 브라우저 팝업 허용 후 다시 눌러주세요."); return; }
+    popup.document.open(); popup.document.write(buildVatCombinedPrintHtml(tables, includeTaxInvoice ? taxInvoiceRows : [], fileName)); popup.document.close();
+    setMessage("선택한 여러 시트와 세금계산서를 한 페이지 인쇄용 시트로 만들었습니다.");
+  };
 
   const updateRule = (id: string, patch: Partial<ClassificationRule>) => setRules((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const assignExactProducts = (productNames: string[], standardProductName: string) => {
@@ -191,7 +216,7 @@ const NicepayVatSettlement = () => {
   };
   const updateComponent = (id: string, patch: Partial<PackageComponent>) => setComponents((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const updateFacility = (id: string, patch: Partial<Facility>) => setFacilities((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
-  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["components", "업장별 구성금액"], ["rules", "고급 규칙"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
+  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["print", "인쇄용 시트"], ["components", "업장별 구성금액"], ["rules", "고급 규칙"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
 
   return <div className="vat-step3">
     <header className="vat-hero"><div><span>NICEPAY VAT SETTLEMENT · STEP 3</span><h1>상품 분류·수수료 배분</h1><p>원본 거래 파일은 이 브라우저 안에서만 계산하고 저장하지 않습니다.</p></div><button onClick={() => void saveSettings()} disabled={isSaving}><Save size={17} /> {isSaving ? "저장 중" : "설정 저장"}</button></header>
@@ -215,6 +240,7 @@ const NicepayVatSettlement = () => {
     {tab === "result" && <section className="vat-card"><div className="vat-section-head"><div><h2>6. 집계 및 배분 결과</h2><p>각 X열 상품의 AE:BJ 배분 합계가 수수료계와 일치하는지 검증합니다. 맨 아래 합계는 업장별 최종 수수료입니다.</p></div><button className="download" onClick={() => void download()}><Download size={17} /> Excel 다운로드</button></div><label className="vat-checkbox"><input type="checkbox" checked={includeSettings} onChange={(event) => setIncludeSettings(event.target.checked)} /> 설정표 시트를 결과 Excel에 포함</label><div className="vat-kpis"><b>배분 전 <strong>{won(result.report.feeBeforeAllocation)}</strong></b><b>배분 후 <strong>{won(result.report.feeAfterAllocation)}</strong></b><b>차이 발생 <strong className={result.report.allocationDifferenceCount ? "bad" : ""}>{result.report.allocationDifferenceCount}건</strong></b><b>기준 없는 PKG <strong className={result.report.missingAllocationPackageCount ? "bad" : ""}>{result.report.missingAllocationPackageCount}건</strong></b></div><div className="vat-table-scroll"><table><thead><tr><th>PKG명</th><th>거래</th><th>승인</th><th>취소</th><th>수수료계</th>{activeFacilities.map((item) => <th key={item.id}>{item.name}</th>)}<th>배분 합계</th><th>차이</th><th>검증</th></tr></thead><tbody>{result.summaries.map((summary) => { const allocation = Object.fromEntries(summary.allocations.map((item) => [item.facilityName, item.allocatedFee])); return <tr key={summary.key} className={summary.validation === "오류" ? "error-row" : ""}><td>{summary.packageName}</td><td>{summary.transactionCount}</td><td>{summary.approvedCount}</td><td>{summary.cancelledCount}</td><td>{won(summary.feeTotal)}</td>{activeFacilities.map((facility) => <td key={facility.id}>{allocation[facility.name] ? won(allocation[facility.name]) : "-"}</td>)}<td>{won(summary.allocatedTotal)}</td><td>{won(summary.difference)}</td><td>{summary.validation}</td></tr>; })}</tbody><tfoot><tr><td>합계</td><td>{result.summaries.reduce((sum, item) => sum + item.transactionCount, 0).toLocaleString()}</td><td>{result.summaries.reduce((sum, item) => sum + item.approvedCount, 0).toLocaleString()}</td><td>{result.summaries.reduce((sum, item) => sum + item.cancelledCount, 0).toLocaleString()}</td><td>{won(result.report.feeBeforeAllocation)}</td>{activeFacilities.map((facility) => <td key={facility.id}>{won(result.report.facilityTotals[facility.name] || 0)}</td>)}<td>{won(result.report.feeAfterAllocation)}</td><td className={result.report.feeAfterAllocation === result.report.feeBeforeAllocation ? "" : "bad"}>{won(result.report.feeAfterAllocation - result.report.feeBeforeAllocation)}</td><td>{result.report.feeAfterAllocation === result.report.feeBeforeAllocation ? "정상" : "오류"}</td></tr></tfoot></table></div></section>}
 
     {tab === "errors" && <section className="vat-card"><h2>7. 오류 및 미분류</h2><div className="vat-error-list">{result.unclassified.length === 0 && result.errors.length === 0 ? <p className="ok"><CheckCircle2 size={18} /> 미분류·배분 오류가 없습니다.</p> : <>{result.unclassified.map((item) => <p key={item.rowNumber}><XCircle size={16} /><b>미분류</b> {item.productName} <small>원본 {item.rowNumber}행 · {won(item.feeTotal)}</small></p>)}{result.errors.map((error) => <p key={error}><XCircle size={16} /><b>배분 오류</b> {error}</p>)}</>}</div><div className="vat-download-bottom"><FileSpreadsheet size={20} /><span>정상 항목은 배분 차이 0원으로 검증됩니다.</span><button onClick={() => void download()}>결과 Excel 생성</button></div></section>}
+    {tab === "print" && <section className="vat-card vat-combined-print"><div className="vat-section-head"><div><h2>통합 인쇄용 시트</h2><p>여러 결과 시트에서 필요한 열만 골라 한 페이지에 이어서 출력합니다.</p></div><button className="vat-print-button" onClick={printCombinedSheet}><Printer size={17} /> 한 페이지 바로 인쇄</button></div><div className="vat-print-source"><h3>상품별 금액 합계</h3><p>체크한 열만 상품별 표에 포함합니다.</p><div className="vat-print-columns">{VAT_SUMMARY_PRINT_COLUMNS.map((column) => <label key={column.key} className={printColumnKeys.includes(column.key) ? "selected" : ""}><input type="checkbox" checked={printColumnKeys.includes(column.key)} onChange={() => togglePrintColumn(column.key)} /><b>{column.excelColumn}열</b><span>{column.label}</span></label>)}</div></div><div className="vat-print-source"><h3>집계 및 배분 결과</h3><p>PKG 집계와 이용업장별 배분 데이터에서 필요한 열만 선택하세요.</p><div className="vat-print-columns">{resultPrintColumns.map((column) => <label key={column.key} className={resultPrintKeys.includes(column.key) ? "selected" : ""}><input type="checkbox" checked={resultPrintKeys.includes(column.key)} onChange={() => toggleResultPrintColumn(column.key)} /><span>{column.label}</span></label>)}</div></div><div className="vat-print-source"><div className="vat-tax-title"><div><h3>세금계산서</h3><p>입력값은 이 브라우저에 저장되며 합계 행은 자동 계산됩니다.</p></div><label><input type="checkbox" checked={includeTaxInvoice} onChange={(event) => setIncludeTaxInvoice(event.target.checked)} /> 인쇄에 포함</label></div><div className="vat-tax-table"><div className="header"><b>구분</b><b>공급가액</b><b>세액</b><b>합계</b></div>{taxInvoiceRows.map((row) => <div className="row" key={row.category}><b>{row.category}</b><input type="number" value={row.supplyAmount || ""} placeholder="0" onChange={(event) => updateTaxInvoice(row.category, "supplyAmount", Number(event.target.value))} /><input type="number" value={row.taxAmount || ""} placeholder="0" onChange={(event) => updateTaxInvoice(row.category, "taxAmount", Number(event.target.value))} /><input type="number" value={row.totalAmount || ""} placeholder="0" onChange={(event) => updateTaxInvoice(row.category, "totalAmount", Number(event.target.value))} /></div>)}<div className="row total"><b>합계</b><output>{won(taxInvoiceRows.reduce((sum, row) => sum + row.supplyAmount, 0))}</output><output>{won(taxInvoiceRows.reduce((sum, row) => sum + row.taxAmount, 0))}</output><output>{won(taxInvoiceRows.reduce((sum, row) => sum + row.totalAmount, 0))}</output></div></div></div></section>}
   </div>;
 };
 
