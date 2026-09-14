@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupProductNames, isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
+import { calculateAllocationDisplayTotals, groupProductNames, isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
 
 const facilities = [
   { id: "room", name: "객실료", excelColumn: "AE", displayOrder: 1, enabled: true },
@@ -95,4 +95,12 @@ test("S column names with the same first five non-space characters are grouped t
   assert.equal(waterGroup.names.length, 2);
   assert.equal(waterGroup.count, 2);
   assert.equal(groups.length, 2);
+});
+
+test("display-only water and ski rental totals do not change the allocation total", () => {
+  const facilityTotals = { 워터파크: 100, 카바나: 200, 선베드: 300, 루지: 40, 레이싱카트: 30, 고카트: 20, 깡통열차: 10, 아레나: 5, 객실료: 900 };
+  const displayTotals = calculateAllocationDisplayTotals((facilityName) => facilityTotals[facilityName as keyof typeof facilityTotals] || 0);
+  assert.equal(displayTotals.waterTotal, 600);
+  assert.equal(displayTotals.skiRentalTotal, 105);
+  assert.equal(Object.values(facilityTotals).reduce((sum, value) => sum + value, 0), 1605);
 });

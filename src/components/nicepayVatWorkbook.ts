@@ -1,6 +1,6 @@
 import type { Workbook, Worksheet } from "exceljs";
 import type { ClassificationRule, Facility, PackageComponent, ProcessingResult, RawRow } from "./nicepayVatEngine.ts";
-import { summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
+import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
 
 const border = { top: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, left: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, bottom: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, right: { style: "thin" as const, color: { argb: "FF7F7F7F" } } };
 const moneyFormat = "#,##0;[Red]-#,##0;0";
@@ -100,11 +100,12 @@ export const buildVatSettlementWorkbook = (
 
   const allocation = workbook.addWorksheet("PKG 집계 및 업장별 배분");
   const facilityList = facilities.filter((item) => item.enabled).sort((a, b) => a.displayOrder - b.displayOrder);
-  const allocationHeaders = ["PKG명", "거래 건수", "승인 건수", "취소 건수", "배분 대상 수수료", ...facilityList.map((item) => item.name), "배분 합계", "차이", "검증 상태", "메시지"];
+  const allocationHeaders = ["PKG명", "거래 건수", "승인 건수", "취소 건수", "배분 대상 수수료", ...facilityList.map((item) => item.name), ...ALLOCATION_DISPLAY_GROUPS.map((group) => group.label), "배분 합계", "차이", "검증 상태", "메시지"];
   allocation.addRow(allocationHeaders);
   result.summaries.forEach((summary) => {
     const byFacility = Object.fromEntries(summary.allocations.map((item) => [item.facilityName, item.allocatedFee]));
-    allocation.addRow([summary.packageName, summary.transactionCount, summary.approvedCount, summary.cancelledCount, summary.feeTotal, ...facilityList.map((facility) => byFacility[facility.name] || 0), summary.allocatedTotal, summary.difference, summary.validation, summary.message]);
+    const displayTotals = calculateAllocationDisplayTotals((facilityName) => byFacility[facilityName] || 0);
+    allocation.addRow([summary.packageName, summary.transactionCount, summary.approvedCount, summary.cancelledCount, summary.feeTotal, ...facilityList.map((facility) => byFacility[facility.name] || 0), ...ALLOCATION_DISPLAY_GROUPS.map((group) => displayTotals[group.key]), summary.allocatedTotal, summary.difference, summary.validation, summary.message]);
   });
   setHeader(allocation, 1, 1, allocationHeaders.length);
   styleTable(allocation, 2, Math.max(2, result.summaries.length + 1), 1, allocationHeaders.length);
@@ -113,7 +114,7 @@ export const buildVatSettlementWorkbook = (
   result.summaries.forEach((summary, index) => colorProductCells(allocation, index + 2, [1], summary.packageName, true));
   for (let column = 1; column <= allocationHeaders.length; column += 1) fillCell(allocation.getCell(result.summaries.length + 3, column), COLORS.paleGold, true);
   for (let column = 2; column <= allocationHeaders.length; column += 1) allocation.getColumn(column).width = 15;
-  for (let column = 5; column <= 5 + facilityList.length + 1; column += 1) allocation.getColumn(column).numFmt = moneyFormat;
+  for (let column = 5; column <= 5 + facilityList.length + ALLOCATION_DISPLAY_GROUPS.length + 1; column += 1) allocation.getColumn(column).numFmt = moneyFormat;
   allocation.views = [{ state: "frozen", ySplit: 1, xSplit: 1 }];
 
   const errors = workbook.addWorksheet("미분류·오류 목록");
@@ -163,21 +164,35 @@ export const buildVatSettlementWorkbook = (
   report.getRow(totalRow).font = { name: "맑은 고딕", size: 9, bold: true };
   for (let column = 1; column <= 26; column += 1) fillCell(report.getCell(totalRow, column), COLORS.paleGold, true);
   const summaryRow = totalRow + 3;
+  const displayTotalStartColumn = 67; // BO: display-only totals follow the standard BN validation column.
+  const facilityColumnByName = new Map(facilities.map((facility) => [facility.name, facility.excelColumn]));
+  const displayGroupFormula = (group: (typeof ALLOCATION_DISPLAY_GROUPS)[number], rowNumber: number) => {
+    const cells = group.facilityNames.map((facilityName) => facilityColumnByName.get(facilityName)).filter((column): column is string => Boolean(column)).map((column) => `${column}${rowNumber}`);
+    return cells.length ? cells.join("+") : "0";
+  };
   report.getCell(summaryRow, 30).value = "PKG 분류명"; // AD
   facilityList.forEach((facility) => { report.getCell(summaryRow, columnNumber(facility.excelColumn)).value = facility.name; });
   report.getCell(summaryRow, 63).value = "배분 합계"; // BK
   report.getCell(summaryRow, 64).value = "배분 대상 수수료"; // BL
   report.getCell(summaryRow, 65).value = "검증"; // BM
   report.getCell(summaryRow, 66).value = "배분 차이"; // BN
-  setHeader(report, summaryRow, 30, 66);
+  ALLOCATION_DISPLAY_GROUPS.forEach((group, index) => { report.getCell(summaryRow, displayTotalStartColumn + index).value = group.label; });
+  setHeader(report, summaryRow, 30, displayTotalStartColumn + ALLOCATION_DISPLAY_GROUPS.length - 1);
   result.summaries.forEach((summary, index) => {
     const rowNumber = summaryRow + 1 + index;
+    const byFacility = Object.fromEntries(summary.allocations.map((line) => [line.facilityName, line.allocatedFee]));
+    const displayTotals = calculateAllocationDisplayTotals((facilityName) => byFacility[facilityName] || 0);
     report.getCell(rowNumber, 30).value = summary.packageName;
     summary.allocations.forEach((line) => { report.getCell(rowNumber, columnNumber(line.excelColumn)).value = line.allocatedFee; report.getCell(rowNumber, columnNumber(line.excelColumn)).numFmt = moneyFormat; });
     report.getCell(rowNumber, 63).value = { formula: `SUM(AE${rowNumber}:BJ${rowNumber})`, result: summary.allocatedTotal };
     report.getCell(rowNumber, 64).value = summary.feeTotal;
     report.getCell(rowNumber, 65).value = summary.validation;
     report.getCell(rowNumber, 66).value = { formula: `BK${rowNumber}-BL${rowNumber}`, result: summary.difference };
+    ALLOCATION_DISPLAY_GROUPS.forEach((group, groupIndex) => {
+      const column = displayTotalStartColumn + groupIndex;
+      report.getCell(rowNumber, column).value = { formula: displayGroupFormula(group, rowNumber), result: displayTotals[group.key] };
+      report.getCell(rowNumber, column).numFmt = moneyFormat;
+    });
     [63, 64, 66].forEach((column) => { report.getCell(rowNumber, column).numFmt = moneyFormat; });
     colorProductCells(report, rowNumber, [30], summary.packageName, true);
     fillCell(report.getCell(rowNumber, 65), summary.validation === "정상" ? COLORS.paleGreen : COLORS.paleRed, true);
@@ -200,13 +215,22 @@ export const buildVatSettlementWorkbook = (
   report.getCell(allocationTotalRow, 64).value = hasAllocationRows ? { formula: `SUM(BL${allocationFirstRow}:BL${allocationLastRow})`, result: result.report.feeBeforeAllocation } : 0;
   report.getCell(allocationTotalRow, 65).value = result.report.feeAfterAllocation === result.report.feeBeforeAllocation ? "정상" : "오류";
   report.getCell(allocationTotalRow, 66).value = { formula: `BK${allocationTotalRow}-BL${allocationTotalRow}`, result: result.report.feeAfterAllocation - result.report.feeBeforeAllocation };
+  const displayFacilityTotals = calculateAllocationDisplayTotals((facilityName) => result.report.facilityTotals[facilityName] || 0);
+  ALLOCATION_DISPLAY_GROUPS.forEach((group, groupIndex) => {
+    const column = displayTotalStartColumn + groupIndex;
+    const letter = report.getColumn(column).letter;
+    report.getCell(allocationTotalRow, column).value = hasAllocationRows
+      ? { formula: `SUM(${letter}${allocationFirstRow}:${letter}${allocationLastRow})`, result: displayFacilityTotals[group.key] }
+      : 0;
+    report.getCell(allocationTotalRow, column).numFmt = moneyFormat;
+  });
   [63, 64, 66].forEach((column) => { report.getCell(allocationTotalRow, column).numFmt = moneyFormat; });
-  styleTable(report, allocationFirstRow, allocationTotalRow, 30, 66);
+  styleTable(report, allocationFirstRow, allocationTotalRow, 30, displayTotalStartColumn + ALLOCATION_DISPLAY_GROUPS.length - 1);
   report.getRow(allocationTotalRow).font = { name: "맑은 고딕", size: 9, bold: true };
-  for (let column = 30; column <= 66; column += 1) fillCell(report.getCell(allocationTotalRow, column), COLORS.paleGold, true);
+  for (let column = 30; column <= displayTotalStartColumn + ALLOCATION_DISPLAY_GROUPS.length - 1; column += 1) fillCell(report.getCell(allocationTotalRow, column), COLORS.paleGold, true);
   [8, 15, 12, 12, 12, 12, 16, 13, 14, 12, 12, 12, 11, 13, 14, 14, 18, 12, 42, 12, 31, 12, 31, 26, 13, 13].forEach((width, index) => { report.getColumn(index + 1).width = width; });
   report.getColumn("P").width = 18; report.getColumn("Q").width = 22; report.getColumn("U").width = 34;
-  for (let column = 30; column <= 66; column += 1) report.getColumn(column).width = column === 30 ? 26 : 14;
+  for (let column = 30; column <= displayTotalStartColumn + ALLOCATION_DISPLAY_GROUPS.length - 1; column += 1) report.getColumn(column).width = column === 30 ? 26 : 14;
   REFERENCE_HIDDEN_REPORT_COLUMNS.forEach((column) => { report.getColumn(column).hidden = true; });
   report.views = [{ state: "frozen", ySplit: 3, xSplit: 2, showGridLines: true }];
   report.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 26 } };

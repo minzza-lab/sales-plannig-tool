@@ -62,6 +62,23 @@ export type AllocationLine = {
   componentKey: string;
 };
 
+/**
+ * Reference-only display totals. They intentionally duplicate individual
+ * facility allocations and must never be included in allocation validation.
+ */
+export const ALLOCATION_DISPLAY_GROUPS = [
+  { key: "waterTotal", label: "워터합계", facilityNames: ["워터파크", "카바나", "선베드"] },
+  { key: "skiRentalTotal", label: "스키임대합계", facilityNames: ["루지", "레이싱카트", "고카트", "깡통열차", "아레나"] },
+] as const;
+
+export type AllocationDisplayGroupKey = (typeof ALLOCATION_DISPLAY_GROUPS)[number]["key"];
+
+export const calculateAllocationDisplayTotals = (amountForFacility: (facilityName: string) => number): Record<AllocationDisplayGroupKey, number> =>
+  ALLOCATION_DISPLAY_GROUPS.reduce((totals, group) => {
+    totals[group.key] = group.facilityNames.reduce((sum, facilityName) => sum + amountForFacility(facilityName), 0);
+    return totals;
+  }, {} as Record<AllocationDisplayGroupKey, number>);
+
 export type PackageSummary = {
   key: string;
   packageName: string;

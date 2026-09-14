@@ -2,7 +2,7 @@ import XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "../src/components/nicepayVatDefaults.ts";
 import { buildVatSettlementWorkbook, REFERENCE_HIDDEN_REPORT_COLUMNS } from "../src/components/nicepayVatWorkbook.ts";
-import { isNicepayTargetMid, processVatSettlement, type RawRow } from "../src/components/nicepayVatEngine.ts";
+import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, isNicepayTargetMid, processVatSettlement, type RawRow } from "../src/components/nicepayVatEngine.ts";
 
 const sourcePath = process.argv[2];
 if (!sourcePath) throw new Error("사용법: node --experimental-strip-types scripts/verify-nicepay-vat-sample.ts <raw-data.xls>");
@@ -28,9 +28,20 @@ const totalFormula = report.getCell(allocationTotalRow, 63).value as { formula?:
 const differenceFormula = report.getCell(allocationTotalRow, 66).value as { formula?: string; result?: number };
 if (!totalFormula.formula?.startsWith("SUM(BK") || totalFormula.result !== result.report.feeAfterAllocation) throw new Error("업장별 배분 합계 검증 수식이 올바르지 않습니다.");
 if (differenceFormula.formula !== `BK${allocationTotalRow}-BL${allocationTotalRow}` || result.report.feeAfterAllocation - result.report.feeBeforeAllocation !== 0) throw new Error("최종 배분 차이 검증 수식이 올바르지 않습니다.");
+const firstAllocationRow = allocationHeaderRow + 1;
+const allocationRowTotal = report.getCell(firstAllocationRow, 63).value as { formula?: string; result?: number };
+if (allocationRowTotal.formula !== `SUM(AE${firstAllocationRow}:BJ${firstAllocationRow})`) throw new Error("참고 합계가 배분 합계 수식에 포함되었습니다.");
+const displayTotals = calculateAllocationDisplayTotals((facilityName) => result.report.facilityTotals[facilityName] || 0);
+ALLOCATION_DISPLAY_GROUPS.forEach((group, index) => {
+  const column = 67 + index;
+  if (report.getCell(allocationHeaderRow, column).value !== group.label) throw new Error(`${group.label} 헤더가 없습니다.`);
+  const cell = report.getCell(allocationTotalRow, column).value as { formula?: string; result?: number };
+  const letter = report.getColumn(column).letter;
+  if (!cell.formula?.startsWith(`SUM(${letter}`) || (displayTotals[group.key] !== 0 && cell.result !== displayTotals[group.key])) throw new Error(`${group.label} 참고 합계가 맞지 않습니다.`);
+});
 DEFAULT_FACILITIES.filter((facility) => facility.enabled).forEach((facility) => {
   const expected = result.report.facilityTotals[facility.name] || 0;
   const cell = report.getCell(`${facility.excelColumn}${allocationTotalRow}`).value as { formula?: string; result?: number };
   if (!cell.formula?.startsWith(`SUM(${facility.excelColumn}`) || (expected !== 0 && cell.result !== expected)) throw new Error(`업장별 합계가 맞지 않습니다: ${facility.name}`);
 });
-console.log(JSON.stringify({ sourceRows: allRows.length, midExcluded: allRows.length - rows.length, inputRows: rows.length, processedRows: result.report.outputCount, classified: result.report.classifiedCount, unclassified: result.report.unclassifiedCount, allocationRows: result.summaries.length, feeBefore: result.report.feeBeforeAllocation, feeAfter: result.report.feeAfterAllocation, allocationDifferences: result.report.allocationDifferenceCount, outputSheets: output.worksheets.length, outputBytes: buffer.byteLength }, null, 2));
+console.log(JSON.stringify({ sourceRows: allRows.length, midExcluded: allRows.length - rows.length, inputRows: rows.length, processedRows: result.report.outputCount, classified: result.report.classifiedCount, unclassified: result.report.unclassifiedCount, allocationRows: result.summaries.length, feeBefore: result.report.feeBeforeAllocation, feeAfter: result.report.feeAfterAllocation, allocationDifferences: result.report.allocationDifferenceCount, displayTotals, outputSheets: output.worksheets.length, outputBytes: buffer.byteLength }, null, 2));
