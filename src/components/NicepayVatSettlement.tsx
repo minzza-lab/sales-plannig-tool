@@ -7,7 +7,8 @@ import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
 import { buildVatCombinedPrintHtml, buildVatSummaryPrintHtml, VAT_SUMMARY_PRINT_COLUMNS, type VatSummaryColumnKey, type VatTaxInvoiceRow } from "./nicepayVatPrint";
 import NicepayProductGrouping from "./NicepayProductGrouping";
 import NicepayAllocationSetup from "./NicepayAllocationSetup";
-import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, exactProductMappingDescription, exactProductNamesFromRule, isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
+import NicepayProductSummary from "./NicepayProductSummary";
+import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, exactProductMappingDescription, exactProductNamesFromRule, isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type MajorCategory, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 import "./NicepayVatPrint.css";
 
@@ -74,6 +75,7 @@ const NicepayVatSettlement = () => {
   const [rules, setRules] = useState<ClassificationRule[]>(DEFAULT_CLASSIFICATION_RULES);
   const [components, setComponents] = useState<PackageComponent[]>(DEFAULT_PACKAGE_COMPONENTS);
   const [facilities, setFacilities] = useState<Facility[]>(DEFAULT_FACILITIES);
+  const [majorCategories, setMajorCategories] = useState<MajorCategory[]>([]);
   const [manualOverrides, setManualOverrides] = useState<Record<number, ManualOverride>>({});
   const [message, setMessage] = useState("기준 설정을 불러오는 중입니다.");
   const [settingsMode, setSettingsMode] = useState<"database" | "browser">("browser");
@@ -92,15 +94,17 @@ const NicepayVatSettlement = () => {
     const loadSettings = async () => {
       const stored = localStorage.getItem("nicepay_vat_step3_settings_v1");
       if (stored) try {
-        const saved = JSON.parse(stored) as { rules: ClassificationRule[]; components: PackageComponent[]; facilities: Facility[] };
+        const saved = JSON.parse(stored) as { rules: ClassificationRule[]; components: PackageComponent[]; facilities: Facility[]; majorCategories?: MajorCategory[] };
         if (saved.rules?.length) setRules(saved.rules);
         if (saved.components?.length) setComponents(saved.components);
         if (saved.facilities?.length) setFacilities(saved.facilities);
+        if (saved.majorCategories?.length) setMajorCategories(saved.majorCategories);
       } catch { /* defaults remain */ }
-      const [rulesResult, componentsResult, facilitiesResult] = await Promise.all([
+      const [rulesResult, componentsResult, facilitiesResult, categoriesResult] = await Promise.all([
         supabase.from("nicepay_vat_classification_rules").select("*").order("priority"),
         supabase.from("nicepay_vat_package_components").select("*").order("package_name"),
         supabase.from("nicepay_vat_facilities").select("*").order("display_order"),
+        supabase.from("nicepay_vat_major_categories").select("*").order("display_order"),
       ]);
       if (rulesResult.error || componentsResult.error || facilitiesResult.error) {
         setMessage("DB 설정표가 아직 없습니다. 기본 기준을 검토한 뒤 ‘설정 저장’을 눌러 초기화하세요. 원본 파일은 브라우저 밖으로 전송되지 않습니다.");
@@ -110,13 +114,14 @@ const NicepayVatSettlement = () => {
         if (rulesResult.data?.length) setRules(rulesResult.data.map((item) => { const rule = { id: item.id, priority: item.priority, includeKeywords: item.include_keywords || [], excludeKeywords: item.exclude_keywords || [], standardProductName: item.standard_product_name, packageName: item.package_name, enabled: item.enabled, description: item.description || "" }; return { ...rule, exactProductNames: exactProductNamesFromRule(rule) }; }));
         if (componentsResult.data?.length) setComponents(componentsResult.data.map((item) => ({ id: item.id, packageName: item.package_name, facilityName: item.facility_name, baseAmount: Number(item.base_amount), startDate: toDateValue(item.start_date), endDate: toDateValue(item.end_date), enabled: item.enabled })));
         if (facilitiesResult.data?.length) setFacilities(facilitiesResult.data.map((item) => ({ id: item.id, name: item.name, excelColumn: item.excel_column, displayOrder: item.display_order, enabled: item.enabled })));
-        setSettingsMode("database"); setMessage("공유 설정표를 불러왔습니다.");
-      } else setMessage("DB 설정표가 비어 있습니다. 기준 파일에서 추출한 기본값을 검토한 뒤 저장하세요.");
+        if (categoriesResult.data?.length) setMajorCategories(categoriesResult.data.map((item) => ({ id: item.id, name: item.name, productNames: item.product_names || [], displayOrder: item.display_order })));
+        setSettingsMode(categoriesResult.error ? "browser" : "database"); setMessage(categoriesResult.error ? "공유 기본 설정을 불러왔습니다. 대분류 공유 저장을 위해 새 SQL 스키마를 한 번 적용하세요. 현재 대분류는 이 브라우저에 보관됩니다." : "공유 설정표를 불러왔습니다.");
+      } else setMessage(categoriesResult.error ? "기본 설정표를 불러왔습니다. 대분류는 새 SQL 스키마 적용 전까지 이 브라우저에만 저장됩니다." : "DB 설정표가 비어 있습니다. 기준 파일에서 추출한 기본값을 검토한 뒤 저장하세요.");
     };
     void loadSettings();
   }, []);
 
-  useEffect(() => { localStorage.setItem("nicepay_vat_step3_settings_v1", JSON.stringify({ rules, components, facilities })); }, [rules, components, facilities]);
+  useEffect(() => { localStorage.setItem("nicepay_vat_step3_settings_v1", JSON.stringify({ rules, components, facilities, majorCategories })); }, [rules, components, facilities, majorCategories]);
   useEffect(() => { localStorage.setItem("nicepay_vat_tax_invoice_v1", JSON.stringify(taxInvoiceRows)); }, [taxInvoiceRows]);
 
   const effectiveRules = useMemo(() => [
@@ -139,19 +144,25 @@ const NicepayVatSettlement = () => {
   };
   const applySheet = () => { if (!workbook || !sheetName) return; const parsed = parseSheetRows(workbook, sheetName, headerRow); setRawRows(parsed.rows); setSourceRowCount(parsed.sourceRowCount); setExcludedMidCount(parsed.excludedMidCount); setManualOverrides({}); setMessage(`${sheetName} 시트 ${headerRow}행을 헤더로 적용했습니다. MID 1M·4M·5M ${parsed.rows.length.toLocaleString()}행만 반영합니다.`); };
   const saveSettings = async () => {
+    const categoryNames = majorCategories.map((item) => item.name.trim()).filter(Boolean);
+    if (categoryNames.length !== majorCategories.length || new Set(categoryNames).size !== categoryNames.length) { setMessage("대분류명은 비워 둘 수 없고, 같은 이름을 중복해서 저장할 수 없습니다."); return; }
     setIsSaving(true);
     const toRule = (item: ClassificationRule) => ({ priority: item.priority, include_keywords: item.includeKeywords, exclude_keywords: item.excludeKeywords, standard_product_name: item.standardProductName, package_name: item.packageName, enabled: item.enabled, description: item.exactProductNames?.length ? exactProductMappingDescription(item.exactProductNames) : item.description });
     const toFacility = (item: Facility) => ({ name: item.name, excel_column: item.excelColumn, display_order: item.displayOrder, enabled: item.enabled });
     const toComponent = (item: PackageComponent) => ({ package_name: item.packageName, facility_name: item.facilityName, base_amount: item.baseAmount, start_date: item.startDate || null, end_date: item.endDate || null, enabled: item.enabled });
+    const toMajorCategory = (item: MajorCategory) => ({ name: item.name.trim(), product_names: item.productNames, display_order: item.displayOrder });
     const failed = await supabase.from("nicepay_vat_package_components").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     if (!failed.error) {
       await supabase.from("nicepay_vat_classification_rules").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("nicepay_vat_facilities").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      const categoriesDelete = await supabase.from("nicepay_vat_major_categories").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       const response = await supabase.from("nicepay_vat_facilities").insert(facilities.map(toFacility));
       if (!response.error) {
         const componentsResponse = components.length ? await supabase.from("nicepay_vat_package_components").insert(components.map(toComponent)) : { error: null };
         const rulesResponse = rules.length ? await supabase.from("nicepay_vat_classification_rules").insert(rules.map(toRule)) : { error: null };
-        if (!componentsResponse.error && !rulesResponse.error) { setSettingsMode("database"); setMessage("상품 분류·PKG 구성·이용업장 설정을 DB에 저장했습니다."); setIsSaving(false); return; }
+        const categoriesResponse = categoriesDelete.error ? { error: categoriesDelete.error } : majorCategories.length ? await supabase.from("nicepay_vat_major_categories").insert(majorCategories.map(toMajorCategory)) : { error: null };
+        if (!componentsResponse.error && !rulesResponse.error && !categoriesResponse.error) { setSettingsMode("database"); setMessage("상품 분류·대분류·PKG 구성·이용업장 설정을 DB에 저장했습니다."); setIsSaving(false); return; }
+        if (!componentsResponse.error && !rulesResponse.error && categoriesResponse.error) { setSettingsMode("browser"); setMessage("기본 설정은 DB에 저장했습니다. 대분류 공유 저장을 위해 새 SQL 스키마를 한 번 적용하세요. 현재 대분류는 이 브라우저에 보관됩니다."); setIsSaving(false); return; }
       }
     }
     setSettingsMode("browser"); setMessage("DB 저장에 실패했습니다. SQL 스키마 적용과 권한을 확인하세요. 현재 설정은 이 브라우저에 안전하게 보관됩니다."); setIsSaving(false);
@@ -159,7 +170,7 @@ const NicepayVatSettlement = () => {
   const download = async () => {
     if (!rawRows.length) { setMessage("먼저 로우데이터를 업로드하세요."); return; }
     const ExcelJS = await import("exceljs"); const { saveAs } = await import("file-saver"); const output = new ExcelJS.Workbook();
-    buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, includeSettings);
+    buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, majorCategories, includeSettings);
     const buffer = await output.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
     setMessage(`검증 결과를 포함한 ${result.rows.length.toLocaleString()}건 Excel 파일을 생성했습니다.`);
@@ -228,6 +239,14 @@ const NicepayVatSettlement = () => {
   };
   const updateComponent = (id: string, patch: Partial<PackageComponent>) => setComponents((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   const updateFacility = (id: string, patch: Partial<Facility>) => setFacilities((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const updateMajorCategory = (id: string, patch: Partial<MajorCategory>) => setMajorCategories((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const toggleMajorCategoryProduct = (categoryId: string, productName: string, selected: boolean) => setMajorCategories((items) => items.map((item) => {
+    const productNames = new Set(item.productNames);
+    if (item.id === categoryId && selected) productNames.add(productName);
+    else productNames.delete(productName);
+    return { ...item, productNames: [...productNames] };
+  }));
+  const addMajorCategory = () => setMajorCategories((items) => [...items, { id: newId(), name: "", productNames: [], displayOrder: items.length + 1 }]);
   const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["print", "인쇄용 시트"], ["components", "업장별 구성금액"], ["rules", "고급 규칙"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
 
   return <div className="vat-step3">
@@ -239,7 +258,7 @@ const NicepayVatSettlement = () => {
 
     {tab === "group" && <NicepayProductGrouping rows={rawRows} rules={rules} onAssignExactProducts={assignExactProducts} />}
 
-    {tab === "summary" && <section className="vat-card"><div className="vat-section-head"><div><h2>3. 키워드별 상품 금액 합계</h2><p>S열 상품명을 X열 표준 상품명으로 묶은 뒤, 거래금액·수수료·VAT·수수료계·실입금액을 합산합니다.</p></div><b className="group-count">{productAmountSummaries.length.toLocaleString()}개 상품</b></div>{productAmountSummaries.length ? <><div className="vat-print-builder"><div className="vat-print-builder-head"><div><b>인쇄용 시트 열 선택</b><small>원하는 열을 체크하고, 선택된 열은 끌어서 출력 순서를 바꾸세요.</small></div><button className="vat-print-button" disabled={!selectedPrintColumns.length} onClick={printSummarySheet}><Printer size={17} /> 선택 열 바로 인쇄</button></div><div className="vat-print-columns">{VAT_SUMMARY_PRINT_COLUMNS.map((column) => <label key={column.key} className={printColumnKeys.includes(column.key) ? "selected" : ""}><input type="checkbox" checked={printColumnKeys.includes(column.key)} onChange={() => togglePrintColumn(column.key)} /><b>{column.excelColumn}열</b><span>{column.label}</span></label>)}</div><div className="vat-print-order"><span>인쇄 순서</span>{selectedPrintColumns.map((column) => <button key={column.key} draggable onDragStart={() => setDraggedPrintColumn(column.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePrintColumn(column.key)}><GripVertical size={14} /> {column.excelColumn}열 · {column.label}</button>)}{!selectedPrintColumns.length && <small>선택된 열이 없습니다.</small>}</div><div className="vat-print-preview"><b>인쇄용 시트 미리보기</b><span>{selectedPrintColumns.length ? `${selectedPrintColumns.map((column) => column.excelColumn).join(" · ")}열` : "열을 선택하세요"}</span></div>{selectedPrintColumns.length > 0 && <div className="vat-table-scroll vat-print-preview-table"><table><thead><tr>{selectedPrintColumns.map((column) => <th key={column.key}>{column.excelColumn}열 · {column.label}</th>)}</tr></thead><tbody>{productAmountSummaries.slice(0, 5).map((item) => <tr key={item.standardProductName}>{selectedPrintColumns.map((column) => <td key={column.key}>{column.key === "transactionCount" ? item[column.key].toLocaleString() : column.numeric ? won(Number(item[column.key])) : String(item[column.key])}</td>)}</tr>)}</tbody></table><small>화면은 처음 5개 상품만 미리 보여주며, 인쇄에는 전체 상품과 합계가 포함됩니다.</small></div>}</div><div className="vat-table-scroll"><table><thead><tr><th>분류 키워드</th><th>X열 표준 상품명</th><th>거래 건수</th><th>거래금액</th><th>결제수수료</th><th>VAT</th><th>수수료계</th><th>실입금액</th></tr></thead><tbody>{productAmountSummaries.map((item) => <tr key={item.standardProductName} className={item.standardProductName === "미분류" ? "error-row" : ""}><td>{item.keywords}</td><td>{item.standardProductName}</td><td>{item.transactionCount.toLocaleString()}</td><td>{won(item.transactionAmount)}</td><td>{won(item.paymentFee)}</td><td>{won(item.vat)}</td><td>{won(item.feeTotal)}</td><td>{won(item.settlementAmount)}</td></tr>)}<tr><td>합계</td><td>-</td><td>{productAmountSummaries.reduce((sum, item) => sum + item.transactionCount, 0).toLocaleString()}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.transactionAmount, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.paymentFee, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.vat, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.feeTotal, 0))}</td><td>{won(productAmountSummaries.reduce((sum, item) => sum + item.settlementAmount, 0))}</td></tr></tbody></table></div></> : <p>먼저 S열 묶음에서 X열 표준 상품명을 지정하세요.</p>}</section>}
+    {tab === "summary" && (productAmountSummaries.length ? <NicepayProductSummary summaries={productAmountSummaries} categories={majorCategories} onAdd={addMajorCategory} onUpdate={updateMajorCategory} onRemove={(id) => setMajorCategories((items) => items.filter((item) => item.id !== id))} onToggleProduct={toggleMajorCategoryProduct} printControls={<div className="vat-print-builder"><div className="vat-print-builder-head"><div><b>인쇄용 시트 열 선택</b><small>원하는 열을 체크하고, 선택된 열은 끌어서 출력 순서를 바꾸세요.</small></div><button className="vat-print-button" disabled={!selectedPrintColumns.length} onClick={printSummarySheet}><Printer size={17} /> 선택 열 바로 인쇄</button></div><div className="vat-print-columns">{VAT_SUMMARY_PRINT_COLUMNS.map((column) => <label key={column.key} className={printColumnKeys.includes(column.key) ? "selected" : ""}><input type="checkbox" checked={printColumnKeys.includes(column.key)} onChange={() => togglePrintColumn(column.key)} /><b>{column.excelColumn}열</b><span>{column.label}</span></label>)}</div><div className="vat-print-order"><span>인쇄 순서</span>{selectedPrintColumns.map((column) => <button key={column.key} draggable onDragStart={() => setDraggedPrintColumn(column.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePrintColumn(column.key)}><GripVertical size={14} /> {column.excelColumn}열 · {column.label}</button>)}{!selectedPrintColumns.length && <small>선택된 열이 없습니다.</small>}</div><div className="vat-print-preview"><b>인쇄용 시트 미리보기</b><span>{selectedPrintColumns.length ? `${selectedPrintColumns.map((column) => column.excelColumn).join(" · ")}열` : "열을 선택하세요"}</span></div>{selectedPrintColumns.length > 0 && <div className="vat-table-scroll vat-print-preview-table"><table><thead><tr>{selectedPrintColumns.map((column) => <th key={column.key}>{column.excelColumn}열 · {column.label}</th>)}</tr></thead><tbody>{productAmountSummaries.slice(0, 5).map((item) => <tr key={item.standardProductName}>{selectedPrintColumns.map((column) => <td key={column.key}>{column.key === "transactionCount" ? item[column.key].toLocaleString() : column.numeric ? won(Number(item[column.key])) : String(item[column.key])}</td>)}</tr>)}</tbody></table><small>화면은 처음 5개 상품만 미리 보여주며, 인쇄에는 전체 상품과 합계가 포함됩니다.</small></div>}</div>} /> : <section className="vat-card"><h2>3. 키워드별 상품 금액 합계</h2><p>먼저 S열 묶음에서 X열 표준 상품명을 지정하세요.</p></section>)}
 
     {tab === "rules" && <section className="vat-card"><div className="vat-section-head"><div><h2>2. 상품 분류 기준</h2><p>작은 우선순위부터 적용됩니다. 포함 키워드는 모두 포함되어야 하고, 제외 키워드가 하나라도 있으면 제외됩니다.</p></div><button onClick={() => setRules((items) => [...items, { id: newId(), priority: (Math.max(0, ...items.map((item) => item.priority)) + 1), includeKeywords: [], excludeKeywords: [], standardProductName: "", packageName: "", enabled: true, description: "" }])}><Plus size={16} /> 규칙 추가</button></div><div className="vat-grid-table rules"><div className="row header"><span>우선순위</span><span>포함 키워드</span><span>제외 키워드</span><span>표준 상품명</span><span>PKG 분류명</span><span>사용</span><span>설명</span><span /></div>{rules.sort((a, b) => a.priority - b.priority).map((rule) => <div className="row" key={rule.id}><input type="number" value={rule.priority} onChange={(event) => updateRule(rule.id, { priority: Number(event.target.value) || 0 })} /><input value={rule.includeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { includeKeywords: splitKeywords(event.target.value) })} placeholder="워터, 조식" /><input value={rule.excludeKeywords.join(", ")} onChange={(event) => updateRule(rule.id, { excludeKeywords: splitKeywords(event.target.value) })} /><input value={rule.standardProductName} onChange={(event) => updateRule(rule.id, { standardProductName: event.target.value })} /><input value={rule.packageName} onChange={(event) => updateRule(rule.id, { packageName: event.target.value })} /><input type="checkbox" checked={rule.enabled} onChange={(event) => updateRule(rule.id, { enabled: event.target.checked })} /><input value={rule.description} onChange={(event) => updateRule(rule.id, { description: event.target.value })} /><button className="icon-danger" onClick={() => setRules((items) => items.filter((item) => item.id !== rule.id))}><Trash2 size={16} /></button></div>)}</div></section>}
 

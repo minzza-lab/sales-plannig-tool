@@ -132,6 +132,21 @@ export type ProductAmountSummary = {
   settlementAmount: number;
 };
 
+export type MajorCategory = {
+  id: string;
+  name: string;
+  productNames: string[];
+  displayOrder: number;
+};
+
+export type ProductSummaryGroup = {
+  key: string;
+  kind: "major" | "single";
+  name: string;
+  items: ProductAmountSummary[];
+  transactionAmount: number;
+};
+
 const normalizeHeader = (value: unknown) => String(value ?? "")
   .replace(/[\n\r\s]/g, "")
   .toLowerCase();
@@ -218,6 +233,34 @@ export const summarizeStandardProducts = (rows: ProcessedRow[]): ProductAmountSu
   });
   return [...summary.values()].map(({ keywordSet, ...row }) => ({ ...row, keywords: [...keywordSet].join(" / ") || "-" }))
     .sort((a, b) => b.transactionAmount - a.transactionAmount || a.standardProductName.localeCompare(b.standardProductName, "ko"));
+};
+
+/** Keeps selected X-column products together while leaving unselected products as standalone rows. */
+export const groupProductSummariesByMajorCategory = (items: ProductAmountSummary[], categories: MajorCategory[]): ProductSummaryGroup[] => {
+  const assigned = new Set<string>();
+  const groups = categories
+    .filter((category) => category.name.trim())
+    .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name, "ko"))
+    .map((category) => {
+      const productNames = new Set(category.productNames);
+      const groupedItems = items.filter((item) => productNames.has(item.standardProductName) && !assigned.has(item.standardProductName));
+      groupedItems.forEach((item) => assigned.add(item.standardProductName));
+      return {
+        key: category.id,
+        kind: "major" as const,
+        name: category.name.trim(),
+        items: groupedItems,
+        transactionAmount: groupedItems.reduce((sum, item) => sum + item.transactionAmount, 0),
+      };
+    })
+    .filter((group) => group.items.length > 0);
+  return [...groups, ...items.filter((item) => !assigned.has(item.standardProductName)).map((item) => ({
+    key: `single-${item.standardProductName}`,
+    kind: "single" as const,
+    name: "",
+    items: [item],
+    transactionAmount: item.transactionAmount,
+  }))];
 };
 
 export const normalizeDate = (value: unknown): string => {

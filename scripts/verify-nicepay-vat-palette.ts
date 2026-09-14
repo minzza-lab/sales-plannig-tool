@@ -20,7 +20,7 @@ const result: ProcessingResult = {
 };
 
 const workbook = new ExcelJS.Workbook();
-buildVatSettlementWorkbook(workbook, rows.map((row) => row.source), result, DEFAULT_CLASSIFICATION_RULES, DEFAULT_PACKAGE_COMPONENTS, DEFAULT_FACILITIES, true);
+buildVatSettlementWorkbook(workbook, rows.map((row) => row.source), result, DEFAULT_CLASSIFICATION_RULES, DEFAULT_PACKAGE_COMPONENTS, DEFAULT_FACILITIES, [], true);
 const classified = workbook.getWorksheet("분류 결과");
 const report = workbook.getWorksheet("2607월 부가세");
 if (!classified || !report) throw new Error("검증 시트를 찾지 못했습니다.");

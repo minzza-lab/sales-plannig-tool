@@ -1,6 +1,6 @@
 import type { Workbook, Worksheet } from "exceljs";
-import type { ClassificationRule, Facility, PackageComponent, ProcessingResult, RawRow } from "./nicepayVatEngine.ts";
-import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
+import type { ClassificationRule, Facility, MajorCategory, PackageComponent, ProcessingResult, RawRow } from "./nicepayVatEngine.ts";
+import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, groupProductSummariesByMajorCategory, summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
 
 const border = { top: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, left: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, bottom: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, right: { style: "thin" as const, color: { argb: "FF7F7F7F" } } };
 const moneyFormat = "#,##0;[Red]-#,##0;0";
@@ -61,6 +61,7 @@ export const buildVatSettlementWorkbook = (
   rules: ClassificationRule[],
   components: PackageComponent[],
   facilities: Facility[],
+  majorCategories: MajorCategory[],
   includeSettings: boolean,
 ) => {
   workbook.creator = "WELLIHILLI Sales Planning";
@@ -84,17 +85,37 @@ export const buildVatSettlementWorkbook = (
   classified.views = [{ state: "frozen", ySplit: 1 }];
 
   const productSummary = workbook.addWorksheet("상품별 금액 합계");
-  const productSummaryHeaders = ["분류 키워드", "X열 표준 상품명", "거래 건수", "거래금액", "결제수수료", "VAT", "수수료계", "실입금액"];
+  const productSummaryHeaders = ["대분류", "X열 표준 상품명", "거래금액 합계", "분류 키워드", "거래 건수", "거래금액", "결제수수료", "VAT", "수수료계", "실입금액"];
   productSummary.addRow(productSummaryHeaders);
   const standardProductTotals = summarizeStandardProducts(result.rows);
-  standardProductTotals.forEach((item) => productSummary.addRow([item.keywords, item.standardProductName, item.transactionCount, item.transactionAmount, item.paymentFee, item.vat, item.feeTotal, item.settlementAmount]));
-  productSummary.addRow(["합계", "", standardProductTotals.reduce((sum, item) => sum + item.transactionCount, 0), standardProductTotals.reduce((sum, item) => sum + item.transactionAmount, 0), standardProductTotals.reduce((sum, item) => sum + item.paymentFee, 0), standardProductTotals.reduce((sum, item) => sum + item.vat, 0), standardProductTotals.reduce((sum, item) => sum + item.feeTotal, 0), standardProductTotals.reduce((sum, item) => sum + item.settlementAmount, 0)]);
+  const productGroups = groupProductSummariesByMajorCategory(standardProductTotals, majorCategories);
+  productGroups.forEach((group) => {
+    const startRow = productSummary.rowCount + 1;
+    group.items.forEach((item, index) => productSummary.addRow(group.kind === "major"
+      ? [index === 0 ? group.name : "", item.standardProductName, index === 0 ? group.transactionAmount : "", item.keywords, item.transactionCount, item.transactionAmount, item.paymentFee, item.vat, item.feeTotal, item.settlementAmount]
+      : [item.standardProductName, "", item.transactionAmount, item.keywords, item.transactionCount, item.transactionAmount, item.paymentFee, item.vat, item.feeTotal, item.settlementAmount]));
+    const endRow = productSummary.rowCount;
+    if (group.kind === "major" && endRow > startRow) {
+      productSummary.mergeCells(startRow, 1, endRow, 1);
+      productSummary.mergeCells(startRow, 3, endRow, 3);
+    }
+    if (group.kind === "single") productSummary.mergeCells(startRow, 1, startRow, 2);
+    productSummary.getCell(startRow, 3).value = group.kind === "major"
+      ? { formula: `SUM(F${startRow}:F${endRow})`, result: group.transactionAmount }
+      : { formula: `F${startRow}`, result: group.transactionAmount };
+    productSummary.getCell(startRow, 3).numFmt = moneyFormat;
+  });
+  productSummary.addRow(["합계", "", "", "", standardProductTotals.reduce((sum, item) => sum + item.transactionCount, 0), standardProductTotals.reduce((sum, item) => sum + item.transactionAmount, 0), standardProductTotals.reduce((sum, item) => sum + item.paymentFee, 0), standardProductTotals.reduce((sum, item) => sum + item.vat, 0), standardProductTotals.reduce((sum, item) => sum + item.feeTotal, 0), standardProductTotals.reduce((sum, item) => sum + item.settlementAmount, 0)]);
   setHeader(productSummary, 1, 1, productSummaryHeaders.length);
   styleTable(productSummary, 2, Math.max(2, standardProductTotals.length + 2), 1, productSummaryHeaders.length);
-  [26, 28, 14, 18, 18, 18, 18, 18].forEach((width, index) => { productSummary.getColumn(index + 1).width = width; });
-  for (let column = 4; column <= 8; column += 1) productSummary.getColumn(column).numFmt = moneyFormat;
+  [18, 28, 18, 26, 14, 18, 18, 18, 18, 18].forEach((width, index) => { productSummary.getColumn(index + 1).width = width; });
+  for (let column = 3; column <= 10; column += 1) if (column !== 4 && column !== 5) productSummary.getColumn(column).numFmt = moneyFormat;
   productSummary.getRow(standardProductTotals.length + 2).font = { name: "맑은 고딕", size: 9, bold: true };
-  standardProductTotals.forEach((item, index) => colorProductCells(productSummary, index + 2, [1, 2], item.standardProductName, true));
+  productGroups.forEach((group) => {
+    const groupFirstRow = productGroups.slice(0, productGroups.indexOf(group)).reduce((row, prior) => row + prior.items.length, 2);
+    if (group.kind === "major") colorProductCells(productSummary, groupFirstRow, [1, 3], group.name, true);
+    group.items.forEach((item, index) => colorProductCells(productSummary, groupFirstRow + index, group.kind === "major" ? [2] : [1, 2], item.standardProductName, true));
+  });
   for (let column = 1; column <= productSummaryHeaders.length; column += 1) fillCell(productSummary.getCell(standardProductTotals.length + 2, column), COLORS.paleGold, true);
   productSummary.views = [{ state: "frozen", ySplit: 1 }];
 
@@ -246,5 +267,10 @@ export const buildVatSettlementWorkbook = (
     components.forEach((component) => { const total = components.filter((item) => item.enabled && item.packageName === component.packageName).reduce((sum, item) => sum + item.baseAmount, 0); componentSheet.addRow([component.packageName, component.facilityName, component.baseAmount, total ? component.baseAmount / total : 0, component.startDate || "", component.endDate || "", component.enabled ? "사용" : "미사용"]); });
     setHeader(componentSheet, 1, 1, 7); styleTable(componentSheet, 2, Math.max(2, components.length + 1), 1, 7); [28, 22, 18, 14, 15, 15, 12].forEach((width, index) => { componentSheet.getColumn(index + 1).width = width; }); componentSheet.getColumn(3).numFmt = moneyFormat; componentSheet.getColumn(4).numFmt = "0.000000%";
     components.forEach((component, index) => colorProductCells(componentSheet, index + 2, [1, 2], component.packageName, true));
+    const categorySheet = workbook.addWorksheet("설정_대분류");
+    categorySheet.addRow(["표시 순서", "대분류", "포함 X열 표준 상품명"]);
+    [...majorCategories].sort((a, b) => a.displayOrder - b.displayOrder).forEach((category) => categorySheet.addRow([category.displayOrder, category.name, category.productNames.join(", ")]));
+    setHeader(categorySheet, 1, 1, 3); styleTable(categorySheet, 2, Math.max(2, majorCategories.length + 1), 1, 3); [12, 22, 72].forEach((width, index) => { categorySheet.getColumn(index + 1).width = width; });
+    majorCategories.forEach((category, index) => colorProductCells(categorySheet, index + 2, [2, 3], category.name, true));
   }
 };

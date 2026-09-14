@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateAllocationDisplayTotals, groupProductNames, isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
+import { calculateAllocationDisplayTotals, groupProductNames, groupProductSummariesByMajorCategory, isNicepayTargetMid, processVatSettlement, summarizeStandardProducts } from "./nicepayVatEngine.ts";
 
 const facilities = [
   { id: "room", name: "객실료", excelColumn: "AE", displayOrder: 1, enabled: true },
@@ -103,4 +103,18 @@ test("display-only water and ski rental totals do not change the allocation tota
   assert.equal(displayTotals.waterTotal, 600);
   assert.equal(displayTotals.skiRentalTotal, 105);
   assert.equal(Object.values(facilityTotals).reduce((sum, value) => sum + value, 0), 1605);
+});
+
+test("selected standard products form one major category while unselected products remain standalone", () => {
+  const items = [
+    { keywords: "워터", standardProductName: "워터플래닛입장권", transactionCount: 1, transactionAmount: 100, paymentFee: 10, vat: 1, feeTotal: 11, settlementAmount: 89 },
+    { keywords: "코인", standardProductName: "웰팍코인", transactionCount: 1, transactionAmount: 200, paymentFee: 20, vat: 2, feeTotal: 22, settlementAmount: 178 },
+    { keywords: "객실", standardProductName: "룸온리", transactionCount: 1, transactionAmount: 300, paymentFee: 30, vat: 3, feeTotal: 33, settlementAmount: 267 },
+  ];
+  const groups = groupProductSummariesByMajorCategory(items, [{ id: "water", name: "워터파크", productNames: ["워터플래닛입장권", "웰팍코인"], displayOrder: 1 }]);
+  assert.equal(groups[0].name, "워터파크");
+  assert.equal(groups[0].items.length, 2);
+  assert.equal(groups[0].transactionAmount, 300);
+  assert.equal(groups[1].kind, "single");
+  assert.equal(groups[1].items[0].standardProductName, "룸온리");
 });
