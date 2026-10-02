@@ -102,6 +102,22 @@
 .nicepay-month-field input { border: 1px solid #d5dfeb; border-radius: 9px; padding: 10px; background: #fff; }
 .nicepay-month-field small { color: #78869c; }
 .nicepay-upload-grid.deposit-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.nicepay-calendar-capture-card { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.nicepay-calendar-capture-card .nicepay-upload-box { margin: 0; }
+.nicepay-calendar-capture-card > img { width: 100%; max-height: 130px; object-fit: contain; border: 1px solid #dbe5f3; border-radius: 8px; background: #fff; }
+.nicepay-capture-button { padding: 10px 12px; border: 1px solid #93c5fd; border-radius: 10px; background: #eff6ff; color: #1d4ed8; font-weight: 800; }
+.nicepay-capture-overlay { position: fixed; z-index: 1100; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(7, 22, 48, .72); }
+.nicepay-capture-modal { width: min(100%, 1050px); max-height: 94vh; overflow: auto; padding: 24px; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px #0004; }
+.nicepay-capture-modal h2 { margin: 0 0 12px; }
+.nicepay-capture-modal p { line-height: 1.6; color: #475569; }
+.nicepay-capture-modal ol { padding-left: 22px; line-height: 1.9; }
+.nicepay-capture-preview { position: relative; width: fit-content; max-width: 100%; max-height: 65vh; margin: 0 auto; overflow: hidden; touch-action: none; cursor: crosshair; border: 1px solid #94a3b8; background: #e2e8f0; }
+.nicepay-capture-preview img { display: block; width: auto; max-width: 100%; height: auto; max-height: 65vh; pointer-events: none; user-select: none; }
+.nicepay-capture-selection { position: absolute; box-sizing: border-box; border: 3px solid #2563eb; background: rgba(37, 99, 235, .13); box-shadow: 0 0 0 9999px rgba(2, 6, 23, .28); pointer-events: none; }
+.nicepay-capture-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.nicepay-capture-actions button { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; font-weight: 800; }
+.nicepay-capture-actions button.primary { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
+.nicepay-capture-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .nicepay-amount-input { width: 112px; border: 1px solid #d5dfeb; border-radius: 8px; padding: 7px; text-align: right; }
 .nicepay-stepper > button {
   display: flex;
