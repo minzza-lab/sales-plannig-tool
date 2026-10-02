@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import "./NicepaySettlement.css";
 import { NICEPAY_DEFAULT_MAPPINGS } from "./nicepayDefaultMappings";
-import { parseNicepayCalendarText } from "./nicepayCalendarText";
+import { findDuplicateCalendarMids, parseNicepayCalendarText } from "./nicepayCalendarText";
 import {
   buildSettlementPrintHtml,
   buildSettlementWorkbook,
@@ -1166,6 +1166,9 @@ const NicepaySettlement: React.FC = () => {
       const extracted = normalizeCalendarAmounts(parsed, depositMonth);
       if ((["1m", "4m", "5m"] as CalendarMid[]).some((mid) => Object.keys(extracted[mid]).length === 0))
         throw new Error("정산달력 중 날짜별 금액이 없는 자료가 있습니다. 이미지 또는 텍스트를 확인해 주세요.");
+      const duplicateMids = findDuplicateCalendarMids(extracted);
+      if (duplicateMids.length)
+        throw new Error(`${duplicateMids.map((mids) => mids.join("·")).join(", ")} 달력의 날짜별 금액이 모두 같습니다. 각 MID의 달력 텍스트 또는 이미지를 다시 확인해 주세요. 분류를 중단했습니다.`);
       setDepositProgress((previous) => ({
         ...previous,
         phase: "matching",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseNicepayCalendarText } from "./nicepayCalendarText.ts";
+import { findDuplicateCalendarMids, parseNicepayCalendarText } from "./nicepayCalendarText.ts";
 
 const september = `2026.09
 일\t월\t화\t수\t목\t금\t토
@@ -70,4 +70,11 @@ test("pasted calendar text keeps dates, skips empty days and holidays", () => {
 test("wrong month and partial calendar are rejected", () => {
   assert.throws(() => parseNicepayCalendarText(september, "2026-08"), /일치/);
   assert.throws(() => parseNicepayCalendarText(september.replace("30\n25,012,438", ""), "2026-09"), /빠졌습니다/);
+});
+
+test("identical MID calendars are detected before bank matching", () => {
+  const one = { "2026-09-01": 2_649_813, "2026-09-02": 2_495_566 };
+  const four = { "2026-09-01": 5_306_639, "2026-09-02": 4_105_838 };
+  assert.deepEqual(findDuplicateCalendarMids({ "1m": one, "4m": one, "5m": one }), [["1m", "4m", "5m"]]);
+  assert.deepEqual(findDuplicateCalendarMids({ "1m": one, "4m": four, "5m": {} }), []);
 });

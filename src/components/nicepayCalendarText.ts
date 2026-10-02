@@ -4,6 +4,18 @@ export type ParsedCalendarText = {
   total: number;
 };
 
+export function findDuplicateCalendarMids(
+  calendars: Record<string, Record<string, number>>,
+): string[][] {
+  const groups = new Map<string, string[]>();
+  Object.entries(calendars).forEach(([mid, amounts]) => {
+    const signature = JSON.stringify(Object.entries(amounts).sort(([a], [b]) => a.localeCompare(b)));
+    if (signature === "[]") return;
+    groups.set(signature, [...(groups.get(signature) || []), mid]);
+  });
+  return Array.from(groups.values()).filter((mids) => mids.length > 1);
+}
+
 export function parseNicepayCalendarText(source: string, selectedMonth: string): ParsedCalendarText {
   const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const header = lines.find((line) => /^20\d{2}[./-]\s*\d{1,2}$/.test(line));
