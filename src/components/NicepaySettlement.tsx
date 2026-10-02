@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import "./NicepaySettlement.css";
 import { NICEPAY_DEFAULT_MAPPINGS } from "./nicepayDefaultMappings";
+import { parseNicepayCalendarText } from "./nicepayCalendarText";
 import {
   buildSettlementPrintHtml,
   buildSettlementWorkbook,
@@ -138,6 +139,8 @@ const parseMoney = (value: unknown) => {
 const prepareCalendarImage = async (file: File) => {
   const image = await createImageBitmap(file);
   try {
+    if (image.width < 1300)
+      throw new Error(`${file.name}: 캡처 가로 폭이 ${image.width}px입니다. 작은 화면에서는 날짜가 하루씩 밀려 인식될 수 있습니다. 나이스페이 달력을 넓게 펼쳐 1300px 이상으로 다시 캡처해 주세요.`);
     // 정산달력 캡처의 위쪽 검색 메뉴와 아래쪽 안내문을 제외하고 숫자를 확대한다.
     const calendarLayout = !file.name.includes("_영역캡처") && image.width >= 700 && image.width / image.height > 1.35 && image.width / image.height < 2.1;
     const top = calendarLayout ? Math.floor(image.height * 0.27) : 0;
@@ -777,13 +780,17 @@ const UploadBox = ({
   </label>
 );
 
-const CalendarImageBox = ({ mid, file, onFile, onCapture }: {
+const CalendarImageBox = ({ mid, month, file, textValue, onTextChange, onFile, onCapture }: {
   mid: CalendarMid;
+  month: string;
   file?: File;
+  textValue: string;
+  onTextChange: (value: string) => void;
   onFile: (file: File) => void;
   onCapture: () => void;
 }) => {
   const [previewUrl, setPreviewUrl] = useState("");
+  const [imageWidth, setImageWidth] = useState(0);
   useEffect(() => {
     if (!file) return;
     const reader = new FileReader();
@@ -791,10 +798,26 @@ const CalendarImageBox = ({ mid, file, onFile, onCapture }: {
     reader.readAsDataURL(file);
     return () => reader.abort();
   }, [file]);
+  let textSummary = "";
+  let parsedText: ReturnType<typeof parseNicepayCalendarText> | null = null;
+  if (textValue.trim()) {
+    try {
+      parsedText = parseNicepayCalendarText(textValue, month);
+      textSummary = `${parsedText.amountCount}일 · ${parsedText.total.toLocaleString("ko-KR")}원 확인 · 텍스트 우선 사용`;
+    } catch (error) {
+      textSummary = error instanceof Error ? error.message : "텍스트를 확인해 주세요.";
+    }
+  }
   return <div className="nicepay-calendar-capture-card">
     <UploadBox title={`${mid} 정산달력`} description={`${mid} 날짜별 입금내역 이미지`} accept="image/png,image/jpeg,image/webp" file={file} onFile={onFile} />
     <button type="button" className="nicepay-capture-button" onClick={onCapture}>화면에서 바로 캡처</button>
-    {previewUrl && <img src={previewUrl} alt={`${mid} 정산달력 캡처 미리보기`} />}
+    {previewUrl && <img src={previewUrl} alt={`${mid} 정산달력 캡처 미리보기`} onLoad={(event) => setImageWidth(event.currentTarget.naturalWidth)} />}
+    {imageWidth > 0 && !textValue.trim() && <small className={imageWidth < 1300 ? "nicepay-capture-quality-warning" : "nicepay-capture-quality-pass"}>캡처 가로 폭 {imageWidth}px · {imageWidth < 1300 ? "1300px 이상으로 다시 캡처해 주세요" : "판독 가능한 크기"}</small>}
+    <label className="nicepay-calendar-text-label" htmlFor={`nicepay-calendar-text-${mid}`}>또는 {mid} 달력 텍스트 붙여넣기</label>
+    <small>나이스페이 정산달력의 월·날짜·금액을 전체 복사해 아래 칸에 붙여넣으면 자동 추출됩니다. 이미지를 함께 올렸다면 텍스트가 우선입니다.</small>
+    <textarea id={`nicepay-calendar-text-${mid}`} value={textValue} onChange={(event) => onTextChange(event.target.value)} placeholder={`2026.09\n1\n9,156,527\n2\n8,543,372\n...`} rows={5} />
+    {textSummary && <small className={textSummary.includes("확인 ·") ? "nicepay-capture-quality-pass" : "nicepay-capture-quality-warning"}>{textSummary}</small>}
+    {parsedText && <details className="nicepay-calendar-text-preview"><summary>추출된 날짜별 금액 확인</summary><div>{Object.entries(parsedText.amounts).map(([date, amount]) => <span key={date}>{Number(date.slice(8))}일 <b>{amount.toLocaleString("ko-KR")}원</b></span>)}</div></details>}
   </div>;
 };
 
@@ -807,6 +830,7 @@ const CalendarCapturePreview = ({ file, mid, onApply, onRetake, onCancel, busy }
   busy: boolean;
 }) => {
   const [previewUrl, setPreviewUrl] = useState("");
+  const [imageWidth, setImageWidth] = useState(0);
   const [area, setArea] = useState<CaptureArea>({ x: 0, y: 0.19, width: 1, height: 0.7 });
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
@@ -829,13 +853,14 @@ const CalendarCapturePreview = ({ file, mid, onApply, onRetake, onCancel, busy }
       const end = point(event);
       setArea({ x: Math.min(dragStart.current.x, end.x), y: Math.min(dragStart.current.y, end.y), width: Math.abs(end.x - dragStart.current.x), height: Math.abs(end.y - dragStart.current.y) });
     }} onPointerUp={() => { dragStart.current = null; }} onPointerCancel={() => { dragStart.current = null; }}>
-      {previewUrl && <img src={previewUrl} alt={`${mid} 화면 캡처`} draggable={false} />}
+      {previewUrl && <img src={previewUrl} alt={`${mid} 화면 캡처`} draggable={false} onLoad={(event) => setImageWidth(event.currentTarget.naturalWidth)} />}
       <div className="nicepay-capture-selection" style={{ left: `${area.x * 100}%`, top: `${area.y * 100}%`, width: `${area.width * 100}%`, height: `${area.height * 100}%` }} />
     </div>
+    {imageWidth > 0 && <p className={imageWidth * area.width < 1300 ? "nicepay-capture-quality-warning" : "nicepay-capture-quality-pass"}>선택한 영역의 가로 폭: {Math.round(imageWidth * area.width)}px · {imageWidth * area.width < 1300 ? "화면을 넓게 펼쳐 다시 캡처하거나 선택 영역을 넓혀 주세요" : "판독 가능한 크기"}</p>}
     <div className="nicepay-capture-actions">
       <button type="button" onClick={onCancel}>취소</button>
       <button type="button" onClick={onRetake} disabled={busy}>다시 캡처</button>
-      <button type="button" className="primary" onClick={() => onApply(area)} disabled={busy || area.width < 0.05 || area.height < 0.05}>{mid} 달력 사용</button>
+      <button type="button" className="primary" onClick={() => onApply(area)} disabled={busy || area.width < 0.05 || area.height < 0.05 || imageWidth * area.width < 1300}>{mid} 달력 사용</button>
     </div>
   </>;
 };
@@ -888,6 +913,7 @@ const NicepaySettlement: React.FC = () => {
   const [bankFile, setBankFile] = useState<File>();
   const [depositMonth, setDepositMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [calendarImages, setCalendarImages] = useState<Partial<Record<CalendarMid, File>>>({});
+  const [calendarTexts, setCalendarTexts] = useState<Partial<Record<CalendarMid, string>>>({});
   const [captureMid, setCaptureMid] = useState<CalendarMid | null>(null);
   const [captureDraft, setCaptureDraft] = useState<File | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -1005,6 +1031,12 @@ const NicepaySettlement: React.FC = () => {
     setDepositMatches({});
   };
 
+  const setCalendarText = (mid: CalendarMid, value: string) => {
+    setCalendarTexts((previous) => ({ ...previous, [mid]: value }));
+    setReconciliation([]);
+    setDepositMatches({});
+  };
+
   const startCalendarCapture = async (mid: CalendarMid) => {
     setIsCapturing(true);
     setMessage("");
@@ -1042,8 +1074,8 @@ const NicepaySettlement: React.FC = () => {
 
   const handleReconciliation = async () => {
     const requiredMids: CalendarMid[] = ["1m", "4m", "5m"];
-    if (!bankFile || requiredMids.some((mid) => !calendarImages[mid]))
-      return setMessage("빠른계좌조회 엑셀과 1m·4m·5m 정산달력 이미지 3장을 모두 선택해 주세요.");
+    if (!bankFile || requiredMids.some((mid) => !calendarTexts[mid]?.trim() && !calendarImages[mid]))
+      return setMessage("빠른계좌조회 엑셀과 1m·4m·5m 각각의 달력 이미지 또는 텍스트를 입력해 주세요.");
     setIsProcessing(true);
     setMessage("");
     setDepositProgress({
@@ -1059,17 +1091,22 @@ const NicepaySettlement: React.FC = () => {
       const { rows: bankRows, meta } = await readBankWorkbook(bankFile);
       setDepositProgress((previous) => ({
         ...previous,
-        description: `${bankRows.length.toLocaleString()}개 은행 거래를 읽었습니다. 정산달력 이미지를 준비합니다.`,
+        description: `${bankRows.length.toLocaleString()}개 은행 거래를 읽었습니다. 정산달력 자료를 준비합니다.`,
         progress: 22,
       }));
-      const imageParts = await Promise.all(requiredMids.map(async (mid) => ({ mid, image: await prepareCalendarImage(calendarImages[mid]!) })));
+      const imageMids = requiredMids.filter((mid) => !calendarTexts[mid]?.trim());
+      const imageParts = await Promise.all(imageMids.map(async (mid) => ({ mid, image: await prepareCalendarImage(calendarImages[mid]!) })));
       setDepositProgress((previous) => ({
         ...previous,
         phase: "scanning",
-        description: "1m · 4m · 5m 정산달력의 날짜별 확정 금액을 판독하고 있습니다.",
+        description: "1m · 4m · 5m 정산달력의 날짜별 금액을 확인하고 있습니다.",
         progress: 38,
       }));
       const parsed: Partial<Record<CalendarMid, Record<string, unknown>>> = {};
+      requiredMids.forEach((mid) => {
+        const pasted = calendarTexts[mid]?.trim();
+        if (pasted) parsed[mid] = parseNicepayCalendarText(pasted, depositMonth).amounts;
+      });
       for (const { mid, image } of imageParts) {
         const prompt = `${depositMonth}의 ${mid} 나이스페이 정산달력 이미지 한 장만 읽으세요. 각 날짜 칸의 오른쪽 아래 검정색 '입금 확정' 금액만 추출하세요. 초록색 예정 금액과 다른 숫자는 제외하세요. 읽을 수 없는 금액은 추측하지 말고 제외하세요. 금액이 명시되지 않은 날짜도 제외하세요. 응답은 날짜(YYYY-MM-DD)를 키, 쉼표 없는 원 단위 정수를 값으로 하는 JSON 객체만 반환하세요.`;
         const response = await callGeminiWithFallback([
@@ -1080,7 +1117,7 @@ const NicepaySettlement: React.FC = () => {
       }
       const extracted = normalizeCalendarAmounts(parsed, depositMonth);
       if ((["1m", "4m", "5m"] as CalendarMid[]).some((mid) => Object.keys(extracted[mid]).length === 0))
-        throw new Error("정산달력 중 날짜별 금액을 읽지 못한 이미지가 있습니다. 이미지 전체가 보이도록 다시 올려 주세요.");
+        throw new Error("정산달력 중 날짜별 금액이 없는 자료가 있습니다. 이미지 또는 텍스트를 확인해 주세요.");
       setDepositProgress((previous) => ({
         ...previous,
         phase: "matching",
@@ -1104,7 +1141,7 @@ const NicepaySettlement: React.FC = () => {
         currentSheet: result.reconciliation.length,
         totalSheets: result.reconciliation.length,
       }));
-      setMessage(`${depositMonth} 나이스정보통신 입금 ${result.niceRows.length.toLocaleString()}건을 ${result.reconciliation.length}개 날짜로 분리했습니다.${unmatched ? ` 금액 확인이 필요한 날짜가 ${unmatched}개 있습니다.` : " 이미지 금액이 모두 정확히 매칭됐습니다."}`);
+      setMessage(`${depositMonth} 나이스정보통신 입금 ${result.niceRows.length.toLocaleString()}건을 ${result.reconciliation.length}개 날짜로 분리했습니다.${unmatched ? ` 금액 확인이 필요한 날짜가 ${unmatched}개 있습니다.` : " 달력 금액이 모두 매칭됐습니다."}`);
       await pause(850);
     } catch (error) {
       setMessage(
@@ -1858,7 +1895,7 @@ const NicepaySettlement: React.FC = () => {
                 file={bankFile}
                 onFile={handleBankFileSelected}
               />
-              {(["1m", "4m", "5m"] as CalendarMid[]).map((mid) => <CalendarImageBox key={mid} mid={mid} file={calendarImages[mid]} onFile={(file) => setCalendarImage(mid, file)} onCapture={() => { setCaptureDraft(null); setCaptureMid(mid); }} />)}
+              {(["1m", "4m", "5m"] as CalendarMid[]).map((mid) => <CalendarImageBox key={mid} mid={mid} month={depositMonth} file={calendarImages[mid]} textValue={calendarTexts[mid] || ""} onTextChange={(value) => setCalendarText(mid, value)} onFile={(file) => setCalendarImage(mid, file)} onCapture={() => { setCaptureDraft(null); setCaptureMid(mid); }} />)}
             </div>
             <div className="nicepay-action-row">
               <button
@@ -2090,7 +2127,7 @@ const NicepaySettlement: React.FC = () => {
           <section className="nicepay-capture-modal">
             <h2>{captureMid} 정산달력 캡처</h2>
             {captureDraft ? <CalendarCapturePreview file={captureDraft} mid={captureMid} busy={isCapturing} onApply={(area) => void applyCalendarCapture(captureMid, area)} onRetake={() => { setCaptureDraft(null); void startCalendarCapture(captureMid); }} onCancel={() => { setCaptureMid(null); setCaptureDraft(null); }} /> : <>
-              <p>나이스페이에서 <b>{depositMonth} · {captureMid} 정산달력</b>을 먼저 열어 주세요. 아래 버튼을 누르면 브라우저의 공유 창이 열립니다.</p>
+              <p>나이스페이에서 <b>{depositMonth} · {captureMid} 정산달력</b>을 화면에 넓게 펼쳐 주세요. 달력 영역의 가로 폭이 1300px 이상이어야 날짜가 밀리는 오인식을 줄일 수 있습니다. 아래 버튼을 누르면 브라우저의 공유 창이 열립니다.</p>
               <ol><li>공유 대상에서 <b>나이스페이 정산달력 탭</b>을 선택합니다.</li><li>캡처 화면에서 달력 테두리를 확인하거나 드래그해 영역을 지정합니다.</li><li>‘{captureMid} 달력 사용’을 누르면 이미지가 바로 입력됩니다.</li></ol>
               <div className="nicepay-capture-actions">
                 <button type="button" onClick={() => setCaptureMid(null)}>취소</button>
