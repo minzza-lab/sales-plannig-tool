@@ -24,6 +24,7 @@ import { parseNicepayCalendarText } from "./nicepayCalendarText";
 import {
   buildSettlementPrintHtml,
   buildSettlementWorkbook,
+  normalizeSettlementCategory,
   type SettlementManualAdjustment,
 } from "./nicepaySettlementWorkbook";
 
@@ -114,7 +115,7 @@ type AllocatedRow = {
   validation: string;
 };
 
-const DEFAULT_MAPPINGS: MappingRule[] = NICEPAY_DEFAULT_MAPPINGS.map((rule) => ({ ...rule }));
+const DEFAULT_MAPPINGS: MappingRule[] = NICEPAY_DEFAULT_MAPPINGS.map((rule) => ({ ...rule, result: normalizeSettlementCategory(rule.result) }));
 
 const createItems = () =>
   Array.from({ length: 6 }, () => ({ target: "", price: 0 }));
@@ -251,7 +252,7 @@ const classifyProduct = (productName: string, mappings: MappingRule[]) => {
   const mapped =
     sorted.find((rule) => target.includes(rule.keyword.trim().toLowerCase()))
       ?.result;
-  if (mapped) return mapped;
+  if (mapped) return normalizeSettlementCategory(mapped);
   return /비씨|\bBC\b/i.test(productName) ? "패키지外" : "미분류";
 };
 
@@ -922,7 +923,7 @@ const NicepaySettlement: React.FC = () => {
       if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_MAPPINGS;
       const savedKeywords = new Set(stored.map((rule) => rule.keyword.trim().toLowerCase()));
       return [
-        ...stored,
+        ...stored.map((rule) => ({ ...rule, result: normalizeSettlementCategory(rule.result) })),
         ...DEFAULT_MAPPINGS.filter((rule) => !savedKeywords.has(rule.keyword.trim().toLowerCase())),
       ];
     } catch {
@@ -1260,7 +1261,7 @@ const NicepaySettlement: React.FC = () => {
   };
 
   const applyMappingResult = (keyword: string, result: string) => {
-    const normalizedResult = result.trim();
+    const normalizedResult = normalizeSettlementCategory(result.trim());
     if (!normalizedResult) return;
     setMappings((rules) => rules.map((rule) =>
       rule.keyword === keyword
@@ -1278,7 +1279,7 @@ const NicepaySettlement: React.FC = () => {
     (workbook) => {
       const mappingSheet = workbook.addWorksheet("매핑설정");
       mappingSheet.addRow(["keyword", "result"]);
-      mappings.forEach((rule) => mappingSheet.addRow([rule.keyword, rule.result]));
+      mappings.forEach((rule) => mappingSheet.addRow([rule.keyword, normalizeSettlementCategory(rule.result)]));
       styleWorksheet(mappingSheet, [48, 24]);
 
     },
@@ -1294,7 +1295,7 @@ const NicepaySettlement: React.FC = () => {
       if (mappingSheet) {
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(mappingSheet, { defval: "" });
         const importedMappings = rows
-          .map((row) => ({ keyword: String(row.keyword || "").trim(), result: String(row.result || "미분류").trim() || "미분류" }))
+          .map((row) => ({ keyword: String(row.keyword || "").trim(), result: normalizeSettlementCategory(String(row.result || "미분류").trim() || "미분류") }))
           .filter((rule) => rule.keyword);
         if (importedMappings.length > 0) setMappings(importedMappings);
       }
@@ -1537,7 +1538,7 @@ const NicepaySettlement: React.FC = () => {
   });
   const activeExportMappings = [
     ...visibleMappingEntries
-      .map(({ rule }) => rule)
+      .map(({ rule }) => ({ ...rule, result: normalizeSettlementCategory(rule.result) }))
       .filter((rule) => rule.result !== "미분류"),
     ...Array.from(exactProductMappings, ([keyword, result]) => ({ keyword, result })),
   ];

@@ -34,7 +34,9 @@ export type SettlementDepositControl = {
   depositAmount: number;
   adjustment?: SettlementManualAdjustment;
 };
-const FIXED_CATEGORIES = ["스마트예약", "워터시즌권", "패키지外"];
+export const normalizeSettlementCategory = (category: string) =>
+  category === "워터시즌권" || category === "스키시즌권" ? "시즌권" : category;
+const FIXED_CATEGORIES = ["스마트예약", "시즌권", "패키지外"];
 const HIDDEN_DETAIL_COLUMNS = ["D", "E", "F", "G", "H", "K", "L", "N", "P", "Q", "T", "U", "V", "W"];
 const DATE_TAB_COLORS = ["FFD5E8D4", "FFE1D5E7", "FFFCE4D6", "FFFFF2CC", "FFD9E1F2", "FFE2EFDA", "FFF8CECC"];
 
@@ -179,7 +181,7 @@ const addSummaryAndVoucher = (
   mergeAndSet(sheet, `B${depositHeader}:H${depositHeader}`, "구 분");
   mergeAndSet(sheet, `I${depositHeader}:J${depositHeader}`, "정산금액");
   const deposits = [
-    ["워터시즌권代", categoryRows[1].row, categoryRows[1].values.settlement],
+    ["시즌권", categoryRows[1].row, categoryRows[1].values.settlement],
     ["워터입장권代", categoryRows[0].row, categoryRows[0].values.settlement],
     ["패키지代外", categoryRows[2].row, categoryRows[2].values.settlement],
   ] as const;
@@ -219,7 +221,7 @@ const addSummaryAndVoucher = (
     [21130199, "미지급금", "보류해제", adjustment?.type === "보류해제" ? adjustmentDebit : 0, adjustment?.type === "보류해제" ? adjustmentCredit : 0],
     [21140107, "패키지", "패키지代外", 0, deposits[2][2]],
     [21140114, "워터파크", "워터파크입장권代外", 0, deposits[1][2]],
-    [21140106, "시즌권", "워터파크시즌패스代", 0, deposits[0][2]],
+    [21140106, "시즌권", "시즌권", 0, deposits[0][2]],
     [21159999, "기타", "국순당행사참가비", 0, 0],
     [21159999, "기타", "숲체원행사참가비", 0, 0],
   ];
@@ -270,7 +272,7 @@ export const buildSettlementWorkbook = (
   mappingSheet.getCell("D5").value = "최종 분류 결과";
   mappings.forEach((rule, index) => {
     mappingSheet.getCell(6 + index, 3).value = rule.keyword;
-    mappingSheet.getCell(6 + index, 4).value = rule.result;
+    mappingSheet.getCell(6 + index, 4).value = normalizeSettlementCategory(rule.result);
   });
   styleRange(mappingSheet, 5, Math.max(5, 5 + mappings.length), 3, 4);
   for (let row = 6; row <= 5 + mappings.length; row += 1) {
@@ -333,11 +335,12 @@ export const buildSettlementWorkbook = (
       const rowNumber = 4 + index;
       const productName = String(getValue(row, ["상품명"])).trim();
       const exactMappingRow = exactMappingRows.get(productName.toLowerCase());
+      const category = normalizeSettlementCategory(row.__category);
       excelRow.getCell(24).value = {
         formula: exactMappingRow
           ? `매핑데이터!$D$${exactMappingRow}`
           : `IFERROR(LOOKUP(2,1/(ISNUMBER(SEARCH(매핑데이터!$C$6:$C$${mappingEndRow},S${rowNumber}))*(매핑데이터!$C$6:$C$${mappingEndRow}<>"")),매핑데이터!$D$6:$D$${mappingEndRow}),"미분류")`,
-        result: row.__category,
+        result: category,
       };
       excelRow.getCell(25).value = { formula: `N${rowNumber}`, result: row.__settlement };
       excelRow.getCell(26).value = { formula: `J${rowNumber}+M${rowNumber}`, result: feeVat };
@@ -347,13 +350,13 @@ export const buildSettlementWorkbook = (
       [9, 10, 11, 12, 13, 14, 25, 26].forEach((column) => { excelRow.getCell(column).numFmt = MONEY_FORMAT; });
       [9, 10, 11, 12, 13, 14, 25, 26].forEach((column) => { excelRow.getCell(column).alignment = { vertical: "middle", horizontal: "right" }; });
       excelRow.getCell(19).alignment = { vertical: "middle", horizontal: "left" };
-      const value = totals[row.__category] || { count: 0, amount: 0, fee: 0, vat: 0, settlement: 0 };
+      const value = totals[category] || { count: 0, amount: 0, fee: 0, vat: 0, settlement: 0 };
       value.count += 1;
       value.amount += row.__amount;
       value.fee += row.__fee;
       value.vat += row.__vat;
       value.settlement += row.__settlement;
-      totals[row.__category] = value;
+      totals[category] = value;
     });
     const detailEndRow = Math.max(4, 3 + dateRows.length);
     if (dateRows.length === 0) {
@@ -367,8 +370,8 @@ export const buildSettlementWorkbook = (
       ref: `X4:X${detailEndRow}`,
       rules: [
         ["미분류", "FFFF0000", "FFFFFFFF"], ["패키지外", "FFE2EFDA", "FF333333"],
-        ["스마트예약", "FFD9E1F2", "FF333333"], ["워터시즌권", "FFFFF2CC", "FF333333"],
-        ["체험행사", "FFFCE4D6", "FF333333"], ["스키시즌권", "FFE1D5E7", "FF333333"],
+        ["스마트예약", "FFD9E1F2", "FF333333"], ["시즌권", "FFFFF2CC", "FF333333"],
+        ["체험행사", "FFFCE4D6", "FF333333"],
       ].map(([label, fill, font], index) => ({
         type: "cellIs" as const, operator: "equal" as const, priority: index + 1,
         formulae: [`"${label}"`],
@@ -403,18 +406,19 @@ export const buildSettlementPrintHtml = (
   const pages = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, dateRows]) => {
     const settlements = Object.fromEntries(FIXED_CATEGORIES.map((category) => [category, 0])) as Record<string, number>;
     dateRows.forEach((row) => {
-      if (row.__category in settlements) settlements[row.__category] += row.__settlement;
+      const category = normalizeSettlementCategory(row.__category);
+      if (category in settlements) settlements[category] += row.__settlement;
     });
-    const waterSeason = settlements["워터시즌권"];
+    const season = settlements["시즌권"];
     const waterAdmission = settlements["스마트예약"];
     const packageAmount = settlements["패키지外"];
-    const total = waterSeason + waterAdmission + packageAmount;
+    const total = season + waterAdmission + packageAmount;
     const cashDeposit = depositControls[date]?.depositAmount ?? total;
     const adjustment = depositControls[date]?.adjustment;
     const adjustmentDebit = adjustment?.side === "차변" ? adjustment.amount : 0;
     const adjustmentCredit = adjustment?.side === "대변" ? adjustment.amount : 0;
     const voucherRows: Array<[string, number]> = [
-      ["워터시즌권代", waterSeason], ["워터입장권代", waterAdmission], ["패키지代外", packageAmount], ["계", total],
+      ["시즌권", season], ["워터입장권代", waterAdmission], ["패키지代外", packageAmount], ["계", total],
     ];
     const ledgerRows: Array<[string, string, string, number, number]> = [
       ["11110311", "현금 및 현금등가물", "패키지代外", cashDeposit, 0],
@@ -422,7 +426,7 @@ export const buildSettlementPrintHtml = (
       ["21130199", "미지급금", "보류해제", adjustment?.type === "보류해제" ? adjustmentDebit : 0, adjustment?.type === "보류해제" ? adjustmentCredit : 0],
       ["21140107", "패키지", "패키지代外", 0, packageAmount],
       ["21140114", "워터파크", "워터파크입장권代外", 0, waterAdmission],
-      ["21140106", "시즌권", "워터파크시즌패스代", 0, waterSeason],
+      ["21140106", "시즌권", "시즌권", 0, season],
       ["21159999", "기타", "국순당행사참가비", 0, 0],
       ["21159999", "기타", "숲체원행사참가비", 0, 0],
     ];
