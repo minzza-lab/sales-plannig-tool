@@ -42,7 +42,8 @@ test("legacy ski and water season categories share the season pass subtotal", as
   assert.ok(!JSON.stringify(sheet.getCell(`R${seasonRow}`).value).includes("워터시즌권"));
 
   const printed = buildSettlementPrintHtml(rows);
-  assert.ok(printed.includes("시즌권"));
+  assert.ok(printed.includes("<td>시즌권</td><td>300</td>"));
+  assert.ok(printed.includes("<td>21140106</td><td>시즌권</td><td>시즌권</td><td>0</td><td>300</td>"));
   assert.ok(!printed.includes("워터시즌권"));
   assert.ok(!printed.includes("워터파크시즌패스"));
 });

@@ -784,18 +784,19 @@ const buildDepositPrintHtml = (
         <tr><th>계좌번호</th><td>${escapePrintHtml(bankMeta.accountNumber)}</td><th>예금종류</th><td>${escapePrintHtml(bankMeta.accountType)}</td><th>조회기간</th><td>${escapePrintHtml(bankMeta.period)}</td></tr>
         <tr><th>현재잔액</th><td>${Math.round(bankMeta.balance).toLocaleString("ko-KR")}</td><th>인출가능금액</th><td>${Math.round(bankMeta.availableBalance).toLocaleString("ko-KR")}</td><th>입금일</th><td>${escapePrintHtml(result.date)}</td></tr>
       </tbody></table>
-      <table class="bank-table"><thead><tr>${headers.map((header) => `<th>${escapePrintHtml(header)}</th>`).join("")}</tr></thead><tbody>
+      <p class="mid-summary">1m ${Math.round(result.mid1Amount).toLocaleString("ko-KR")}원 · 4m ${Math.round(result.mid4Amount).toLocaleString("ko-KR")}원 · 5m ${Math.round(result.mid5Amount).toLocaleString("ko-KR")}원</p>
+      <table class="bank-table"><thead><tr>${headers.map((header) => `<th>${escapePrintHtml(header)}</th>`).join("")}<th>MID 구분</th></tr></thead><tbody>
         ${rows.map((item) => `<tr>${headers.map((header, index) => {
           const raw = item.row[header];
           const display = typeof raw === "number" ? raw.toLocaleString("ko-KR") : raw;
           return `<td class="${index === 3 && item.matchedMid ? "matched" : ""}">${escapePrintHtml(display)}</td>`;
-        }).join("")}</tr>`).join("")}
-        <tr class="total"><td colspan="2"></td><td>합계</td><td>${Math.round(result.matchedAmount).toLocaleString("ko-KR")}</td><td colspan="4"></td></tr>
+        }).join("")}<td class="mid-label ${item.matchedMid ? "matched" : ""}">${item.matchedMid || "미확인"}</td></tr>`).join("")}
+        <tr class="total"><td colspan="2"></td><td>합계</td><td>${Math.round(result.matchedAmount).toLocaleString("ko-KR")}</td><td colspan="5"></td></tr>
       </tbody></table>
     </div></section>`;
   }).join("");
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>나이스페이 날짜별 입금내역</title><style>
-    @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}html,body{margin:0;color:#111;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}.deposit-print-page{height:281mm;overflow:hidden;break-after:page;page-break-after:always}.deposit-print-page:last-child{break-after:auto;page-break-after:auto}.page-content{zoom:var(--print-scale)}h1{margin:0 0 12px;text-align:center;font-size:16px}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}th,td{height:26px;padding:4px;border:1px solid #000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account-meta{margin-bottom:18px}.account-meta th,.bank-table th{background:#bfbfbf;text-align:center;font-weight:700}.account-meta td{text-align:center}.bank-table td:nth-child(4),.bank-table td:nth-child(5),.bank-table td:nth-child(6){text-align:right}.bank-table .matched,.bank-table .total td:nth-child(3),.bank-table .total td:nth-child(4){background:#ff0}.bank-table .total td:nth-child(3){text-align:center;font-weight:700}.bank-table .total td:nth-child(4){text-align:right;font-weight:700}@media screen{body{padding:20px;background:#e5e7eb}.deposit-print-page{width:210mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 4px 18px #0002}}@media print{.deposit-print-page{padding:0}}
+    @page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}html,body{margin:0;color:#111;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}.deposit-print-page{height:281mm;overflow:hidden;break-after:page;page-break-after:always}.deposit-print-page:last-child{break-after:auto;page-break-after:auto}.page-content{zoom:var(--print-scale)}h1{margin:0 0 12px;text-align:center;font-size:16px}.mid-summary{margin:0 0 9px;text-align:right;font-size:10px;font-weight:700}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px}th,td{height:26px;padding:4px;border:1px solid #000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account-meta{margin-bottom:12px}.account-meta th,.bank-table th{background:#bfbfbf;text-align:center;font-weight:700}.account-meta td{text-align:center}.bank-table td:nth-child(4),.bank-table td:nth-child(5),.bank-table td:nth-child(6){text-align:right}.bank-table th:last-child,.bank-table td.mid-label{width:10%;text-align:center;font-weight:700}.bank-table .matched,.bank-table .total td:nth-child(3),.bank-table .total td:nth-child(4){background:#ff0}.bank-table .total td:nth-child(3){text-align:center;font-weight:700}.bank-table .total td:nth-child(4){text-align:right;font-weight:700}@media screen{body{padding:20px;background:#e5e7eb}.deposit-print-page{width:210mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 4px 18px #0002}}@media print{.deposit-print-page{padding:0}}
   </style></head><body>${pages}<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),250));</script></body></html>`;
 };
 
@@ -1977,7 +1978,7 @@ const NicepaySettlement: React.FC = () => {
               <div className="nicepay-result-table">
                 <div className="nicepay-result-summary">
                   <span>
-                    생성 예정 시트 <b>{reconciliation.length + 2}개</b>
+                    생성 예정 시트 <b>{reconciliation.length + 3}개</b>
                   </span>
                   <span>
                     금액 매칭 <b>{reconciliation.reduce((sum, row) => sum + row.matchedCount, 0)} / {reconciliation.reduce((sum, row) => sum + row.expectedCount, 0)}건</b>
