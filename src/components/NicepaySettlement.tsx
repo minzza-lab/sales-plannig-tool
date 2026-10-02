@@ -530,6 +530,19 @@ const REFERENCE_BORDER = {
   right: { style: "thin" as const, color: { argb: "FF000000" } },
 };
 
+const setMidLabel = (
+  sheet: import("exceljs").Worksheet,
+  rowNumber: number,
+  mid?: CalendarMid,
+) => {
+  const cell = sheet.getRow(rowNumber).getCell(9);
+  cell.value = mid || "미확인";
+  cell.font = { name: "맑은 고딕", size: 11, bold: Boolean(mid), color: { argb: mid ? "FF1E3A8A" : "FFB45309" } };
+  cell.alignment = { horizontal: "center", vertical: "middle" };
+  cell.border = REFERENCE_BORDER;
+  if (mid) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDBEAFE" } };
+};
+
 const setupReferenceSheet = (
   sheet: import("exceljs").Worksheet,
   meta: BankMeta,
@@ -593,9 +606,10 @@ const addBankTable = (
   sheet.getRow(5).height = 50.1;
   const headerRow = sheet.getRow(6);
   headerRow.values = headers;
+  headerRow.getCell(9).value = "MID 구분";
   headerRow.height = 50.1;
   headerRow.eachCell({ includeEmpty: true }, (cell, column) => {
-    if (column > 8) return;
+    if (column > 9) return;
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFBFBF" } };
     cell.font = { name: "맑은 고딕", size: 11, bold: true };
     cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -619,6 +633,7 @@ const addBankTable = (
     [4, 5, 6].forEach((column) => {
       excelRow.getCell(column).numFmt = "#,##0";
     });
+    setMidLabel(sheet, rowNumber, item.matchedMid);
     if (highlightMatched && item.matchedMid) {
       excelRow.getCell(4).fill = {
         type: "pattern",
@@ -632,12 +647,12 @@ const addBankTable = (
   for (let rowNumber = 7 + rows.length; rowNumber < totalRowNumber; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
     row.height = 50.1;
-    for (let column = 1; column <= 8; column += 1)
+    for (let column = 1; column <= 9; column += 1)
       row.getCell(column).border = REFERENCE_BORDER;
   }
   const totalRow = sheet.getRow(totalRowNumber);
   totalRow.height = 50.1;
-  for (let column = 1; column <= 8; column += 1)
+  for (let column = 1; column <= 9; column += 1)
     totalRow.getCell(column).border = REFERENCE_BORDER;
   const matchedCells = rows
     .map((item, index) => (sumAll || item.matchedMid ? `D${7 + index}` : ""))
@@ -691,8 +706,9 @@ const addLedgerTable = (
 
   const headerRow = sheet.getRow(6);
   headerRow.values = headers;
+  headerRow.getCell(9).value = "MID 구분";
   headerRow.eachCell({ includeEmpty: true }, (cell, column) => {
-    if (column > 8) return;
+    if (column > 9) return;
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFBFBF" } };
     cell.font = { name: "맑은 고딕", size: 11, bold: true };
     cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -711,12 +727,42 @@ const addLedgerTable = (
       row.getCell(column).numFmt = "###,##0";
       row.getCell(column).alignment = { horizontal: "right", vertical: "middle" };
     });
+    setMidLabel(sheet, 7 + index, item.matchedMid);
   });
   sheet.pageSetup = {
     paperSize: 9,
     orientation: "portrait",
     margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
   };
+};
+
+const addMidSummarySheet = (
+  sheet: import("exceljs").Worksheet,
+  rows: ReconciliationRow[],
+) => {
+  sheet.addRow(["입금일", "1m 입금액", "4m 입금액", "5m 입금액", "1m+4m+5m", "은행 총입금", "기타 MID/차이", "검증"]);
+  rows.forEach((row) => {
+    sheet.addRow([row.date, row.mid1Amount, row.mid4Amount, row.mid5Amount, row.niceAmount, row.bankAmount, row.difference, row.status]);
+  });
+  const sum = (field: keyof ReconciliationRow) => rows.reduce((total, row) => total + Number(row[field]), 0);
+  const total = sheet.addRow(["합계", sum("mid1Amount"), sum("mid4Amount"), sum("mid5Amount"), sum("niceAmount"), sum("bankAmount"), sum("difference"), ""]);
+  styleWorksheet(sheet, [15, 17, 17, 17, 19, 19, 19, 16]);
+  for (let rowNumber = 2; rowNumber <= total.number; rowNumber += 1) {
+    for (let column = 2; column <= 7; column += 1) {
+      const cell = sheet.getRow(rowNumber).getCell(column);
+      cell.numFmt = "#,##0";
+      cell.alignment = { horizontal: "right", vertical: "middle" };
+    }
+  }
+  total.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FF1E3A8A" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+  });
+  rows.forEach((row, index) => {
+    if (row.status === "확인필요") sheet.getRow(index + 2).getCell(8).font = { bold: true, color: { argb: "FFB45309" } };
+  });
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 };
 
 const buildDepositPrintHtml = (
@@ -1350,7 +1396,7 @@ const NicepaySettlement: React.FC = () => {
 
   const exportReconciliation = async () => {
     setIsProcessing(true);
-    const totalSheets = reconciliation.length + 2;
+    const totalSheets = reconciliation.length + 3;
     setDepositProgress({
       open: true,
       title: "기존 양식으로 엑셀을 만들고 있습니다",
@@ -1371,11 +1417,13 @@ const NicepaySettlement: React.FC = () => {
         const baseSheet = workbook.addWorksheet("기준");
         setupReferenceSheet(baseSheet, bankMeta);
         addBankTable(baseSheet, [], bankHeaders, 0);
+        const midSummarySheet = workbook.addWorksheet("MID별 입금액");
+        addMidSummarySheet(midSummarySheet, reconciliation);
         setDepositProgress((previous) => ({
           ...previous,
-          description: "기준 시트를 완성했습니다. 날짜별 시트를 생성합니다.",
+          description: "기준 시트와 MID별 입금액 요약을 완성했습니다. 날짜별 시트를 생성합니다.",
           progress: 10,
-          currentSheet: 1,
+          currentSheet: 2,
         }));
         await pause(60);
 
@@ -1393,16 +1441,20 @@ const NicepaySettlement: React.FC = () => {
             ...previous,
             description: `${result.date} 시트에 입금 내역과 노란색 매칭을 적용했습니다.`,
             progress: 10 + Math.round(((index + 1) / totalSheets) * 72),
-            currentSheet: index + 2,
+            currentSheet: index + 3,
           }));
           await pause(24);
         }
 
         const ledgerSheet = workbook.addWorksheet(`${Number(depositMonth.slice(5))}월 원장`);
         setupReferenceSheet(ledgerSheet, bankMeta);
+        const matchedMidByRow = new Map<RawRow, CalendarMid>();
+        Object.values(depositMatches).flat().forEach((item) => {
+          if (item.matchedMid) matchedMidByRow.set(item.row, item.matchedMid);
+        });
         const ledgerRows = bankSource
           .filter(isNiceDeposit)
-          .map((row) => ({ row, date: getDepositDate(row), amount: getDepositAmount(row) }))
+          .map((row) => ({ row, date: getDepositDate(row), amount: getDepositAmount(row), matchedMid: matchedMidByRow.get(row) }))
           .filter((item) => item.date.startsWith(depositMonth) && item.amount > 0);
         addLedgerTable(ledgerSheet, ledgerRows, bankHeaders);
         setDepositProgress((previous) => ({
