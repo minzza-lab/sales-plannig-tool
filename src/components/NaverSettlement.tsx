@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download, FileSpreadsheet, Printer, UploadCloud } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -8,6 +8,7 @@ type BankRow = Record<string, unknown>
 type BankMeta = { title: string; accountNumber: string; accountType: string; balance: number; availableBalance: number; period: string }
 type ParsedBank = { rows: BankRow[]; headers: string[]; meta: BankMeta }
 type DailyTotal = { date: string; amount: number; count: number }
+type SettlementGroup = { date: string; rows: BankRow[] }
 
 const headerKey = (value: unknown) => String(value ?? '').replace(/[\s\r\n]/g, '').toLowerCase()
 const getCell = (row: BankRow, names: string[]) => {
@@ -36,6 +37,18 @@ const dateValue = (value: unknown) => {
   }
   const match = String(value ?? '').trim().match(/(20\d{2})[^0-9]?(1[0-2]|0?[1-9])[^0-9]?([12]\d|3[01]|0?[1-9])(?!\d)/)
   return match ? `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}` : ''
+}
+const parseSettlementFile = async (file: File) => {
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  if (!sheet) throw new Error('정산 원본 첫 번째 시트를 읽지 못했습니다.')
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+  const headerIndex = matrix.findIndex(row => row.some(value => headerKey(value) === headerKey('정산예정일')))
+  if (headerIndex < 0) throw new Error('첫 번째 시트에서 정산예정일 열을 찾지 못했습니다.')
+  const headers = (matrix[headerIndex] ?? []).map((value,index) => String(value || `열${index+1}`).trim())
+  const rows = matrix.slice(headerIndex+1).filter(row => row.some(value => value !== '' && value != null)).map(row => Object.fromEntries(headers.map((header,index) => [header,row[index] ?? ''])))
+  if (!headers.includes('주문번호') || !headers.includes('상품명')) throw new Error('주문번호 또는 상품명 열이 없어 정산내역 파일 형식을 확인할 수 없습니다.')
+  return { headers, rows }
 }
 const parseBankFile = async (file: File): Promise<ParsedBank> => {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
@@ -86,6 +99,32 @@ const addNaverBankTable = (sheet: import('exceljs').Worksheet, rows: BankRow[], 
   const totalRow=sheet.getRow(totalRowNumber); totalRow.getCell(3).value='합계'; totalRow.getCell(4).value={formula:rows.length?`SUM(D7:D${6+rows.length})`:'0',result:total}; [3,4].forEach(column=>{const cell=totalRow.getCell(column);cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};cell.font={name:'맑은 고딕',size:11,bold:true};cell.alignment={horizontal:column===3?'center':'right',vertical:'middle'}});totalRow.getCell(4).numFmt='#,##0'
   sheet.pageSetup={paperSize:9,orientation:'portrait',scale:60,margins:{left:.7086614173,right:.7086614173,top:.7480314961,bottom:.7480314961,header:.3149606299,footer:.3149606299}}
 }
+const cloneTemplateSheet = (workbook: import('exceljs').Workbook, source: import('exceljs').Worksheet, name: string) => {
+  const target = workbook.addWorksheet(name)
+  target.properties = structuredClone(source.properties)
+  target.pageSetup = structuredClone(source.pageSetup)
+  target.views = structuredClone(source.views)
+  target.headerFooter = structuredClone(source.headerFooter)
+  target.state = source.state
+  target.columns = source.columns.map(column => ({ width: column.width, hidden: column.hidden, outlineLevel: column.outlineLevel, style: structuredClone(column.style || {}) }))
+  source.eachRow({ includeEmpty: true }, sourceRow => {
+    const row = target.getRow(sourceRow.number)
+    row.height = sourceRow.height
+    row.hidden = sourceRow.hidden
+    row.outlineLevel = sourceRow.outlineLevel
+    sourceRow.eachCell({ includeEmpty: true }, sourceCell => {
+      const cell = row.getCell(sourceCell.col)
+      cell.value = sourceCell.formula ? { formula: sourceCell.formula } : structuredClone(sourceCell.value)
+      cell.style = structuredClone(sourceCell.style)
+      if (sourceCell.dataValidation) cell.dataValidation = structuredClone(sourceCell.dataValidation)
+    })
+  })
+  return target
+}
+const normalizedNaverProduct = (row: BankRow, overrides: Record<string,string>) => {
+  const raw = String(getCell(row, ['상품명']) ?? '').trim()
+  return overrides[raw]?.trim() || raw
+}
 
 const sourceItems = [
   { icon: FileSpreadsheet, title: '네이버 정산내역', description: '정산 기간 한 달치 엑셀 원본' },
@@ -102,6 +141,11 @@ export default function NaverSettlement() {
   const [bankRows, setBankRows] = useState<BankRow[]>([])
   const [bankHeaders, setBankHeaders] = useState<string[]>([])
   const [bankMeta, setBankMeta] = useState<BankMeta>({ title: '예금계좌조회', accountNumber: '', accountType: '', balance: 0, availableBalance: 0, period: '' })
+  const [settlementFile, setSettlementFile] = useState<File>()
+  const [settlementRows, setSettlementRows] = useState<BankRow[]>([])
+  const [settlementMessage, setSettlementMessage] = useState('')
+  const [settlementBusy, setSettlementBusy] = useState(false)
+  const [settlementMappings, setSettlementMappings] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } })
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -118,6 +162,13 @@ export default function NaverSettlement() {
     return Array.from(totals.values()).sort((a, b) => a.date.localeCompare(b.date))
   }, [matchedRows])
   const totalAmount = dailyTotals.reduce((sum, row) => sum + row.amount, 0)
+  const settlementGroups = useMemo<SettlementGroup[]>(() => {
+    const groups = new Map<string, BankRow[]>()
+    settlementRows.forEach(row => { const date=dateValue(getCell(row,['정산예정일'])); if(date) groups.set(date,[...(groups.get(date)||[]),row]) })
+    return Array.from(groups.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([date,rows])=>({date,rows}))
+  },[settlementRows])
+  const settlementProductNames = useMemo(()=>Array.from(new Set(settlementRows.map(row=>String(getCell(row,['상품명'])||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'ko')), [settlementRows])
+  useEffect(()=>{try{localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(settlementMappings))}catch{/* browser storage can be disabled */}},[settlementMappings])
 
   const handleFile = async (file?: File) => {
     setBankFile(file); setBankRows([]); setBankHeaders([]); setMessage('')
@@ -162,6 +213,66 @@ export default function NaverSettlement() {
     printWindow.document.close()
   }
 
+  const handleSettlementFile = async (file?: File) => {
+    setSettlementFile(file); setSettlementRows([]); setSettlementMessage('')
+    if (!file) return
+    setSettlementBusy(true)
+    try {
+      const parsed=await parseSettlementFile(file)
+      const missingDate=parsed.rows.filter(row=>!dateValue(getCell(row,['정산예정일']))).length
+      setSettlementRows(parsed.rows)
+      const firstDate=parsed.rows.map(row=>dateValue(getCell(row,['정산예정일']))).find(Boolean)
+      if(firstDate)setMonth(firstDate.slice(0,7))
+      setSettlementMessage(`${parsed.rows.length.toLocaleString()}건을 읽었습니다. 정산예정일 ${new Set(parsed.rows.map(row=>dateValue(getCell(row,['정산예정일']))).filter(Boolean)).size}일 기준으로 시트를 만들 수 있습니다.${missingDate?` 날짜가 없는 ${missingDate}건은 별도 확인이 필요합니다.`:''}`)
+    } catch(error) { setSettlementMessage(error instanceof Error?error.message:'네이버 정산 엑셀을 읽지 못했습니다.') }
+    finally { setSettlementBusy(false) }
+  }
+
+  const updateSettlementMapping = (sourceName:string,targetName:string) => {
+    setSettlementMappings(previous=>{
+      const next={...previous}
+      if(targetName.trim()) next[sourceName]=targetName.trim(); else delete next[sourceName]
+      return next
+    })
+  }
+
+  const exportSettlementWorkbook = async () => {
+    if(!settlementRows.length)return
+    setSettlementBusy(true);setSettlementMessage('날짜별 시트를 만들고 있습니다…')
+    try {
+      const ExcelJS=await import('exceljs')
+      const response=await fetch('/templates/naver-daily-settlement-template.xlsx')
+      if(!response.ok)throw new Error('정산 양식 파일을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.')
+      const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await response.arrayBuffer())
+      workbook.creator='WELLIHILLI Sales Planning';workbook.created=new Date();workbook.calcProperties.fullCalcOnLoad=true
+      const template=workbook.getWorksheet('기준')
+      if(!template)throw new Error('기준 양식 시트를 찾지 못했습니다.')
+      const monthText=month?`${Number(month.slice(5))}`:String(new Date().getMonth()+1)
+      template.getCell('A1').value=`■네이버 세부 정산내역_${monthText}/`
+      const grouped=new Map<string,BankRow[]>()
+      settlementRows.forEach(row=>{const date=dateValue(getCell(row,['정산예정일']));if(date)grouped.set(date,[...(grouped.get(date)||[]),row])})
+      const missingDateRows=settlementRows.filter(row=>!dateValue(getCell(row,['정산예정일'])))
+      const createDailySheet=(name:string,dateTitle:string,rows:BankRow[])=>{
+        const sheet=cloneTemplateSheet(workbook,template,name)
+        sheet.getCell('A1').value=`■네이버 세부 정산내역_${dateTitle}`
+        rows.slice(0,100).forEach((item,index)=>{
+          const r=index+4
+          const values:unknown[]=[index+1,String(getCell(item,['주문번호'])??''),String(getCell(item,['상품주문번호'])??''),String(getCell(item,['구분'])??''),normalizedNaverProduct(item,settlementMappings),String(getCell(item,['구매자명'])??''),getCell(item,['정산기준일']),getCell(item,['정산예정일']),getCell(item,['정산완료일']),getCell(item,['세금신고기준일']),money(getCell(item,['정산기준금액(A)','정산기준금액'])),money(getCell(item,['Npay 수수료(B)','Npay 수수료'])),money(getCell(item,['매출연동 수수료(C)','매출연동 수수료'])),money(getCell(item,['무이자할부 수수료(D)','무이자할부 수수료'])),String(getCell(item,['정산상태'])??'')]
+          values.forEach((value,column)=>{sheet.getRow(r).getCell(column+1).value=value as import('exceljs').CellValue})
+        })
+      }
+      let outputSheetCount=0
+      const createSplitSheets=(baseName:string,title:string,rows:BankRow[])=>{for(let offset=0;offset<rows.length;offset+=100){const part=Math.floor(offset/100)+1;const suffix=part===1?'':` (${part})`;createDailySheet(`${baseName}${suffix}`,`${title}${suffix}`,rows.slice(offset,offset+100));outputSheetCount+=1}}
+      Array.from(grouped.entries()).sort(([a],[b])=>a.localeCompare(b)).forEach(([date,rows])=>{const day=Number(date.slice(8));createSplitSheets(`${Number(date.slice(5,7))}.${day}`,`${Number(date.slice(5,7))}/${day}`,rows)})
+      if(missingDateRows.length)createSplitSheets('날짜확인',`${monthText}/날짜확인`,missingDateRows)
+      const output=await workbook.xlsx.writeBuffer()
+      const monthSlug=month.replace('-','')||new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}).slice(0,7).replace('-','')
+      const {saveAs}=await import('file-saver');saveAs(new Blob([output]),`${monthSlug}_네이버_일일정산내역.xlsx`)
+      setSettlementMessage(`${grouped.size}개 날짜의 시트 ${outputSheetCount}개와 기준 시트를 만들었습니다.${missingDateRows.length?` 날짜 미확인 ${missingDateRows.length}건은 '날짜확인' 시트에 넣었습니다.`:''}`)
+    } catch(error) { setSettlementMessage(error instanceof Error?error.message:'정산내역 엑셀을 만들지 못했습니다.') }
+    finally { setSettlementBusy(false) }
+  }
+
   return <main className="naver-settlement">
     <header className="naver-settlement-hero"><span>NAVER SETTLEMENT</span><h1>네이버 정산</h1><p>은행 입금내역에서 적요가 Npay정산인 행을 자동으로 찾아 날짜별로 정리합니다. MID 구분이나 별도 기준 금액 입력은 필요하지 않습니다.</p></header>
     <nav className="naver-settlement-steps" aria-label="네이버 정산 단계">
@@ -179,6 +290,14 @@ export default function NaverSettlement() {
           <h3>날짜별 입금 합계</h3><div className="naver-verification-table-wrap"><table><thead><tr><th>입금일</th><th>Npay정산 입금액</th><th>입금건수</th></tr></thead><tbody>{dailyTotals.map(row => <tr key={row.date}><td>{row.date}</td><td>{won(row.amount)}</td><td>{row.count}건</td></tr>)}</tbody></table></div>
           <h3>Npay정산 입금 상세</h3><div className="naver-verification-table-wrap"><table><thead><tr><th>거래일</th><th>적요</th><th>입금액</th></tr></thead><tbody>{matchedRows.map((row, index) => <tr key={`${depositDate(row)}-${index}`}><td>{depositDate(row)}</td><td>{depositMemo(row)}</td><td>{won(depositAmount(row))}</td></tr>)}</tbody></table></div>
         </> : <p className="naver-verification-empty">{month} 은행 내역에 Npay정산 입금이 없습니다.</p>}
+      </div>}
+    </section> : step === 2 ? <section className="naver-settlement-card naver-step2-card"><div className="naver-verification-heading"><div><span>STEP 02 · DAILY SETTLEMENT</span><h2>정산예정일별 시트 분리</h2><p>네이버 PaySettleDetail 원본을 올리면 정산예정일을 기준으로 예시 양식의 날짜별 시트를 만듭니다.</p></div><FileSpreadsheet size={30}/></div>
+      <label className="naver-bank-upload naver-step2-upload"><UploadCloud size={21}/><span><b>네이버 정산내역 원본</b><small>{settlementBusy?'파일을 처리하고 있습니다…':settlementFile?.name||'PaySettleDetail 엑셀 파일을 선택하세요.'}</small></span><input type="file" accept=".xlsx,.xls,.csv" onChange={event=>void handleSettlementFile(event.target.files?.[0])}/></label>
+      {settlementMessage&&<p className="naver-verification-message" role="status">{settlementMessage}</p>}
+      {settlementRows.length>0&&<div className="naver-step2-results"><div className="naver-verification-summary"><span>원본 행 <b>{settlementRows.length.toLocaleString()}건</b></span><span>정산예정일 <b>{settlementGroups.length}일</b></span><span>상품명 종류 <b>{settlementProductNames.length}개</b></span></div>
+        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>예시 파일에서 수동으로 바꾸던 상품명을 여기서 지정하세요. 비워두면 원본 상품명을 그대로 사용하며, 변경명은 이 브라우저에 자동 저장되어 다음 작업에도 유지됩니다.</p></div><div className="naver-step2-mapping-list">{settlementProductNames.map(name=><label key={name}><span title={name}>{name}</span><b>→</b><input value={settlementMappings[name]||''} onChange={event=>updateSettlementMapping(name,event.target.value)} placeholder="원본명 그대로" aria-label={`${name}의 E열 변경명`}/></label>)}</div></div>
+        <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
+        <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button></div>
       </div>}
     </section> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
   </main>
