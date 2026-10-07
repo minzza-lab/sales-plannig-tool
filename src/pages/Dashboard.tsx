@@ -52,6 +52,7 @@ const categories: ToolCategory[] = [
       { id: 'room-state', title: '객실 투숙 현황', description: '날짜별 객실 구성과 단체 입·퇴실 일정을 확인합니다.', icon: '🏨', path: '/tools/room-state' },
       { id: 'sports-sales', title: '리조트 발권 현황', description: '일자별 스포츠 발권수와 업장별 매출을 확인합니다.', icon: '🎟️', path: '/tools/sports-sales' },
       { id: 'nicepay-settlement', title: '나이스페이 정산 자동화', description: '날짜별 품목 분류와 안분·수수료·부가세 엑셀을 처리합니다.', icon: '💳', path: '/tools/nicepay-settlement' },
+      { id: 'naver-settlement', title: '네이버 정산', description: '네이버 정산내역과 입금전표를 대조하는 작업을 준비합니다.', icon: '🟢', path: '/tools/naver-settlement' },
       { id: 'deposit-reconciliation', title: '입금 내역 검증', description: '회사 입금액과 나이스정보통신 정산액을 날짜별로 대조합니다.', icon: '🔐', path: '/tools/deposit-reconciliation' },
       { id: 'season-pass-tracker', title: '시즌권 주문 추적', description: '목표 대비 판매 실적과 권종별 주문을 관리합니다.', icon: '🎟️', path: '/tools/season-pass-tracker' },
       { id: 'package-sales', title: '패키지 판매 현황', description: '월별·일별 패키지 판매와 주문 상세를 조회합니다.', icon: '📦', path: '/tools/package-sales' },
