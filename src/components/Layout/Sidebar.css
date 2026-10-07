@@ -135,6 +135,34 @@
   padding-left: 8px;
 }
 
+.settlement-header {
+  width: calc(100% - 24px);
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+}
+.settlement-content { padding-left: 14px; }
+.settlement-provider { margin: 4px 12px 10px 0; }
+.settlement-provider-header {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #e2e8f0;
+  background: rgba(255,255,255,.07);
+  font-family: inherit;
+  font-size: .83rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.settlement-provider-header .chevron { font-size: .65rem; transition: transform .2s; }
+.settlement-provider-header .chevron.open { transform: rotate(180deg); }
+.settlement-steps { padding: 5px 0 0 10px; list-style: none; }
+.settlement-steps a { display: block; padding: 9px 11px; border-radius: 7px; font-size: .78rem; line-height: 1.35; }
+
 .sidebar-footer {
   padding: 15px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);

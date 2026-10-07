@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { callGeminiWithFallback } from "../utils/apiProxy";
 import {
@@ -914,8 +915,13 @@ const CalendarCapturePreview = ({ file, mid, onApply, onRetake, onCancel, busy }
 };
 
 const NicepaySettlement: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const configInputRef = useRef<HTMLInputElement>(null);
-  const [activeStep, setActiveStep] = useState<1 | 2>(1);
+  const activeStep: 1 | 2 = searchParams.get("step") === "2" ? 2 : 1;
+  const changeStep = (step: 1 | 2) => {
+    setSearchParams({ step: String(step) });
+    setMessage("");
+  };
   const [mappings, setMappings] = useState<MappingRule[]>(() => {
     try {
       const stored = JSON.parse(
@@ -1783,8 +1789,7 @@ const NicepaySettlement: React.FC = () => {
                 <button
                   className={activeStep === step.id ? "active" : ""}
                   onClick={() => {
-                    setActiveStep(step.id);
-                    setMessage("");
+                    changeStep(step.id);
                   }}
                 >
                   <Icon size={19} />
@@ -1971,7 +1976,7 @@ const NicepaySettlement: React.FC = () => {
                   <button onClick={printAllDepositSheets}>
                     <ReceiptText size={17} /> 전체 날짜 입금내역 인쇄
                   </button>
-                  <button onClick={() => { setActiveStep(2); setMessage(""); }}>
+                  <button onClick={() => changeStep(2)}>
                     STEP 2 정산내역 올리기 <ArrowRight size={17} />
                   </button>
                 </>

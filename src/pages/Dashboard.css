@@ -443,6 +443,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+.settlement-dashboard-group + .settlement-dashboard-group { margin-top: 20px; }
+.settlement-dashboard-group > h3 { margin: 0 0 10px; color: var(--text-primary); font-size: 14px; }
 
 .tool-card {
   display: grid;

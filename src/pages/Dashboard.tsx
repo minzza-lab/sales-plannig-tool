@@ -19,6 +19,7 @@ interface ToolCategory {
   title: string
   description: string
   tools: Tool[]
+  groups?: { id: string; title: string; tools: Tool[] }[]
 }
 
 type AnalysisItem = { name?: string; quantity?: number; amount?: number }
@@ -36,7 +37,6 @@ const categories: ToolCategory[] = [
       { id: 'knowledge-base', title: '공유 지식 베이스', description: '업무 노하우와 참고 자료를 팀원들과 축적합니다.', icon: '🤝', path: '/tools/knowledge-base' },
       { id: 'approvals', title: '품의서 보관함', description: '품의서를 보관하고 Gemini로 핵심 내용을 요약합니다.', icon: '📄', path: '/tools/approvals' },
       { id: 'product-proposals', title: '상품안 보관함', description: '상품안과 의견을 관리하고 AI 요약을 확인합니다.', icon: '💡', path: '/tools/product-proposals' },
-      { id: 'official-letter', title: '발송공문제작기', description: '회사 공식 양식을 유지한 발송 공문을 작성하고 엑셀로 내려받습니다.', icon: '📨', path: '/tools/official-letter' },
       { id: 'voc-assistant', title: 'VOC 어시스턴트', description: '고객 문의를 분석해 답변 초안을 빠르게 작성합니다.', icon: '🎧', path: '/tools/voc-assistant' },
     ],
   },
@@ -51,11 +51,27 @@ const categories: ToolCategory[] = [
       { id: 'water-operations-analysis', title: '워터 권종·대여 분석', description: '권종 구성·취소와 대여 상품 사용 현황을 분석합니다.', icon: '🛟', path: '/tools/water-operations-analysis' },
       { id: 'room-state', title: '객실 투숙 현황', description: '날짜별 객실 구성과 단체 입·퇴실 일정을 확인합니다.', icon: '🏨', path: '/tools/room-state' },
       { id: 'sports-sales', title: '리조트 발권 현황', description: '일자별 스포츠 발권수와 업장별 매출을 확인합니다.', icon: '🎟️', path: '/tools/sports-sales' },
-      { id: 'nicepay-settlement', title: '나이스페이 정산 자동화', description: '날짜별 품목 분류와 안분·수수료·부가세 엑셀을 처리합니다.', icon: '💳', path: '/tools/nicepay-settlement' },
-      { id: 'naver-settlement', title: '네이버 정산', description: '네이버 정산내역과 입금전표를 대조하는 작업을 준비합니다.', icon: '🟢', path: '/tools/naver-settlement' },
-      { id: 'deposit-reconciliation', title: '입금 내역 검증', description: '회사 입금액과 나이스정보통신 정산액을 날짜별로 대조합니다.', icon: '🔐', path: '/tools/deposit-reconciliation' },
       { id: 'season-pass-tracker', title: '시즌권 주문 추적', description: '목표 대비 판매 실적과 권종별 주문을 관리합니다.', icon: '🎟️', path: '/tools/season-pass-tracker' },
       { id: 'package-sales', title: '패키지 판매 현황', description: '월별·일별 패키지 판매와 주문 상세를 조회합니다.', icon: '📦', path: '/tools/package-sales' },
+    ],
+  },
+  {
+    id: 'settlement',
+    eyebrow: 'SETTLEMENT',
+    title: '정산관리',
+    description: '결제사별 정산 작업을 STEP 순서대로 진행합니다.',
+    tools: [],
+    groups: [
+      { id: 'nicepay', title: '💳 나이스페이', tools: [
+        { id: 'nicepay-step-1', title: 'STEP 1 · 입금 내역 검증', description: '입금액과 정산액을 날짜별로 대조합니다.', icon: '①', path: '/tools/nicepay-settlement?step=1' },
+        { id: 'nicepay-step-2', title: 'STEP 2 · 정산내역 시트 분리', description: '상품 매핑과 수수료 안분을 적용해 날짜별로 분리합니다.', icon: '②', path: '/tools/nicepay-settlement?step=2' },
+        { id: 'nicepay-step-3', title: 'STEP 3 · 부가세 정산', description: '부가세 정산과 전표 제출 자료를 만듭니다.', icon: '③', path: '/tools/nicepay-vat-settlement' },
+      ] },
+      { id: 'naver', title: '🟢 네이버', tools: [
+        { id: 'naver-step-1', title: 'STEP 1 · 입금 내역 검증', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '①', path: '/tools/naver-settlement?step=1' },
+        { id: 'naver-step-2', title: 'STEP 2 · 정산내역 시트 분리', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '②', path: '/tools/naver-settlement?step=2' },
+        { id: 'naver-step-3', title: 'STEP 3 · 부가세 정산', description: '준비 중 · 제출 양식 확인 후 연결합니다.', icon: '③', path: '/tools/naver-settlement?step=3' },
+      ] },
     ],
   },
   {
@@ -83,7 +99,7 @@ const categories: ToolCategory[] = [
   },
 ]
 
-const toolCount = categories.reduce((total, category) => total + category.tools.length, 0) + 1
+const toolCount = categories.reduce((total, category) => total + category.tools.length + (category.groups?.reduce((sum, group) => sum + group.tools.length, 0) || 0), 0) + 1
 
 type IntegratedSnapshot = {
   date: string
@@ -410,8 +426,17 @@ export default function Dashboard({ officeOnly = false }: { officeOnly?: boolean
                 <h2>{category.title}</h2>
                 <p>{category.description}</p>
               </div>
-              <em>{category.tools.length} tools</em>
+              <em>{category.tools.length + (category.groups?.reduce((sum, group) => sum + group.tools.length, 0) || 0)} tools</em>
             </div>
+            {category.groups?.map(group => <div className="settlement-dashboard-group" key={group.id}>
+              <h3>{group.title}</h3>
+              <div className="tool-grid">{group.tools.map(tool => <Link key={tool.id} to={tool.path} className="tool-card">
+                <div className="tool-icon">{tool.icon}</div>
+                <div className="tool-info"><h3>{tool.title}</h3><p>{tool.description}</p></div>
+                <span className="tool-arrow">→</span>
+              </Link>)}</div>
+            </div>)}
+            {category.tools.length > 0 &&
             <div className="tool-grid">
               {category.tools.map((tool) => (
                 <Link key={tool.id} to={tool.path} className="tool-card">
@@ -424,6 +449,7 @@ export default function Dashboard({ officeOnly = false }: { officeOnly?: boolean
                 </Link>
               ))}
             </div>
+            }
           </section>
         ))}
       </div>

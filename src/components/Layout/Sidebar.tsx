@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import './Sidebar.css';
 
@@ -12,8 +12,12 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAdmin }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     sales: true,
+    settlement: true,
+    nicepay: true,
+    naver: true,
     promo: true,
     util: true
   });
@@ -134,21 +138,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
                   </NavLink>
                 </li>
                 <li className="menu-highlight">
-                  <NavLink to="/tools/nicepay-settlement" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">💳</span> 나이스페이 정산
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/naver-settlement" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🟢</span> 네이버 정산
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/nicepay-vat-settlement" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🧾</span> 나이스페이 부가세 정산 · STEP 3
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
                   <NavLink to="/tools/season-pass-tracker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
                     <span className="icon">🎟️</span> 시즌권 주문 추적 관리
                   </NavLink>
@@ -162,6 +151,36 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
             )}
           </li>
           
+          <hr className="sidebar-divider" />
+          <li className="accordion-group">
+            <button type="button" className="accordion-header settlement-header" onClick={() => toggleGroup('settlement')} aria-expanded={openGroups.settlement}>
+              <span>🧾 정산관리</span>
+              <span className={`chevron ${openGroups.settlement ? 'open' : ''}`}>▼</span>
+            </button>
+            {openGroups.settlement && <ul className="accordion-content settlement-content">
+              {([
+                { id: 'nicepay', label: '💳 나이스페이', path: '/tools/nicepay-settlement', steps: [
+                  ['STEP 1 · 입금 내역 검증', '/tools/nicepay-settlement?step=1'],
+                  ['STEP 2 · 정산내역 시트 분리', '/tools/nicepay-settlement?step=2'],
+                  ['STEP 3 · 부가세 정산', '/tools/nicepay-vat-settlement'],
+                ] },
+                { id: 'naver', label: '🟢 네이버', path: '/tools/naver-settlement', steps: [
+                  ['STEP 1 · 입금 내역 검증 (준비 중)', '/tools/naver-settlement?step=1'],
+                  ['STEP 2 · 정산내역 시트 분리 (준비 중)', '/tools/naver-settlement?step=2'],
+                  ['STEP 3 · 부가세 정산 (준비 중)', '/tools/naver-settlement?step=3'],
+                ] },
+              ] as const).map(provider => <li key={provider.id} className="settlement-provider">
+                <button type="button" className="settlement-provider-header" onClick={() => toggleGroup(provider.id)} aria-expanded={openGroups[provider.id]}>
+                  <span>{provider.label}</span><span className={`chevron ${openGroups[provider.id] ? 'open' : ''}`}>▼</span>
+                </button>
+                {openGroups[provider.id] && <ul className="settlement-steps">
+                  {provider.steps.map(([label, path]) => <li key={path}>
+                    <NavLink to={path} className={location.pathname === path.split('?')[0] && (path.includes('?') ? (new URLSearchParams(location.search).get('step') || '1') === path.split('=')[1] : true) ? 'active' : ''} onClick={onClose}>{label}</NavLink>
+                  </li>)}
+                </ul>}
+              </li>)}
+            </ul>}
+          </li>
           <hr className="sidebar-divider" />
           
           <li className="accordion-group">

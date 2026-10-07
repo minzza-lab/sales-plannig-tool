@@ -3,6 +3,10 @@
 .naver-settlement-hero span{font-size:12px;font-weight:800;letter-spacing:.12em;color:#187344}
 .naver-settlement-hero h1{margin:10px 0;font-size:32px}
 .naver-settlement-hero p{max-width:690px;margin:0;color:#466078;line-height:1.6}
+.naver-settlement-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.naver-settlement-steps a{display:grid;gap:5px;padding:15px 18px;border:1px solid #dce7e2;border-radius:12px;background:#fff;color:#18304b;text-decoration:none}
+.naver-settlement-steps a.active{border-color:#21945a;background:#f0faf4;box-shadow:0 0 0 2px #d8f1e1}
+.naver-settlement-steps small{color:#278555;font-weight:800}
 .naver-settlement-card{margin-top:22px;padding:26px;border:1px solid #dce7e2;border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(30,70,50,.04)}
 .naver-settlement-card h2{margin:0 0 8px;font-size:20px}
 .naver-settlement-card p{margin:0 0 20px;color:#607488}
@@ -11,4 +15,4 @@
 .naver-settlement-source svg{flex:none;color:#1f8a56}
 .naver-settlement-source strong,.naver-settlement-source small{display:block}
 .naver-settlement-source small{margin-top:5px;color:#61758a;line-height:1.45}
-@media(max-width:720px){.naver-settlement{padding:18px 14px 40px}.naver-settlement-sources{grid-template-columns:1fr}.naver-settlement-hero{padding:24px}.naver-settlement-hero h1{font-size:27px}}
+@media(max-width:720px){.naver-settlement{padding:18px 14px 40px}.naver-settlement-sources,.naver-settlement-steps{grid-template-columns:1fr}.naver-settlement-hero{padding:24px}.naver-settlement-hero h1{font-size:27px}}
