@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Download, FileSpreadsheet, UploadCloud } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { buildNaverVatStep3Workbook, NAVER_VAT_CATEGORIES } from '../lib/naverVatStep3Workbook'
 
 type Row = Record<string, unknown>
 type ProductMap = Record<string, { product: string; voucher: string }>
 type FeeTotal = { date: string; category: string; supply: number; tax: number; total: number; count: number }
 type TaxInvoiceRow = { date: string; supplier: string; category: string; supply: number; tax: number; status: string }
-const CATEGORIES = ['콘도객실','히든힐스','리프트(히든힐스)','장비렌탈(히든힐스)','강습(히든힐스)','취소위약금','카바나','워터파크']
+const CATEGORIES = NAVER_VAT_CATEGORIES
 const norm = (value: unknown) => String(value ?? '').replace(/[\s\r\n]/g, '').toLowerCase()
 const money = (value: unknown) => typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^\d.-]/g, '')) || 0
 const get = (row: Row, aliases: string[]) => { for (const alias of aliases) { const key = Object.keys(row).find(item => norm(item) === norm(alias)) || Object.keys(row).find(item => norm(item).includes(norm(alias))); if (key && row[key] !== '' && row[key] != null) return row[key] } return '' }
@@ -77,7 +78,6 @@ const readCommissionFile = async (file: File) => {
   return { rows: month ? rows.filter(row=>!baseDate(row)||baseDate(row).startsWith(month)) : rows, month: month||'' }
 }
 const detailFeeRows = (rows: Row[]) => rows.filter(row => feeAmount(row) !== 0)
-const cellBorder = { top:{style:'thin' as const,color:{argb:'FFB7C5D0'}},bottom:{style:'thin' as const,color:{argb:'FFB7C5D0'}},left:{style:'thin' as const,color:{argb:'FFB7C5D0'}},right:{style:'thin' as const,color:{argb:'FFB7C5D0'}} }
 
 export default function NaverVatStep3() {
   const [file,setFile]=useState('');const [month,setMonth]=useState('');const [rows,setRows]=useState<Row[]>([])
@@ -105,14 +105,12 @@ export default function NaverVatStep3() {
   const update=(product:string,value:string)=>setMappings(current=>({...current,[product]:{product:current[product]?.product??product,voucher:value}}))
 
   const exportExcel=async()=>{
-    const ExcelJS=await import('exceljs');const {saveAs}=await import('file-saver');const book=new ExcelJS.Workbook();book.creator='WELLIHILLI Sales Planning';const categorySlots=[...CATEGORIES,...Array.from({length:8},()=> '')];const summary=book.addWorksheet(`${month.slice(5)}월 수수료`);summary.mergeCells(1,1,1,2+categorySlots.length*3+2);summary.getCell(1,1).value=`${month.replace('-','년 ')}월 온라인 상품 판매 수수료 내역_네이버`;summary.getCell(1,1).font={name:'맑은 고딕',size:14,bold:true};summary.getCell(1,1).alignment={horizontal:'center'};summary.getCell(2,1).value='(단위 : 원)';summary.getCell(2,1).alignment={horizontal:'right'};summary.getCell(3,1).value='구분';summary.mergeCells(3,1,4,1);
-    categorySlots.forEach((category,index)=>{const start=2+index*3;summary.mergeCells(3,start,3,start+2);summary.getCell(3,start).value=category||'';['공급가액','세액','소계'].forEach((label,i)=>summary.getCell(4,start+i).value=label)})
-    const totalCol=2+categorySlots.length*3;summary.mergeCells(3,totalCol,3,totalCol+2);summary.getCell(3,totalCol).value='총계';['공급가액','세액','소계'].forEach((label,i)=>summary.getCell(4,totalCol+i).value=label)
-    dates.forEach((date,dateIndex)=>{const r=5+dateIndex;summary.getCell(r,1).value=`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;categorySlots.forEach((category,index)=>{const item=category?totals.find(row=>row.date===date&&row.category===category):undefined;const start=2+index*3;summary.getCell(r,start).value=item?.supply??0;summary.getCell(r,start+1).value=item?.tax??0;summary.getCell(r,start+2).value=item?.total??0});const same=totals.filter(item=>item.date===date);summary.getCell(r,totalCol).value=same.reduce((s,item)=>s+item.supply,0);summary.getCell(r,totalCol+1).value=same.reduce((s,item)=>s+item.tax,0);summary.getCell(r,totalCol+2).value=same.reduce((s,item)=>s+item.total,0)})
-    const totalRow=5+dates.length;summary.getCell(totalRow,1).value='합 계';categorySlots.forEach((category,index)=>{const group=category?totals.filter(item=>item.category===category):[];const start=2+index*3;summary.getCell(totalRow,start).value=group.reduce((sum,item)=>sum+item.supply,0);summary.getCell(totalRow,start+1).value=group.reduce((sum,item)=>sum+item.tax,0);summary.getCell(totalRow,start+2).value=group.reduce((sum,item)=>sum+item.total,0)});summary.getCell(totalRow,totalCol).value=totals.reduce((sum,item)=>sum+item.supply,0);summary.getCell(totalRow,totalCol+1).value=totals.reduce((sum,item)=>sum+item.tax,0);summary.getCell(totalRow,totalCol+2).value=totals.reduce((sum,item)=>sum+item.total,0)
-    summary.columns.forEach((column,index)=>{column.width=index===0?12:14});summary.views=[{state:'frozen',xSplit:1,ySplit:4}];summary.eachRow(row=>row.eachCell(cell=>{cell.border=cellBorder;cell.alignment={vertical:'middle',horizontal:cell.address.replace(/[0-9]/g,'')==='A'?'center':'right'};if(Number(row.number)<=4){cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE8EEF5'}};cell.font={name:'맑은 고딕',bold:true}}}));for(let col=2;col<=totalCol+2;col++)summary.getColumn(col).numFmt='#,##0;[Red]-#,##0;"-"';summary.getRow(totalRow).font={name:'맑은 고딕',bold:true};
-    const byDate=new Map<string,Row[]>();feeRows.forEach(row=>{const date=baseDate(row);if(date.startsWith(month))byDate.set(date,[...(byDate.get(date)||[]),row])});for(const [date,items] of byDate){const sheet=book.addWorksheet(date.slice(5).replace('-','.'));sheet.addRow(['정산기준일',date]);sheet.addRow(['원본 상품명','주문번호','상품주문번호','Npay 수수료','매출연동 수수료','무이자할부 수수료','수수료 합계','월별표 구분']);items.forEach(row=>{const product=productFor(row);const parts=feeParts(row);const amount=(label:string)=>parts.find(part=>part.label===label)?.amount||0;sheet.addRow([product,get(row,['주문번호']),get(row,['상품주문번호']),amount('Npay 수수료(B)'),amount('매출연동 수수료(C)'),amount('무이자할부 수수료(D)'),Math.abs(feeAmount(row)),mappings[product]?.voucher||guessCategory(product)||'미분류'])});const detailEnd=sheet.rowCount;sheet.addRow([]);sheet.addRow(['월별표 구분 합계','','','','','','']);const dateTotals=totals.filter(item=>item.date===date);dateTotals.forEach(item=>sheet.addRow([item.category,'','','','','',item.total]));sheet.getRow(2).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF17365D'}};sheet.views=[{state:'frozen',ySplit:2}];sheet.columns.forEach((column,index)=>{column.width=[36,20,22,19,21,21,16,24][index]||14});for(let r=3;r<=detailEnd;r++)for(let c=4;c<=7;c++)sheet.getCell(r,c).numFmt='#,##0;[Red]-#,##0;"-"';for(let r=detailEnd+2;r<=sheet.rowCount;r++)sheet.getCell(r,7).numFmt='#,##0;[Red]-#,##0;"-"'}
-    const output=await book.xlsx.writeBuffer();saveAs(new Blob([new Uint8Array(output).buffer]),`${file.replace(/\.(xlsx|xls)$/i,'')}_최종수수료내역.xlsx`)
+    const {saveAs}=await import('file-saver')
+    const template=await fetch('/templates/naver-vat-step3-template.xlsx')
+    if(!template.ok)throw new Error('수수료 내역 양식 파일을 불러오지 못했습니다.')
+    const details=feeRows.filter(row=>baseDate(row).startsWith(month)).map(row=>{const product=productFor(row);const parts=feeParts(row);const amount=(label:string)=>parts.find(part=>part.label===label)?.amount||0;return{date:baseDate(row),product,order:get(row,['주문번호']),productOrder:get(row,['상품주문번호']),npayFee:amount('Npay 수수료(B)'),salesFee:amount('매출연동 수수료(C)'),installmentFee:amount('무이자할부 수수료(D)'),total:Math.abs(feeAmount(row)),category:mappings[product]?.voucher||guessCategory(product)||'미분류'}})
+    const result=await buildNaverVatStep3Workbook({template:await template.arrayBuffer(),month,dates,totals,details})
+    saveAs(new Blob([result.slice().buffer as ArrayBuffer]),file.replace(/\.(xlsx|xls)$/i,'')+'_최종수수료내역.xlsx')
   }
 
   return <section className="naver-settlement-card naver-vat-step3"><div className="naver-verification-heading"><div><span>STEP 03 · VAT & VOUCHER</span><h2>부가세 정산 · 월별 수수료 내역</h2><p>STEP 3에 올린 수수료 원본의 상품명을 분류하고, 같은 파일에 있는 수수료 금액을 정산기준일별로 집계해 월별 수수료 내역으로 출력합니다.</p></div><FileSpreadsheet size={30}/></div>
