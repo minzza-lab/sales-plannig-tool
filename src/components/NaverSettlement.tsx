@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Download, FileSpreadsheet, Printer, UploadCloud } from 'lucide-react'
+import { Check, Download, FileSpreadsheet, Printer, Save, UploadCloud } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import './NaverSettlement.css'
 
@@ -123,7 +123,69 @@ const cloneTemplateSheet = (workbook: import('exceljs').Workbook, source: import
 }
 const normalizedNaverProduct = (row: BankRow, overrides: Record<string,string>) => {
   const raw = String(getCell(row, ['상품명']) ?? '').trim()
-  return overrides[raw]?.trim() || raw
+  const type = String(getCell(row, ['구분']) ?? '').trim()
+  return overrides[JSON.stringify([type, raw])]?.trim() || overrides[raw]?.trim() || raw
+}
+const loadNaverMappings = (): Record<string,string> => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } }
+const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string, seen = new Set<string>()): string | number | Date => {
+  const cell = sheet.getCell(address)
+  if (!cell.formula) return cell.value instanceof Date || typeof cell.value === 'string' || typeof cell.value === 'number' ? cell.value : ''
+  if (seen.has(address)) return 0
+  seen.add(address)
+  let formula = cell.formula
+  if (formula.startsWith('SUMPRODUCT(')) {
+    const body = formula.slice('SUMPRODUCT('.length, formula.lastIndexOf(')'))
+    const itemPattern = /\(\$([A-Z]+)\$(\d+):\$\1\$(\d+)="([^"]+)"\)\*\(\$([A-Z]+)\$(\d+):\$\5\$(\d+)\)/g
+    let total = 0
+    for (const match of body.matchAll(itemPattern)) {
+      const [, criteriaColumn, start, end, criteria, amountColumn, amountStart, amountEnd] = match
+      const from = Math.max(Number(start), Number(amountStart)); const to = Math.min(Number(end), Number(amountEnd))
+      for (let row = from; row <= to; row++) if (String(worksheetCellValue(sheet, `${criteriaColumn}${row}`, new Set(seen))) === criteria) total += Number(worksheetCellValue(sheet, `${amountColumn}${row}`, new Set(seen))) || 0
+    }
+    return total
+  }
+  formula = formula.replace(/SUM\(\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)\)/g, (_whole, startColumn:string, startRow:string, endColumn:string, endRow:string) => {
+    let total = 0
+    for (let row = Number(startRow); row <= Number(endRow); row++) for (let col = startColumn.charCodeAt(0); col <= endColumn.charCodeAt(0); col++) total += Number(worksheetCellValue(sheet, `${String.fromCharCode(col)}${row}`, new Set(seen))) || 0
+    return String(total)
+  })
+  formula = formula.replace(/ABS\(\$?([A-Z]+)\$?(\d+)\)/g, (_whole, column:string, row:string) => String(Math.abs(Number(worksheetCellValue(sheet, `${column}${row}`, new Set(seen))) || 0)))
+  formula = formula.replace(/\$([A-Z]+)\$(\d+)/g, '$1$2').replace(/(\d+(?:\.\d+)?)%/g, '($1/100)')
+  formula = formula.replace(/\b([A-Z]{1,3}\d+)\b/g, reference => String(Number(worksheetCellValue(sheet, reference, new Set(seen))) || 0))
+  if (!/^[\d\s.+*/()\-]+$/.test(formula)) return 0
+  try { const result = Function(`"use strict";return (${formula})`)(); return Number.isFinite(result) ? result : 0 } catch { return 0 }
+}
+const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
+  const maxRow = 124; const maxColumn = 20
+  const columns = Array.from({length:maxColumn},(_,index)=>`<col style="width:${Math.max(4,sheet.getColumn(index+1).width||10)}ch">`).join('')
+  const rows:string[]=[]
+  for(let rowNumber=1;rowNumber<=maxRow;rowNumber++){
+    const row=sheet.getRow(rowNumber); if(row.hidden)continue
+    const cells:string[]=[]
+    for(let column=1;column<=maxColumn;column++){
+      const cell=row.getCell(column);const raw=worksheetCellValue(sheet,cell.address);let value:unknown=raw
+      if(raw instanceof Date)value=`${raw.getFullYear()}.${String(raw.getMonth()+1).padStart(2,'0')}.${String(raw.getDate()).padStart(2,'0')}`
+      else if(typeof raw==='number'){
+        if(cell.numFmt?.includes('%')){const decimals=(cell.numFmt.match(/\.([0#]+)/)?.[1].length)||0;value=`${(raw*100).toFixed(decimals)}%`}
+        else if(raw===0&&cell.numFmt?.includes(';'))value='-'
+        else if(cell.numFmt?.includes('#')||cell.numFmt?.includes('0'))value=Math.round(raw).toLocaleString('ko-KR')
+        else value=Number.isInteger(raw)?raw.toLocaleString('ko-KR'):raw.toFixed(2)
+      }
+      const style=cell.style;const css:string[]=['text-align:center','vertical-align:middle','overflow:hidden']
+      if(row.height)css.push(`height:${Math.max(12,row.height*.7)}px`)
+      if(style.font?.bold)css.push('font-weight:700');if(style.font?.italic)css.push('font-style:italic')
+      if(style.font?.size)css.push(`font-size:${Math.min(11,style.font.size)}px`)
+      if(style.font?.name)css.push(`font-family:${JSON.stringify(style.font.name)},Arial,sans-serif`)
+      const fontColor=style.font?.color?.argb;if(fontColor)css.push(`color:#${fontColor.slice(-6)}`)
+      if(style.fill?.type==='pattern'&&style.fill.pattern==='solid'&&style.fill.fgColor?.argb)css.push(`background:#${style.fill.fgColor.argb.slice(-6)}`)
+      const edge=(side:string)=>{const border=(style.border as Record<string,{style?:string;color?:{argb?:string}}>|undefined)?.[side];if(border?.style){const color=border.color?.argb?.slice(-6)||'000000';return `${border.style==='medium'?2:1}px solid #${color}`}return ''}
+      const borders=[`border-top:${edge('top')}`,`border-right:${edge('right')}`,`border-bottom:${edge('bottom')}`,`border-left:${edge('left')}`].filter(value=>!value.endsWith(':'))
+      css.push(...borders)
+      cells.push(`<td style="${css.join(';')}">${escapeHtml(value)}</td>`)
+    }
+    rows.push(`<tr>${cells.join('')}</tr>`)
+  }
+  return `<table><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>`
 }
 
 const sourceItems = [
@@ -145,7 +207,8 @@ export default function NaverSettlement() {
   const [settlementRows, setSettlementRows] = useState<BankRow[]>([])
   const [settlementMessage, setSettlementMessage] = useState('')
   const [settlementBusy, setSettlementBusy] = useState(false)
-  const [settlementMappings, setSettlementMappings] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } })
+  const [settlementMappings, setSettlementMappings] = useState<Record<string,string>>(loadNaverMappings)
+  const [savedSettlementMappings, setSavedSettlementMappings] = useState<Record<string,string>>(loadNaverMappings)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -167,8 +230,9 @@ export default function NaverSettlement() {
     settlementRows.forEach(row => { const date=dateValue(getCell(row,['정산예정일'])); if(date) groups.set(date,[...(groups.get(date)||[]),row]) })
     return Array.from(groups.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([date,rows])=>({date,rows}))
   },[settlementRows])
-  const settlementProductNames = useMemo(()=>Array.from(new Set(settlementRows.map(row=>String(getCell(row,['상품명'])??'').trim()))).sort((a,b)=>a.localeCompare(b,'ko')), [settlementRows])
-  useEffect(()=>{try{localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(settlementMappings))}catch{/* browser storage can be disabled */}},[settlementMappings])
+  const settlementMappingEntries = useMemo(()=>Array.from(new Map(settlementRows.map(row=>{const name=String(getCell(row,['상품명'])??'').trim();const type=String(getCell(row,['구분'])??'').trim();return [JSON.stringify([type,name]),{key:JSON.stringify([type,name]),type,name}] as const})).values()).sort((a,b)=>a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko')),[settlementRows])
+  const settlementProductNames = useMemo(()=>Array.from(new Set(settlementMappingEntries.map(entry=>entry.name))),[settlementMappingEntries])
+  const hasUnsavedMappings = JSON.stringify(settlementMappings) !== JSON.stringify(savedSettlementMappings)
 
   const handleFile = async (file?: File) => {
     setBankFile(file); setBankRows([]); setBankHeaders([]); setMessage('')
@@ -228,18 +292,29 @@ export default function NaverSettlement() {
     finally { setSettlementBusy(false) }
   }
 
-  const updateSettlementMapping = (sourceName:string,targetName:string) => {
+  const updateSettlementMapping = (type:string,sourceName:string,targetName:string) => {
+    const key=JSON.stringify([type,sourceName])
     setSettlementMappings(previous=>{
       const next={...previous}
-      if(targetName.trim()) next[sourceName]=targetName.trim(); else delete next[sourceName]
+      if(Object.prototype.hasOwnProperty.call(next,sourceName)){
+        const legacy=next[sourceName]
+        settlementMappingEntries.filter(entry=>entry.name===sourceName).forEach(entry=>{if(!Object.prototype.hasOwnProperty.call(next,entry.key))next[entry.key]=legacy})
+        delete next[sourceName]
+      }
+      if(targetName.trim()) next[key]=targetName.trim(); else delete next[key]
       return next
     })
   }
 
-  const exportSettlementWorkbook = async () => {
-    if(!settlementRows.length)return
-    setSettlementBusy(true);setSettlementMessage('날짜별 시트를 만들고 있습니다…')
+  const saveSettlementMappings = () => {
     try {
+      localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(settlementMappings))
+      setSavedSettlementMappings({...settlementMappings})
+      setSettlementMessage('상품명 변경 규칙을 저장했습니다. 다음 파일부터도 적용됩니다.')
+    } catch { setSettlementMessage('브라우저 저장에 실패했습니다. 저장 공간을 확인해 주세요.') }
+  }
+
+  const buildSettlementWorkbook = async () => {
       const ExcelJS=await import('exceljs')
       const response=await fetch('/templates/naver-daily-settlement-template.xlsx')
       if(!response.ok)throw new Error('정산 양식 파일을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.')
@@ -265,12 +340,57 @@ export default function NaverSettlement() {
       const createSplitSheets=(baseName:string,title:string,rows:BankRow[])=>{for(let offset=0;offset<rows.length;offset+=100){const part=Math.floor(offset/100)+1;const suffix=part===1?'':` (${part})`;createDailySheet(`${baseName}${suffix}`,`${title}${suffix}`,rows.slice(offset,offset+100));outputSheetCount+=1}}
       Array.from(grouped.entries()).sort(([a],[b])=>a.localeCompare(b)).forEach(([date,rows])=>{const day=Number(date.slice(8));createSplitSheets(`${Number(date.slice(5,7))}.${day}`,`${Number(date.slice(5,7))}/${day}`,rows)})
       if(missingDateRows.length)createSplitSheets('날짜확인',`${monthText}/날짜확인`,missingDateRows)
+      for(const sheet of workbook.worksheets){
+        sheet.eachRow({includeEmpty:true},row=>row.eachCell({includeEmpty:true},cell=>{cell.alignment={...cell.alignment,horizontal:'center',vertical:'middle'}}))
+      }
+      // Daily sheets keep the 100-row template capacity while hiding unused rows.
+      for(const sheet of workbook.worksheets){
+        if(sheet.name==='기준') continue
+        const m=sheet.name.match(/^(\d+\.\d+)/); if(!m) continue
+        const [monthPart,dayPart]=m[1].split('.').map(Number)
+        const date=Array.from(grouped.keys()).find(value=>Number(value.slice(5,7))===monthPart&&Number(value.slice(8))===dayPart)
+        const partMatch=sheet.name.match(/\((\d+)\)$/); const offset=(partMatch?Number(partMatch[1])-1:0)*100
+        if(!date){if(sheet.name.startsWith('날짜확인')){const count=Math.min(100,Math.max(0,missingDateRows.length-offset));for(let rowNumber=4;rowNumber<=103;rowNumber++)sheet.getRow(rowNumber).hidden=rowNumber>3+count}continue}
+        const rows=grouped.get(date)||[]
+        const count=Math.min(100,Math.max(0,rows.length-offset))
+        for(let rowNumber=4;rowNumber<=103;rowNumber++) sheet.getRow(rowNumber).hidden=rowNumber>3+count
+      }
+      return {workbook,grouped,missingDateRows,outputSheetCount}
+  }
+
+  const exportSettlementWorkbook = async () => {
+    if(!settlementRows.length)return
+    if(hasUnsavedMappings)return setSettlementMessage('먼저 상품명 변경 내용을 저장해 주세요.')
+    setSettlementBusy(true);setSettlementMessage('날짜별 시트를 만들고 있습니다…')
+    try {
+      const {workbook,grouped,missingDateRows,outputSheetCount}=await buildSettlementWorkbook()
       const output=await workbook.xlsx.writeBuffer()
       const monthSlug=month.replace('-','')||new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}).slice(0,7).replace('-','')
       const {saveAs}=await import('file-saver');saveAs(new Blob([output]),`${monthSlug}_네이버_일일정산내역.xlsx`)
       setSettlementMessage(`${grouped.size}개 날짜의 시트 ${outputSheetCount}개와 기준 시트를 만들었습니다.${missingDateRows.length?` 날짜 미확인 ${missingDateRows.length}건은 '날짜확인' 시트에 넣었습니다.`:''}`)
     } catch(error) { setSettlementMessage(error instanceof Error?error.message:'정산내역 엑셀을 만들지 못했습니다.') }
     finally { setSettlementBusy(false) }
+  }
+
+  const printSettlementWorkbook = async () => {
+    if(!settlementRows.length)return
+    if(hasUnsavedMappings)return setSettlementMessage('먼저 상품명 변경 내용을 저장해 주세요.')
+    setSettlementBusy(true);setSettlementMessage('인쇄할 날짜 시트를 준비하고 있습니다…')
+    try {
+      const {workbook,grouped}=await buildSettlementWorkbook()
+      const pages=workbook.worksheets.filter(sheet=>sheet.name!=='기준'&&Array.from(grouped.entries()).some(([date,rows])=>{
+        const monthPart=Number(date.slice(5,7)),dayPart=Number(date.slice(8))
+        const sheetMatch=sheet.name.match(/^(\d+)\.(\d+)(?: \((\d+)\))?$/)
+        if(!sheetMatch||Number(sheetMatch[1])!==monthPart||Number(sheetMatch[2])!==dayPart)return false
+        const offset=(sheetMatch[3]?Number(sheetMatch[3])-1:0)*100
+        return rows.slice(offset,offset+100).some(row=>{const product=normalizedNaverProduct(row,savedSettlementMappings);return product.includes('히든힐스')||product.includes('객실취소위약금')})
+      })).map(sheet=>`<section class="page"><h1>${escapeHtml(String(sheet.getCell('A1').value||sheet.name))}</h1>${printWorksheetHtml(sheet)}</section>`).join('')
+      if(!pages){setSettlementMessage('인쇄 대상 시트가 없습니다. 상품명에 히든힐스 또는 객실취소위약금이 포함된 날짜만 인쇄할 수 있습니다.');return}
+      const printWindow=window.open('','_blank','width=1200,height=850')
+      if(!printWindow){setSettlementMessage('인쇄 창이 차단되었습니다. 브라우저의 팝업을 허용해 주세요.');return}
+      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}h1{text-align:center;font-size:14px;margin:0 0 5mm}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:6.5px}td{padding:2px;white-space:nowrap;text-align:center}@media screen{body{padding:18px;background:#e5e7eb}.page{width:283mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 3px 16px #0002}}@media print{.page{padding:0}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
+      setSettlementMessage('선택된 날짜 시트의 인쇄 창을 열었습니다.')
+    } catch(error){setSettlementMessage(error instanceof Error?error.message:'인쇄 자료를 준비하지 못했습니다.')} finally{setSettlementBusy(false)}
   }
 
   return <main className="naver-settlement">
@@ -295,9 +415,9 @@ export default function NaverSettlement() {
       <label className="naver-bank-upload naver-step2-upload"><UploadCloud size={21}/><span><b>네이버 정산내역 원본</b><small>{settlementBusy?'파일을 처리하고 있습니다…':settlementFile?.name||'PaySettleDetail 엑셀 파일을 선택하세요.'}</small></span><input type="file" accept=".xlsx,.xls,.csv" onChange={event=>void handleSettlementFile(event.target.files?.[0])}/></label>
       {settlementMessage&&<p className="naver-verification-message" role="status">{settlementMessage}</p>}
       {settlementRows.length>0&&<div className="naver-step2-results"><div className="naver-verification-summary"><span>원본 행 <b>{settlementRows.length.toLocaleString()}건</b></span><span>정산예정일 <b>{settlementGroups.length}일</b></span><span>상품명 종류 <b>{settlementProductNames.length}개</b></span></div>
-        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>예시 파일에서 수동으로 바꾸던 상품명을 여기서 지정하세요. 비워두면 원본 상품명을 그대로 사용하며, 변경명은 이 브라우저에 자동 저장되어 다음 작업에도 유지됩니다. 원본 상품명이 빈 행도 별도로 지정할 수 있습니다.</p></div><div className="naver-step2-mapping-list">{settlementProductNames.map((name,index)=><label key={`${name || 'empty'}-${index}`}><span title={name||'원본 상품명 빈칸'}>{name||'〈빈 상품명〉'}</span><b>→</b><input value={settlementMappings[name]||''} onChange={event=>updateSettlementMapping(name,event.target.value)} placeholder={name?'원본명 그대로':'변경명 입력'} aria-label={`${name||'빈 상품명'}의 E열 변경명`}/></label>)}</div></div>
+        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>상품명 변경 규칙은 저장 버튼을 눌러야 다운로드와 인쇄에 반영됩니다. 저장된 규칙은 다음 작업에도 유지됩니다.</p></div><div className="naver-step2-mapping-list"><div className="naver-step2-mapping-header"><span>구분</span><span>원본 상품명</span><span></span><span>E열 상품명</span></div>{settlementMappingEntries.map(entry=><label key={entry.key}><small>{entry.type||'〈구분 없음〉'}</small><span title={entry.name||'원본 상품명 빈칸'}>{entry.name||'〈빈 상품명〉'}</span><b>→</b><input value={settlementMappings[entry.key]??settlementMappings[entry.name]??''} onChange={event=>updateSettlementMapping(entry.type,entry.name,event.target.value)} placeholder={entry.name?'원본명 그대로':'변경명 입력'} aria-label={`${entry.type||'구분 없음'} ${entry.name||'빈 상품명'}의 E열 변경명`}/></label>)}</div><div className="naver-step2-savebar"><span className={hasUnsavedMappings?'unsaved':'saved'}>{hasUnsavedMappings?'저장되지 않은 변경이 있습니다.':<><Check size={16}/> 저장 완료 · 다음 작업에도 적용됩니다.</>}</span><button type="button" onClick={saveSettlementMappings} disabled={!hasUnsavedMappings}><Save size={16}/>{hasUnsavedMappings?'변경 내용 저장':'저장됨'}</button></div></div>
         <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
-        <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button></div>
+        <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy||hasUnsavedMappings} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button><button type="button" disabled={settlementBusy||hasUnsavedMappings} onClick={()=>void printSettlementWorkbook()}><Printer size={16}/>인쇄</button></div>
       </div>}
     </section> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
   </main>
