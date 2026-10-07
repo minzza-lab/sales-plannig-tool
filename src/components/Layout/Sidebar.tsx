@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { settlementProviders, sidebarEntries, sidebarSections, useNavigationSettings, visibleEntries, type SidebarEntry } from '../../lib/navigationSettings';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -13,251 +14,51 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAdmin }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    sales: true,
-    settlement: true,
-    nicepay: true,
-    naver: true,
-    promo: true,
-    util: true
-  });
-
-  const toggleGroup = (group: string) => {
-    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
-  };
-
+  const settings = useNavigationSettings();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ sales: true, settlement: true, nicepay: true, naver: true, promo: true, util: true });
+  const toggleGroup = (group: string) => setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
-    if (!error) {
-      navigate('/login');
-    }
+    if (!error) navigate('/login');
   };
+  const renderEntry = (entry: SidebarEntry) => {
+    const [pathname, query] = entry.path.split('?');
+    const active = location.pathname === pathname && (!query || (new URLSearchParams(location.search).get('step') || '1') === new URLSearchParams(query).get('step'));
+    return <li key={entry.id} className={entry.section === 'sales' || entry.provider ? 'menu-highlight' : undefined}>
+      <NavLink to={entry.path} className={active ? 'active' : ''} onClick={onClose}>
+        {entry.icon && <span className="icon">{entry.icon}</span>}{settings[entry.id]?.title?.trim() || entry.title}
+      </NavLink>
+    </li>;
+  };
+  const sectionOrder = (id: string) => sidebarSections.findIndex(section => section.id === id);
+  const sections = sidebarSections.filter(section => settings[`section:${section.id}`]?.sidebarVisible !== false)
+    .sort((a, b) => (settings[`section:${a.id}`]?.sidebarOrder ?? sectionOrder(a.id)) - (settings[`section:${b.id}`]?.sidebarOrder ?? sectionOrder(b.id)));
 
-  return (
-    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-      <div className="sidebar-logo">
-        <div className="logo-header">
-          <h2>영업기획 도구</h2>
-          <button className="mobile-close-btn" onClick={onClose}>✕</button>
-        </div>
-      </div>
-      <nav className="sidebar-nav">
-        <ul>
-          <li>
-            <NavLink to="/" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🏠</span> 대시보드
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/app-access" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📲</span> 앱 설치 · 빠른 접속
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/virtual-office" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🏢</span> 가상 사무실
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/automation-request" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">⚡</span> 자동화 요청 게시판
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/knowledge-base" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🤝</span> 공유 지식 베이스
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/team-workspace" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🗓️</span> 공유 스케줄 · 업무 트래커
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/sales-schedule-performance" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📈</span> 판매 스케줄 · 실적 관리
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/approvals" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📄</span> 품의서 보관함
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/approval-cover-splitter" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">📄</span> 품의 갑지 분리기
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/product-proposals" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">💡</span> 상품안 보관함
-            </NavLink>
-          </li>
-          <li className="menu-highlight">
-            <NavLink to="/tools/proposal-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎁</span> AI 상품 구성안 생성기
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/tools/voc-assistant" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-              <span className="icon">🎧</span> 고객의 소리(VOC) 어시스턴트
-            </NavLink>
-          </li>
-          <hr className="sidebar-divider" />
-          
-          <li className="accordion-group">
-            <div className="accordion-header" onClick={() => toggleGroup('sales')}>
-              <span>📊 매출/운영 관리</span>
-              <span className={`chevron ${openGroups.sales ? 'open' : ''}`}>▼</span>
-            </div>
-            {openGroups.sales && (
-              <ul className="accordion-content">
-                <li className="menu-highlight">
-                  <NavLink to="/tools/water-operations" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">📍</span> 워터 운영 통합 현황
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/waterpark-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🌊</span> 워터파크 매출 관리
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/water-operations-analysis" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🛟</span> 워터 권종·대여 분석
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/room-state" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🏨</span> 객실 투숙 현황
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/sports-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎟️</span> 리조트 발권 현황
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/season-pass-tracker" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎟️</span> 시즌권 주문 추적 관리
-                  </NavLink>
-                </li>
-                <li className="menu-highlight">
-                  <NavLink to="/tools/package-sales" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">📦</span> 패키지 판매 현황
-                  </NavLink>
-                </li>
-              </ul>
-            )}
-          </li>
-          
-          <hr className="sidebar-divider" />
-          <li className="accordion-group">
-            <button type="button" className="accordion-header settlement-header" onClick={() => toggleGroup('settlement')} aria-expanded={openGroups.settlement}>
-              <span>🧾 정산관리</span>
-              <span className={`chevron ${openGroups.settlement ? 'open' : ''}`}>▼</span>
-            </button>
-            {openGroups.settlement && <ul className="accordion-content settlement-content">
-              {([
-                { id: 'nicepay', label: '💳 나이스페이', path: '/tools/nicepay-settlement', steps: [
-                  ['STEP 1 · 입금 내역 검증', '/tools/nicepay-settlement?step=1'],
-                  ['STEP 2 · 정산내역 시트 분리', '/tools/nicepay-settlement?step=2'],
-                  ['STEP 3 · 부가세 정산', '/tools/nicepay-vat-settlement'],
-                ] },
-                { id: 'naver', label: '🟢 네이버', path: '/tools/naver-settlement', steps: [
-                  ['STEP 1 · 입금 내역 검증 (준비 중)', '/tools/naver-settlement?step=1'],
-                  ['STEP 2 · 정산내역 시트 분리 (준비 중)', '/tools/naver-settlement?step=2'],
-                  ['STEP 3 · 부가세 정산 (준비 중)', '/tools/naver-settlement?step=3'],
-                ] },
-              ] as const).map(provider => <li key={provider.id} className="settlement-provider">
+  return (<aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+    <div className="sidebar-logo"><div className="logo-header"><h2>영업기획 도구</h2><button className="mobile-close-btn" onClick={onClose}>✕</button></div></div>
+    <nav className="sidebar-nav"><ul>
+      <li><NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} onClick={onClose}><span className="icon">🏠</span> 대시보드</NavLink></li>
+      {visibleEntries(sidebarEntries.filter(entry => entry.section === 'top'), settings).map(renderEntry)}
+      {sections.map(section => <React.Fragment key={section.id}>
+        <hr className="sidebar-divider" />
+        <li className="accordion-group">
+          <button type="button" className="accordion-header settlement-header" onClick={() => toggleGroup(section.id)} aria-expanded={openGroups[section.id]}>
+            <span>{section.icon} {settings[`section:${section.id}`]?.title?.trim() || section.title}</span>
+            <span className={`chevron ${openGroups[section.id] ? 'open' : ''}`}>▼</span>
+          </button>
+          {openGroups[section.id] && <ul className={`accordion-content ${section.id === 'settlement' ? 'settlement-content' : ''}`}>
+            {section.id === 'settlement' ? settlementProviders.filter(provider => settings[`provider:${provider.id}`]?.sidebarVisible !== false)
+              .sort((a, b) => (settings[`provider:${a.id}`]?.sidebarOrder ?? settlementProviders.indexOf(a)) - (settings[`provider:${b.id}`]?.sidebarOrder ?? settlementProviders.indexOf(b)))
+              .map(provider => <li key={provider.id} className="settlement-provider">
                 <button type="button" className="settlement-provider-header" onClick={() => toggleGroup(provider.id)} aria-expanded={openGroups[provider.id]}>
-                  <span>{provider.label}</span><span className={`chevron ${openGroups[provider.id] ? 'open' : ''}`}>▼</span>
+                  <span>{provider.icon} {settings[`provider:${provider.id}`]?.title?.trim() || provider.title}</span><span className={`chevron ${openGroups[provider.id] ? 'open' : ''}`}>▼</span>
                 </button>
-                {openGroups[provider.id] && <ul className="settlement-steps">
-                  {provider.steps.map(([label, path]) => <li key={path}>
-                    <NavLink to={path} className={location.pathname === path.split('?')[0] && (path.includes('?') ? (new URLSearchParams(location.search).get('step') || '1') === path.split('=')[1] : true) ? 'active' : ''} onClick={onClose}>{label}</NavLink>
-                  </li>)}
-                </ul>}
-              </li>)}
-            </ul>}
-          </li>
-          <hr className="sidebar-divider" />
-          
-          <li className="accordion-group">
-            <div className="accordion-header" onClick={() => toggleGroup('promo')}>
-              <span>📢 홍보/마케팅 파트</span>
-              <span className={`chevron ${openGroups.promo ? 'open' : ''}`}>▼</span>
-            </div>
-            {openGroups.promo && (
-              <ul className="accordion-content">
-                <li>
-                  <NavLink to="/tools/field-sketch" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">📸</span> 현장 스케치 생성기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/tts-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎙️</span> 안내방송용 TTS 생성기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/sms-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">💬</span> 문자 메시지 생성기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/thumbnail-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎨</span> 상품 썸네일 제작기
-                  </NavLink>
-                </li>
-              </ul>
-            )}
-          </li>
-          
-          <hr className="sidebar-divider" />
-          
-          <li className="accordion-group">
-            <div className="accordion-header" onClick={() => toggleGroup('util')}>
-              <span>🛠️ 유틸리티 모음</span>
-              <span className={`chevron ${openGroups.util ? 'open' : ''}`}>▼</span>
-            </div>
-            {openGroups.util && (
-              <ul className="accordion-content">
-                <li>
-                  <NavLink to="/tools/lunch-roulette" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎲</span> 점심 내기 룰렛
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/qr-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🔍</span> QR 코드 생성기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/qr-verifier" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">📷</span> 대체업장 조회 도구
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/url-shortener" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🔗</span> URL 단축기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/barcode-generator" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">📊</span> 바코드 생성기
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink to="/tools/coupon-status" className={({ isActive }) => (isActive ? 'active' : '')} onClick={onClose}>
-                    <span className="icon">🎫</span> 쿠폰/바코드 사용조회
-                  </NavLink>
-                </li>
-              </ul>
-            )}
-          </li>
-        </ul>
-      </nav>
+                {openGroups[provider.id] && <ul className="settlement-steps">{visibleEntries(sidebarEntries.filter(entry => entry.provider === provider.id), settings).map(renderEntry)}</ul>}
+              </li>) : visibleEntries(sidebarEntries.filter(entry => entry.section === section.id), settings).map(renderEntry)}
+          </ul>}
+        </li>
+      </React.Fragment>)}
+    </ul></nav>
       <div className="sidebar-footer">
         <button onClick={onOpenApiModal} className="api-settings-btn" style={{ width: '100%', marginBottom: '8px', padding: '10px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '8px', color: '#818cf8', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.2s' }}>
           <span className="icon">🔑</span> API 키 설정

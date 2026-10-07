@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import './AdminConsole.css'
 import { activitySections } from '../lib/activitySections'
+import NavigationEditor from './NavigationEditor'
 
 type AccessUser = { user_id: string; email: string; full_name: string | null; department: string | null; role: 'admin' | 'member'; status: 'pending' | 'approved' | 'suspended'; created_at: string; approved_at: string | null }
 type AuditRow = { id: number; target_user_id: string; previous_role: string; previous_status: string; next_role: string; next_status: string; created_at: string }
@@ -90,6 +91,7 @@ export default function AdminConsole() {
     <header><p>ADMINISTRATION</p><h1>관리자 페이지</h1><span>계정 승인, 최근 접속 기록과 팀원의 마지막 이용 구역을 확인합니다.</span></header>
     {error && <div className="admin-console__error" role="alert">{error}</div>}
     {message && <div className="admin-console__success" role="status">{message}</div>}
+    <NavigationEditor />
     <div className="admin-console__summary"><b>전체 {users.length}명</b><span>승인 대기 {users.filter((user) => user.status === 'pending').length}명</span><span>사용 중 {users.filter((user) => user.status === 'approved').length}명</span></div>
     <section className="admin-console__card">
       <div className="admin-console__card-title"><h2>팀원별 최근 접속</h2><button disabled={loading} onClick={() => void load()}>{loading ? '불러오는 중...' : '새로고침'}</button></div>
