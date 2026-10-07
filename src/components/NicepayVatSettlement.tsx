@@ -173,7 +173,7 @@ const NicepayVatSettlement = () => {
     buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, majorCategories, includeSettings);
     const buffer = await output.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
-    setMessage(`검증 결과를 포함한 ${result.rows.length.toLocaleString()}건 Excel 파일을 생성했습니다.`);
+    setMessage(`전표제출용 시트와 검증 결과를 포함한 ${result.rows.length.toLocaleString()}건 Excel 파일을 생성했습니다.`);
   };
 
   const selectedPrintColumns = printColumnKeys.map((key) => VAT_SUMMARY_PRINT_COLUMNS.find((column) => column.key === key)).filter((column): column is (typeof VAT_SUMMARY_PRINT_COLUMNS)[number] => Boolean(column));

@@ -1,6 +1,7 @@
 import type { Workbook, Worksheet } from "exceljs";
 import type { ClassificationRule, Facility, MajorCategory, PackageComponent, ProcessingResult, RawRow } from "./nicepayVatEngine.ts";
 import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, groupProductSummariesByMajorCategory, summarizeStandardProducts, valueByHeaders } from "./nicepayVatEngine.ts";
+import { addVatVoucherSubmissionSheet } from "./nicepayVatVoucherSheet.ts";
 
 const border = { top: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, left: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, bottom: { style: "thin" as const, color: { argb: "FF7F7F7F" } }, right: { style: "thin" as const, color: { argb: "FF7F7F7F" } } };
 const moneyFormat = "#,##0;[Red]-#,##0;0";
@@ -255,6 +256,8 @@ export const buildVatSettlementWorkbook = (
   REFERENCE_HIDDEN_REPORT_COLUMNS.forEach((column) => { report.getColumn(column).hidden = true; });
   report.views = [{ state: "frozen", ySplit: 3, xSplit: 2, showGridLines: true }];
   report.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 26 } };
+
+  addVatVoucherSubmissionSheet(workbook, result, facilities);
 
   if (includeSettings) {
     const rulesSheet = workbook.addWorksheet("설정_상품 분류 기준");
