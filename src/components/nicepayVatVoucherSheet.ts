@@ -23,6 +23,9 @@ const referenceGroups = [
   ["패키지", "공홈특가올인원", "비씨올인원", "룸온리", "여름올인클루시브", "비씨어텀올인원", "공홈특가플레이", "워터파크PKG", "가을올인클루", "공홈특가조식", "원타임1인추가", "비비큐PKG", "워터조식PKG", "어텀워터", "어텀레포츠", "어텀조식"],
 ] as const;
 
+export type VoucherGroup = { id: string; name: string; productNames: string[]; displayOrder: number };
+export const DEFAULT_VOUCHER_GROUPS: VoucherGroup[] = referenceGroups.map(([name, ...productNames], index) => ({ id: `reference-${index + 1}`, name, productNames: [...productNames], displayOrder: index + 1 }));
+
 const setCell = (sheet: Worksheet, address: string, value: string | number | { formula: string; result: number }, options: { header?: boolean; total?: boolean; numeric?: boolean; accent?: boolean } = {}) => {
   const cell = sheet.getCell(address);
   cell.value = value;
@@ -35,13 +38,13 @@ const setCell = (sheet: Worksheet, address: string, value: string | number | { f
 const excelRound = (value: number) => value < 0 ? -Math.round(-value) : Math.round(value);
 
 /** Adds the submission sheet shown in the August reference workbook using the current Step 3 result. */
-export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: ProcessingResult, facilities: Facility[]) => {
+export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: ProcessingResult, facilities: Facility[], voucherGroups: VoucherGroup[] = DEFAULT_VOUCHER_GROUPS) => {
   const sheet = workbook.addWorksheet("전표제출용", { pageSetup: { paperSize: 9, orientation: "portrait" } });
   sheet.views = [{ showGridLines: false }];
-  sheet.getColumn("A").width = 22;
-  for (let column = 2; column <= 58; column += 1) sheet.getColumn(column).width = 12;
-  sheet.getColumn("AN").width = 17; sheet.getColumn("AP").width = 24;
-  sheet.getColumn("BB").width = 18;
+  sheet.getColumn("A").width = 17.875;
+  for (let column = 2; column <= 58; column += 1) sheet.getColumn(column).width = 13;
+  Object.entries({ AR: 12.125, AS: 9.25, AT: 12.125, AU: 11, AV: 10.125, AW: 11, AX: 12.125, AY: 12.875, BB: 13.625, BC: 12.25, BD: 10.125, BE: 12.25, BF: 12.125 }).forEach(([column, width]) => { sheet.getColumn(column).width = width; });
+  sheet.getRow(3).height = 24;
   ["E", "K", "N", "S", "V", "AE"].forEach((column) => { sheet.getColumn(column).hidden = true; });
 
   sheet.getCell("AN2").value = "■ 나이스페이먼츠 결제내역";
@@ -54,8 +57,8 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
   const products = summarizeStandardProducts(result.rows);
   const byName = new Map(products.map((product) => [product.standardProductName, product]));
   const groups: Array<{ name: string; items: typeof products }> = [];
-  referenceGroups.forEach(([name, ...names]) => {
-    const items = names.flatMap((productName) => { const found = byName.get(productName); if (found) byName.delete(productName); return found ? [found] : []; });
+  [...voucherGroups].sort((a, b) => a.displayOrder - b.displayOrder).forEach(({ name, productNames }) => {
+    const items = productNames.flatMap((productName) => { const found = byName.get(productName); if (found) byName.delete(productName); return found ? [found] : []; });
     if (items.length) groups.push({ name, items });
   });
   byName.forEach((product) => groups.push({ name: product.standardProductName, items: [product] }));
@@ -79,6 +82,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     if (last > first) sheet.mergeCells(`AZ${first}:AZ${last}`);
   });
   const topTotalRow = topRow;
+  sheet.getRow(topTotalRow).height = 23.25;
   setCell(sheet, `AN${topTotalRow}`, "합계", { total: true });
   sheet.mergeCells(`AN${topTotalRow}:AQ${topTotalRow}`);
   const totalProducts = products.reduce((totals, item) => ({ transactionAmount: totals.transactionAmount + item.transactionAmount, count: totals.count + item.transactionCount, paymentFee: totals.paymentFee + item.paymentFee, vat: totals.vat + item.vat, fee: totals.fee + item.feeTotal, settlement: totals.settlement + item.settlementAmount }), { transactionAmount: 0, count: 0, paymentFee: 0, vat: 0, fee: 0, settlement: 0 });
@@ -145,7 +149,9 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
   const costTitleRow = Math.max(37, topTotalRow + 2);
   sheet.getCell(`A${costTitleRow}`).value = "■ 원가 배분";
   sheet.getCell(`A${costTitleRow}`).font = { name: "맑은 고딕", size: 11, bold: true };
+  sheet.getRow(costTitleRow).height = 17.25;
   const costHeaderRow = costTitleRow + 1;
+  sheet.getRow(costHeaderRow).height = 24;
   const facilityList = [...facilities].filter((item) => item.enabled).sort((a, b) => a.displayOrder - b.displayOrder);
   const facilityStart = 2;
   const totalStart = facilityStart + facilityList.length;
@@ -161,6 +167,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     [summary.allocatedTotal, summary.feeTotal, ...ALLOCATION_DISPLAY_GROUPS.map((item) => displays[item.key])].forEach((amount, columnIndex) => setCell(sheet, `${sheet.getColumn(totalStart + columnIndex).letter}${row}`, amount, { numeric: true }));
   });
   const costTotalRow = costHeaderRow + result.summaries.length + 1;
+  sheet.getRow(costTotalRow).height = 17.25;
   setCell(sheet, `A${costTotalRow}`, "합계", { total: true });
   const costEndColumn = totalStart + 1 + ALLOCATION_DISPLAY_GROUPS.length;
   for (let column = facilityStart; column <= costEndColumn; column += 1) {

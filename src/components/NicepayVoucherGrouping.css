@@ -1,0 +1,14 @@
+.vat-voucher-grouping{display:grid;gap:16px}
+.vat-voucher-grouping .vat-section-head{margin-bottom:0}
+.vat-voucher-group-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid #e3eaf2}
+.vat-voucher-group-head small,.vat-voucher-group-note{color:#64748b}
+.vat-voucher-group-list{display:grid;gap:7px}
+.vat-voucher-group-row{display:grid;grid-template-columns:32px minmax(180px,1fr) 90px 34px 34px 34px;align-items:center;gap:8px;padding:7px 9px;border:1px solid #dbe5ef;border-radius:9px}
+.vat-voucher-group-row .order{color:#64748b;text-align:center}
+.vat-voucher-group-row input,.vat-voucher-grouping select{width:100%;min-width:0;border:1px solid #cbd8e6;border-radius:7px;padding:8px;background:#fff}
+.vat-voucher-group-row small{color:#64748b;text-align:right}
+.vat-voucher-group-row button{padding:7px!important}
+.vat-voucher-group-row button:disabled{opacity:.35;cursor:default}
+.vat-voucher-grouping .vat-table-scroll select{min-width:190px}
+.vat-voucher-group-note{display:block;font-size:12px}
+@media(max-width:640px){.vat-voucher-group-row{grid-template-columns:24px minmax(100px,1fr) 28px 28px 28px}.vat-voucher-group-row small{display:none}.vat-voucher-group-head{align-items:flex-start;flex-direction:column}}

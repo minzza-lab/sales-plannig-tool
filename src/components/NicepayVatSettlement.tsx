@@ -4,15 +4,18 @@ import { CheckCircle2, Download, FileSpreadsheet, GripVertical, Plus, Printer, S
 import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
+import { attachVoucherCameras } from "./nicepayVatCamera";
 import { buildVatCombinedPrintHtml, buildVatSummaryPrintHtml, VAT_SUMMARY_PRINT_COLUMNS, type VatSummaryColumnKey, type VatTaxInvoiceRow } from "./nicepayVatPrint";
 import NicepayProductGrouping from "./NicepayProductGrouping";
 import NicepayAllocationSetup from "./NicepayAllocationSetup";
 import NicepayProductSummary from "./NicepayProductSummary";
+import NicepayVoucherGrouping from "./NicepayVoucherGrouping";
+import { DEFAULT_VOUCHER_GROUPS, type VoucherGroup } from "./nicepayVatVoucherSheet";
 import { ALLOCATION_DISPLAY_GROUPS, calculateAllocationDisplayTotals, exactProductMappingDescription, exactProductNamesFromRule, isNicepayTargetMid, summarizeStandardProducts, type ClassificationRule, type Facility, type MajorCategory, type PackageComponent, type RawRow, processVatSettlement, valueByHeaders } from "./nicepayVatEngine";
 import "./NicepayVatSettlement.css";
 import "./NicepayVatPrint.css";
 
-type Tab = "upload" | "group" | "summary" | "print" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
+type Tab = "upload" | "group" | "summary" | "voucher" | "print" | "rules" | "components" | "facilities" | "classified" | "result" | "errors";
 type ManualOverride = { standardProductName: string; packageName: string };
 const newId = () => globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
@@ -76,6 +79,13 @@ const NicepayVatSettlement = () => {
   const [components, setComponents] = useState<PackageComponent[]>(DEFAULT_PACKAGE_COMPONENTS);
   const [facilities, setFacilities] = useState<Facility[]>(DEFAULT_FACILITIES);
   const [majorCategories, setMajorCategories] = useState<MajorCategory[]>([]);
+  const [voucherGroups, setVoucherGroups] = useState<VoucherGroup[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("nicepay_vat_voucher_groups_v1") || "null");
+      return Array.isArray(stored) ? stored as VoucherGroup[] : DEFAULT_VOUCHER_GROUPS;
+    } catch { return DEFAULT_VOUCHER_GROUPS; }
+  });
+  const [isSavingVoucherGroups, setIsSavingVoucherGroups] = useState(false);
   const [manualOverrides, setManualOverrides] = useState<Record<number, ManualOverride>>({});
   const [message, setMessage] = useState("기준 설정을 불러오는 중입니다.");
   const [settingsMode, setSettingsMode] = useState<"database" | "browser">("browser");
@@ -100,12 +110,14 @@ const NicepayVatSettlement = () => {
         if (saved.facilities?.length) setFacilities(saved.facilities);
         if (saved.majorCategories?.length) setMajorCategories(saved.majorCategories);
       } catch { /* defaults remain */ }
-      const [rulesResult, componentsResult, facilitiesResult, categoriesResult] = await Promise.all([
+      const [rulesResult, componentsResult, facilitiesResult, categoriesResult, voucherGroupsResult] = await Promise.all([
         supabase.from("nicepay_vat_classification_rules").select("*").order("priority"),
         supabase.from("nicepay_vat_package_components").select("*").order("package_name"),
         supabase.from("nicepay_vat_facilities").select("*").order("display_order"),
         supabase.from("nicepay_vat_major_categories").select("*").order("display_order"),
+        supabase.from("nicepay_vat_voucher_groups").select("*").order("display_order"),
       ]);
+      if (voucherGroupsResult.data?.length) setVoucherGroups(voucherGroupsResult.data.map((item) => ({ id: item.id, name: item.name, productNames: item.product_names || [], displayOrder: item.display_order })));
       if (rulesResult.error || componentsResult.error || facilitiesResult.error) {
         setMessage("DB 설정표가 아직 없습니다. 기본 기준을 검토한 뒤 ‘설정 저장’을 눌러 초기화하세요. 원본 파일은 브라우저 밖으로 전송되지 않습니다.");
         return;
@@ -122,6 +134,7 @@ const NicepayVatSettlement = () => {
   }, []);
 
   useEffect(() => { localStorage.setItem("nicepay_vat_step3_settings_v1", JSON.stringify({ rules, components, facilities, majorCategories })); }, [rules, components, facilities, majorCategories]);
+  useEffect(() => { localStorage.setItem("nicepay_vat_voucher_groups_v1", JSON.stringify(voucherGroups)); }, [voucherGroups]);
   useEffect(() => { localStorage.setItem("nicepay_vat_tax_invoice_v1", JSON.stringify(taxInvoiceRows)); }, [taxInvoiceRows]);
 
   const effectiveRules = useMemo(() => [
@@ -167,12 +180,31 @@ const NicepayVatSettlement = () => {
     }
     setSettingsMode("browser"); setMessage("DB 저장에 실패했습니다. SQL 스키마 적용과 권한을 확인하세요. 현재 설정은 이 브라우저에 안전하게 보관됩니다."); setIsSaving(false);
   };
+  const saveVoucherGroups = async () => {
+    const names = voucherGroups.map((group) => group.name.trim());
+    const products = voucherGroups.flatMap((group) => group.productNames);
+    if (names.some((name) => !name) || new Set(names.map((name) => name.toLowerCase())).size !== names.length) return setMessage("전표제출용 구분 이름을 모두 입력하고 중복 이름을 없애 주세요.");
+    if (new Set(products).size !== products.length) return setMessage("같은 상품을 여러 전표 구분에 넣을 수 없습니다.");
+    setIsSavingVoucherGroups(true);
+    try {
+      const removed = await supabase.from("nicepay_vat_voucher_groups").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (removed.error) throw removed.error;
+      if (voucherGroups.length) {
+        const saved = await supabase.from("nicepay_vat_voucher_groups").insert(voucherGroups.map((group, index) => ({ name: group.name.trim(), product_names: group.productNames, display_order: index + 1 })));
+        if (saved.error) throw saved.error;
+      }
+      setMessage("전표제출용 구분 설정을 공유 DB에 저장했습니다. 다음 달에도 이 기준을 불러옵니다.");
+    } catch (error) {
+      setMessage(`공유 설정 저장에 실패했습니다. 현재 브라우저에는 보관되어 있습니다. ${error instanceof Error ? error.message : ""}`);
+    } finally { setIsSavingVoucherGroups(false); }
+  };
   const download = async () => {
     if (!rawRows.length) { setMessage("먼저 로우데이터를 업로드하세요."); return; }
     const ExcelJS = await import("exceljs"); const { saveAs } = await import("file-saver"); const output = new ExcelJS.Workbook();
-    buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, majorCategories, includeSettings);
+    buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, majorCategories, includeSettings, voucherGroups);
     const buffer = await output.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
+    const cameraWorkbook = await attachVoucherCameras(buffer, output.getWorksheet("전표제출용")!);
+    saveAs(new Blob([new Uint8Array(cameraWorkbook).buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
     setMessage(`전표제출용 시트와 검증 결과를 포함한 ${result.rows.length.toLocaleString()}건 Excel 파일을 생성했습니다.`);
   };
 
@@ -247,7 +279,7 @@ const NicepayVatSettlement = () => {
     return { ...item, productNames: [...productNames] };
   }));
   const addMajorCategory = () => setMajorCategories((items) => [...items, { id: newId(), name: "", productNames: [], displayOrder: items.length + 1 }]);
-  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["print", "인쇄용 시트"], ["components", "업장별 구성금액"], ["rules", "고급 규칙"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
+  const tabs: Array<[Tab, string]> = [["upload", "파일 업로드"], ["group", "S열 묶음 · X열 지정"], ["summary", "상품별 금액 합계"], ["voucher", "전표제출용 구분"], ["print", "인쇄용 시트"], ["components", "업장별 구성금액"], ["rules", "고급 규칙"], ["facilities", "이용업장 관리"], ["classified", "분류 결과"], ["result", "집계·배분 결과"], ["errors", "오류·미분류"]];
 
   return <div className="vat-step3">
     <header className="vat-hero"><div><span>NICEPAY VAT SETTLEMENT · STEP 3</span><h1>상품 분류·수수료 배분</h1><p>원본 거래 파일은 이 브라우저 안에서만 계산하고 저장하지 않습니다.</p></div><button onClick={() => void saveSettings()} disabled={isSaving}><Save size={17} /> {isSaving ? "저장 중" : "설정 저장"}</button></header>
@@ -257,6 +289,8 @@ const NicepayVatSettlement = () => {
     {tab === "upload" && <section className="vat-card"><h2>1. 로우데이터 업로드</h2><p>원본 파일은 수정하지 않습니다. 업로드 뒤 시트와 헤더 행을 변경해 전체 행을 다시 읽을 수 있습니다. <b>MID 1M·4M·5M 외의 거래는 분류·집계·Excel 출력에서 제외됩니다.</b></p><label className="vat-dropzone"><UploadCloud size={30} /><b>{fileName || "나이스페이 상세 거래일 파일 선택"}</b><small>.xls, .xlsx, .xlsm 지원</small><input ref={uploadRef} type="file" accept=".xls,.xlsx,.xlsm" onChange={(event) => event.target.files?.[0] && void loadFile(event.target.files[0])} /></label>{workbook && <div className="vat-upload-options"><label>시트<select value={sheetName} onChange={(event) => setSheetName(event.target.value)}>{workbook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label><label>헤더 행<input type="number" min="1" value={headerRow} onChange={(event) => setHeaderRow(Number(event.target.value) || 1)} /></label><button onClick={applySheet}>적용</button></div>}{sourceRowCount > 0 && <><div className="vat-kpis"><b>원본 데이터 행 <strong>{sourceRowCount.toLocaleString()}</strong></b><b>MID 대상 행 <strong>{result.report.inputCount.toLocaleString()}</strong></b><b>MID 제외 <strong>{excludedMidCount.toLocaleString()}</strong></b><b>미분류 <strong className={result.report.unclassifiedCount ? "bad" : ""}>{result.report.unclassifiedCount.toLocaleString()}</strong></b></div>{rawRows.length > 0 && <div className="vat-preview"><table><thead><tr>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rawRows.slice(0, 8).map((row, index) => <tr key={index}>{Object.keys(rawRows[0]).filter((header) => !header.startsWith("__")).slice(0, 8).map((header) => <td key={header}>{String(row[header] ?? "")}</td>)}</tr>)}</tbody></table></div>}</>}</section>}
 
     {tab === "group" && <NicepayProductGrouping rows={rawRows} rules={rules} onAssignExactProducts={assignExactProducts} />}
+
+    {tab === "voucher" && <NicepayVoucherGrouping groups={voucherGroups} products={productAmountSummaries} onChange={setVoucherGroups} onSave={() => void saveVoucherGroups()} saving={isSavingVoucherGroups} />}
 
     {tab === "summary" && (productAmountSummaries.length ? <NicepayProductSummary summaries={productAmountSummaries} categories={majorCategories} onAdd={addMajorCategory} onUpdate={updateMajorCategory} onRemove={(id) => setMajorCategories((items) => items.filter((item) => item.id !== id))} onToggleProduct={toggleMajorCategoryProduct} printControls={<div className="vat-print-builder"><div className="vat-print-builder-head"><div><b>인쇄용 시트 열 선택</b><small>원하는 열을 체크하고, 선택된 열은 끌어서 출력 순서를 바꾸세요.</small></div><button className="vat-print-button" disabled={!selectedPrintColumns.length} onClick={printSummarySheet}><Printer size={17} /> 선택 열 바로 인쇄</button></div><div className="vat-print-columns">{VAT_SUMMARY_PRINT_COLUMNS.map((column) => <label key={column.key} className={printColumnKeys.includes(column.key) ? "selected" : ""}><input type="checkbox" checked={printColumnKeys.includes(column.key)} onChange={() => togglePrintColumn(column.key)} /><b>{column.excelColumn}열</b><span>{column.label}</span></label>)}</div><div className="vat-print-order"><span>인쇄 순서</span>{selectedPrintColumns.map((column) => <button key={column.key} draggable onDragStart={() => setDraggedPrintColumn(column.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => movePrintColumn(column.key)}><GripVertical size={14} /> {column.excelColumn}열 · {column.label}</button>)}{!selectedPrintColumns.length && <small>선택된 열이 없습니다.</small>}</div><div className="vat-print-preview"><b>인쇄용 시트 미리보기</b><span>{selectedPrintColumns.length ? `${selectedPrintColumns.map((column) => column.excelColumn).join(" · ")}열` : "열을 선택하세요"}</span></div>{selectedPrintColumns.length > 0 && <div className="vat-table-scroll vat-print-preview-table"><table><thead><tr>{selectedPrintColumns.map((column) => <th key={column.key}>{column.excelColumn}열 · {column.label}</th>)}</tr></thead><tbody>{productAmountSummaries.slice(0, 5).map((item) => <tr key={item.standardProductName}>{selectedPrintColumns.map((column) => <td key={column.key}>{column.key === "transactionCount" ? item[column.key].toLocaleString() : column.numeric ? won(Number(item[column.key])) : String(item[column.key])}</td>)}</tr>)}</tbody></table><small>화면은 처음 5개 상품만 미리 보여주며, 인쇄에는 전체 상품과 합계가 포함됩니다.</small></div>}</div>} /> : <section className="vat-card"><h2>3. 키워드별 상품 금액 합계</h2><p>먼저 S열 묶음에서 X열 표준 상품명을 지정하세요.</p></section>)}
 
