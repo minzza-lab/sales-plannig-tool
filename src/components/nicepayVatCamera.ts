@@ -73,6 +73,7 @@ export async function attachVoucherCameras(buffer: ArrayBuffer, sheet: Worksheet
   zip.file(relationPath, oldRels ? oldRels.replace("</Relationships>", `${newRels}</Relationships>`) : rels([newRels]));
   zip.file(sheetPath, sheetXml.replace("</worksheet>", `<drawing r:id="rId91"/><legacyDrawing r:id="rId92"/></worksheet>`));
   const types = await zip.file("[Content_Types].xml")?.async("string") || "";
-  zip.file("[Content_Types].xml", types.replace("</Types>", `<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/nicepayVoucherCamera.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`));
+  const addedTypes = `${types.includes('Extension="vml"') ? "" : '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>'}${types.includes('Extension="png"') ? "" : '<Default Extension="png" ContentType="image/png"/>'}<Override PartName="/xl/drawings/nicepayVoucherCamera.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`;
+  zip.file("[Content_Types].xml", types.replace("</Types>", `${addedTypes}</Types>`));
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }

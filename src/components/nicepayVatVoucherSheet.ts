@@ -173,7 +173,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
   for (let column = facilityStart; column <= costEndColumn; column += 1) {
     const letter = sheet.getColumn(column).letter;
     const amount = column < totalStart ? result.report.facilityTotals[facilityList[column - facilityStart].name] || 0 : column === totalStart ? result.report.feeAfterAllocation : column === totalStart + 1 ? result.report.feeBeforeAllocation : displayTotals[ALLOCATION_DISPLAY_GROUPS[column - totalStart - 2].key];
-    setCell(sheet, `${letter}${costTotalRow}`, { formula: `SUM(${letter}${costHeaderRow + 1}:${letter}${costTotalRow - 1})`, result: amount }, { numeric: true, total: true });
+    setCell(sheet, `${letter}${costTotalRow}`, result.summaries.length ? { formula: `SUM(${letter}${costHeaderRow + 1}:${letter}${costTotalRow - 1})`, result: amount } : 0, { numeric: true, total: true });
   }
 
   const entryTitleRow = Math.max(80, costTotalRow + 10);

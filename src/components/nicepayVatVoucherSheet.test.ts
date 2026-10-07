@@ -30,7 +30,7 @@ test("submission workbook embeds three linked camera ranges without reference-mo
   const { attachVoucherCameras } = await import("./nicepayVatCamera.ts");
   const JSZip = (await import("jszip")).default;
   const originalDocument = globalThis.document;
-  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==";
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAE0lEQVR4nGP8//8/AwMDEwMYAAAkBgMBXaJOiAAAAABJRU5ErkJggg==";
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => ({ width: 0, height: 0, getContext: () => ({ scale() {}, fillRect() {}, strokeRect() {}, fillText() {}, save() {}, restore() {}, beginPath() {}, rect() {}, clip() {} }), toDataURL: () => `data:image/png;base64,${png}` }) } });
   try {
     const workbook = new ExcelJS.Workbook();
@@ -42,6 +42,8 @@ test("submission workbook embeds three linked camera ranges without reference-mo
     const output = await attachVoucherCameras(await workbook.xlsx.writeBuffer(), sheet);
     const zip = await JSZip.loadAsync(output);
     const drawing = await zip.file("xl/drawings/nicepayVoucherCamera.xml")!.async("string");
+    const contentTypes = await zip.file("[Content_Types].xml")!.async("string");
+    assert.equal((contentTypes.match(/Default Extension="vml"/g) || []).length, 1);
     assert.equal((drawing.match(/a14:cameraTool/g) || []).length, 3);
     assert.match(drawing, /cellRange="\$AN\$2:\$AZ\$5"/);
     assert.match(drawing, /cellRange="\$BB\$2:\$BF\$18"/);
