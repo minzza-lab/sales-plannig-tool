@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Check, Download, FileSpreadsheet, Printer, Save, UploadCloud } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { supabase } from '../lib/supabase'
 import './NaverSettlement.css'
 
 type BankRow = Record<string, unknown>
@@ -126,6 +127,7 @@ const normalizedNaverProduct = (row: BankRow, overrides: Record<string,string>) 
   const type = String(getCell(row, ['구분']) ?? '').trim()
   return overrides[JSON.stringify([type, raw])]?.trim() || overrides[raw]?.trim() || raw
 }
+const isNaverPrintTarget = (product:string) => product.includes('객실취소위약금') || product.includes('히든힐스객실')
 const loadNaverMappings = (): Record<string,string> => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } }
 const excelColor = (color?: { argb?: string; indexed?: number; theme?: number; tint?: number }) => {
   if (!color) return undefined
@@ -223,6 +225,8 @@ export default function NaverSettlement() {
   const [settlementBusy, setSettlementBusy] = useState(false)
   const [settlementMappings, setSettlementMappings] = useState<Record<string,string>>(loadNaverMappings)
   const [savedSettlementMappings, setSavedSettlementMappings] = useState<Record<string,string>>(loadNaverMappings)
+  const [mappingLoadState, setMappingLoadState] = useState<'loading'|'ready'|'error'>('loading')
+  const [mappingSaving, setMappingSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -247,6 +251,47 @@ export default function NaverSettlement() {
   const settlementMappingEntries = useMemo(()=>Array.from(new Map(settlementRows.map(row=>{const name=String(getCell(row,['상품명'])??'').trim();const type=String(getCell(row,['구분'])??'').trim();return [JSON.stringify([type,name]),{key:JSON.stringify([type,name]),type,name}] as const})).values()).sort((a,b)=>a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko')),[settlementRows])
   const settlementProductNames = useMemo(()=>Array.from(new Set(settlementMappingEntries.map(entry=>entry.name))),[settlementMappingEntries])
   const hasUnsavedMappings = JSON.stringify(settlementMappings) !== JSON.stringify(savedSettlementMappings)
+  const printTargetSheets = useMemo(()=>settlementGroups.flatMap(group=>{
+    const monthNumber=Number(group.date.slice(5,7)),dayNumber=Number(group.date.slice(8))
+    const parts:Array<{name:string; products:string[]}> = []
+    for(let offset=0;offset<group.rows.length;offset+=100){
+      const part=Math.floor(offset/100)+1
+      const products=Array.from(new Set(group.rows.slice(offset,offset+100).map(row=>normalizedNaverProduct(row,savedSettlementMappings)).filter(isNaverPrintTarget)))
+      if(products.length)parts.push({name:`${monthNumber}.${dayNumber}${part>1?` (${part})`:''}`,products})
+    }
+    return parts.map(part=>({...part,date:group.date}))
+  }),[settlementGroups,savedSettlementMappings])
+
+  useEffect(()=>{
+    let active=true
+    const loadSharedMappings=async()=>{
+      try{
+        const {data,error}=await supabase.from('naver_settlement_product_mappings').select('mappings').eq('id','main').maybeSingle()
+        if(error)throw error
+        if(data){
+          const shared=(data.mappings&&typeof data.mappings==='object'&&!Array.isArray(data.mappings)?data.mappings:{}) as Record<string,string>
+          if(active){setSettlementMappings(shared);setSavedSettlementMappings(shared);try{localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(shared))}catch{};setMappingLoadState('ready')}
+          return
+        }
+        const legacy=loadNaverMappings()
+        if(Object.keys(legacy).length){
+          const {data:userData,error:userError}=await supabase.auth.getUser()
+          if(userError)throw userError
+          if(userData.user){
+            const {error:saveError}=await supabase.from('naver_settlement_product_mappings').upsert({id:'main',mappings:legacy,updated_at:new Date().toISOString(),updated_by:userData.user.id},{onConflict:'id'})
+            if(saveError)throw saveError
+          }
+          if(active){setSettlementMappings(legacy);setSavedSettlementMappings(legacy);setMappingLoadState('ready');setSettlementMessage('기존 상품명 규칙을 팀 공용 저장소로 옮겼습니다.')}
+          return
+        }
+        if(active){setSettlementMappings({});setSavedSettlementMappings({});setMappingLoadState('ready')}
+      }catch(error){
+        if(active){setMappingLoadState('error');setSettlementMessage(`공용 상품명 규칙을 불러오지 못했습니다. ${error instanceof Error?error.message:''}`)}
+      }
+    }
+    void loadSharedMappings()
+    return()=>{active=false}
+  },[])
 
   const handleFile = async (file?: File) => {
     setBankFile(file); setBankRows([]); setBankHeaders([]); setMessage('')
@@ -320,12 +365,20 @@ export default function NaverSettlement() {
     })
   }
 
-  const saveSettlementMappings = () => {
+  const saveSettlementMappings = async () => {
+    if(mappingLoadState!=='ready')return setSettlementMessage('팀 공용 저장소 연결을 확인한 뒤 다시 저장해 주세요.')
+    setMappingSaving(true)
     try {
+      const {data:userData,error:userError}=await supabase.auth.getUser()
+      if(userError)throw userError
+      if(!userData.user)throw new Error('로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.')
+      const {error}=await supabase.from('naver_settlement_product_mappings').upsert({id:'main',mappings:settlementMappings,updated_at:new Date().toISOString(),updated_by:userData.user.id},{onConflict:'id'})
+      if(error)throw error
       localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(settlementMappings))
       setSavedSettlementMappings({...settlementMappings})
-      setSettlementMessage('상품명 변경 규칙을 저장했습니다. 다음 파일부터도 적용됩니다.')
-    } catch { setSettlementMessage('브라우저 저장에 실패했습니다. 저장 공간을 확인해 주세요.') }
+      setSettlementMessage('상품명 변경 규칙을 팀 공용으로 저장했습니다. 다른 로그인에서도 같은 규칙이 적용됩니다.')
+    } catch(error) { setSettlementMessage(`공용 저장에 실패했습니다. ${error instanceof Error?error.message:'잠시 후 다시 시도해 주세요.'}`) }
+    finally {setMappingSaving(false)}
   }
 
   const buildSettlementWorkbook = async () => {
@@ -375,6 +428,7 @@ export default function NaverSettlement() {
 
   const exportSettlementWorkbook = async () => {
     if(!settlementRows.length)return
+    if(mappingLoadState!=='ready')return setSettlementMessage('공용 상품명 규칙을 불러온 뒤 다운로드해 주세요.')
     if(hasUnsavedMappings)return setSettlementMessage('먼저 상품명 변경 내용을 저장해 주세요.')
     setSettlementBusy(true);setSettlementMessage('날짜별 시트를 만들고 있습니다…')
     try {
@@ -389,6 +443,7 @@ export default function NaverSettlement() {
 
   const printSettlementWorkbook = async () => {
     if(!settlementRows.length)return
+    if(mappingLoadState!=='ready')return setSettlementMessage('공용 상품명 규칙을 불러온 뒤 인쇄해 주세요.')
     if(hasUnsavedMappings)return setSettlementMessage('먼저 상품명 변경 내용을 저장해 주세요.')
     setSettlementBusy(true);setSettlementMessage('인쇄할 날짜 시트를 준비하고 있습니다…')
     try {
@@ -398,9 +453,9 @@ export default function NaverSettlement() {
         const sheetMatch=sheet.name.match(/^(\d+)\.(\d+)(?: \((\d+)\))?$/)
         if(!sheetMatch||Number(sheetMatch[1])!==monthPart||Number(sheetMatch[2])!==dayPart)return false
         const offset=(sheetMatch[3]?Number(sheetMatch[3])-1:0)*100
-        return rows.slice(offset,offset+100).some(row=>{const product=normalizedNaverProduct(row,savedSettlementMappings);return product.includes('히든힐스')||product.includes('객실취소위약금')})
+        return rows.slice(offset,offset+100).some(row=>isNaverPrintTarget(normalizedNaverProduct(row,savedSettlementMappings)))
       })).map(sheet=>`<section class="page"><h1>${escapeHtml(String(sheet.getCell('A1').value||sheet.name))}</h1>${printWorksheetHtml(sheet)}</section>`).join('')
-      if(!pages){setSettlementMessage('인쇄 대상 시트가 없습니다. 상품명에 히든힐스 또는 객실취소위약금이 포함된 날짜만 인쇄할 수 있습니다.');return}
+      if(!pages){setSettlementMessage('인쇄 대상 시트가 없습니다. 상품명에 히든힐스객실 또는 객실취소위약금이 있는 날짜만 인쇄할 수 있습니다.');return}
       const printWindow=window.open('','_blank','width=1200,height=850')
       if(!printWindow){setSettlementMessage('인쇄 창이 차단되었습니다. 브라우저의 팝업을 허용해 주세요.');return}
       printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}h1{text-align:center;font-size:14px;margin:0 0 5mm}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:6.5px}td{padding:2px;white-space:nowrap;text-align:center}@media screen{body{padding:18px;background:#e5e7eb}.page{width:283mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 3px 16px #0002}}@media print{.page{padding:0}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
@@ -430,9 +485,9 @@ export default function NaverSettlement() {
       <label className="naver-bank-upload naver-step2-upload"><UploadCloud size={21}/><span><b>네이버 정산내역 원본</b><small>{settlementBusy?'파일을 처리하고 있습니다…':settlementFile?.name||'PaySettleDetail 엑셀 파일을 선택하세요.'}</small></span><input type="file" accept=".xlsx,.xls,.csv" onChange={event=>void handleSettlementFile(event.target.files?.[0])}/></label>
       {settlementMessage&&<p className="naver-verification-message" role="status">{settlementMessage}</p>}
       {settlementRows.length>0&&<div className="naver-step2-results"><div className="naver-verification-summary"><span>원본 행 <b>{settlementRows.length.toLocaleString()}건</b></span><span>정산예정일 <b>{settlementGroups.length}일</b></span><span>상품명 종류 <b>{settlementProductNames.length}개</b></span></div>
-        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>상품명 변경 규칙은 저장 버튼을 눌러야 다운로드와 인쇄에 반영됩니다. 저장된 규칙은 다음 작업에도 유지됩니다.</p></div><div className="naver-step2-mapping-list"><div className="naver-step2-mapping-header"><span>구분</span><span>원본 상품명</span><span></span><span>E열 상품명</span></div>{settlementMappingEntries.map(entry=><label key={entry.key}><small>{entry.type||'〈구분 없음〉'}</small><span title={entry.name||'원본 상품명 빈칸'}>{entry.name||'〈빈 상품명〉'}</span><b>→</b><input value={settlementMappings[entry.key]??settlementMappings[entry.name]??''} onChange={event=>updateSettlementMapping(entry.type,entry.name,event.target.value)} placeholder={entry.name?'원본명 그대로':'변경명 입력'} aria-label={`${entry.type||'구분 없음'} ${entry.name||'빈 상품명'}의 E열 변경명`}/></label>)}</div><div className="naver-step2-savebar"><span className={hasUnsavedMappings?'unsaved':'saved'}>{hasUnsavedMappings?'저장되지 않은 변경이 있습니다.':<><Check size={16}/> 저장 완료 · 다음 작업에도 적용됩니다.</>}</span><button type="button" onClick={saveSettlementMappings} disabled={!hasUnsavedMappings}><Save size={16}/>{hasUnsavedMappings?'변경 내용 저장':'저장됨'}</button></div></div>
+        <div className="naver-step2-mappings"><div className="naver-step2-mapping-layout"><div className="naver-step2-mapping-main"><div><h3>E열 상품명 변경</h3><p>저장한 변경명은 팀 공용 저장소에 보관되어 다른 로그인에서도 동일하게 적용됩니다. 저장 버튼을 눌러야 다운로드와 인쇄에 반영됩니다.</p></div><div className="naver-step2-mapping-list"><div className="naver-step2-mapping-header"><span>구분</span><span>원본 상품명</span><span></span><span>E열 상품명</span></div>{settlementMappingEntries.map(entry=><label key={entry.key}><small>{entry.type||'〈구분 없음〉'}</small><span title={entry.name||'원본 상품명 빈칸'}>{entry.name||'〈빈 상품명〉'}</span><b>→</b><input value={settlementMappings[entry.key]??settlementMappings[entry.name]??''} onChange={event=>updateSettlementMapping(entry.type,entry.name,event.target.value)} placeholder={entry.name?'원본명 그대로':'변경명 입력'} aria-label={`${entry.type||'구분 없음'} ${entry.name||'빈 상품명'}의 E열 변경명`} disabled={mappingLoadState!=='ready'||mappingSaving}/></label>)}</div><div className="naver-step2-savebar"><span className={mappingLoadState==='ready'&&!hasUnsavedMappings?'saved':'unsaved'}>{mappingLoadState==='loading'?'팀 공용 저장소를 불러오는 중…':mappingLoadState==='error'?'공용 저장소에 연결되지 않았습니다.':hasUnsavedMappings?'저장되지 않은 변경이 있습니다.':<><Check size={16}/> 팀 공용 저장 완료 · 다른 로그인에도 적용됩니다.</>}</span><button type="button" onClick={()=>void saveSettlementMappings()} disabled={!hasUnsavedMappings||mappingLoadState!=='ready'||mappingSaving}><Save size={16}/>{mappingSaving?'저장 중…':hasUnsavedMappings?'변경 내용 저장':'저장됨'}</button></div></div><aside className="naver-step2-print-targets"><h3>자동 인쇄 대상</h3><p>저장된 상품명에 <b>객실취소위약금</b> 또는 <b>히든힐스객실</b>이 있는 시트만 인쇄합니다.</p>{printTargetSheets.length?<div className="naver-step2-print-target-list">{printTargetSheets.map(sheet=><article key={sheet.name}><strong>{Number(sheet.date.slice(5,7))}월 {Number(sheet.date.slice(8))}일</strong><small>{sheet.name} 시트</small><div>{sheet.products.map(product=><span key={product}>{product}</span>)}</div></article>)}</div>:<div className="naver-step2-print-empty">인쇄 대상 상품이 포함된 날짜 시트가 없습니다.</div>}</aside></div></div>
         <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
-        <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy||hasUnsavedMappings} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button><button type="button" disabled={settlementBusy||hasUnsavedMappings} onClick={()=>void printSettlementWorkbook()}><Printer size={16}/>인쇄</button></div>
+        <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button><button type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void printSettlementWorkbook()}><Printer size={16}/>인쇄</button></div>
       </div>}
     </section> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
   </main>
