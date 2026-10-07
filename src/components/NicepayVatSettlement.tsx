@@ -4,7 +4,6 @@ import { CheckCircle2, Download, FileSpreadsheet, GripVertical, Plus, Printer, S
 import { supabase } from "../lib/supabase";
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_FACILITIES, DEFAULT_PACKAGE_COMPONENTS } from "./nicepayVatDefaults";
 import { buildVatSettlementWorkbook } from "./nicepayVatWorkbook";
-import { attachVoucherCameras } from "./nicepayVatCamera";
 import { buildVatCombinedPrintHtml, buildVatSummaryPrintHtml, VAT_SUMMARY_PRINT_COLUMNS, type VatSummaryColumnKey, type VatTaxInvoiceRow } from "./nicepayVatPrint";
 import NicepayProductGrouping from "./NicepayProductGrouping";
 import NicepayAllocationSetup from "./NicepayAllocationSetup";
@@ -203,8 +202,7 @@ const NicepayVatSettlement = () => {
     const ExcelJS = await import("exceljs"); const { saveAs } = await import("file-saver"); const output = new ExcelJS.Workbook();
     buildVatSettlementWorkbook(output, rawRows, result, rules, components, facilities, majorCategories, includeSettings, voucherGroups);
     const buffer = await output.xlsx.writeBuffer();
-    const cameraWorkbook = await attachVoucherCameras(buffer, output.getWorksheet("전표제출용")!);
-    saveAs(new Blob([new Uint8Array(cameraWorkbook).buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
+    saveAs(new Blob([buffer]), `${fileName.replace(/\.(xlsx|xlsm|xls)$/i, "")}_부가세정산_STEP3.xlsx`);
     setMessage(`전표제출용 시트와 검증 결과를 포함한 ${result.rows.length.toLocaleString()}건 Excel 파일을 생성했습니다.`);
   };
 
