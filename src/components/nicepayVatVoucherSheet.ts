@@ -12,6 +12,7 @@ const moneyFormat = "#,##0;[Red]-#,##0;0";
 const ink = "FF17365D";
 const pale = "FFE8D2FA";
 const gold = "FFFFF2CC";
+const groupColors = ["FFE8F1FB", "FFE8F5F1", "FFF3ECFA", "FFFDF1DF", "FFEAF1F7"];
 const border = { top: { style: "thin" as const }, bottom: { style: "thin" as const }, left: { style: "thin" as const }, right: { style: "thin" as const } };
 const referenceGroups = [
   ["워터파크", "워터플래닛입장권", "카바나", "선베드", "웰팍코인", "Q-PASS"],
@@ -42,10 +43,12 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
   const sheet = workbook.addWorksheet("전표제출용", { pageSetup: { paperSize: 9, orientation: "portrait" } });
   sheet.views = [{ showGridLines: false }];
   sheet.getColumn("A").width = 17.875;
-  for (let column = 2; column <= 58; column += 1) sheet.getColumn(column).width = 13;
+  for (let column = 2; column <= 68; column += 1) sheet.getColumn(column).width = 13;
   Object.entries({ AR: 12.125, AS: 9.25, AT: 12.125, AU: 11, AV: 10.125, AW: 11, AX: 12.125, AY: 12.875, BB: 13.625, BC: 12.25, BD: 10.125, BE: 12.25, BF: 12.125 }).forEach(([column, width]) => { sheet.getColumn(column).width = width; });
   sheet.getRow(3).height = 24;
-  ["E", "K", "N", "S", "V", "AE"].forEach((column) => { sheet.getColumn(column).hidden = true; });
+  sheet.getColumn("BG").width = 3;
+  sheet.getColumn("BH").width = 15;
+  sheet.getColumn("BN").width = 16;
 
   sheet.getCell("AN2").value = "■ 나이스페이먼츠 결제내역";
   sheet.getCell("BB2").value = "■ 수수료 내역";
@@ -63,7 +66,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
   });
   byName.forEach((product) => groups.push({ name: product.standardProductName, items: [product] }));
   let topRow = 4;
-  groups.forEach((group) => {
+  groups.forEach((group, groupIndex) => {
     const first = topRow;
     group.items.forEach((product) => {
       const row = topRow++;
@@ -78,6 +81,14 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     const last = topRow - 1;
     setCell(sheet, `AN${first}`, group.name, { accent: true });
     sheet.mergeCells(last > first ? `AN${first}:AO${last}` : group.name === group.items[0].standardProductName ? `AN${first}:AQ${first}` : `AN${first}:AO${first}`);
+    sheet.getCell(`AN${first}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: groupColors[groupIndex % groupColors.length] } };
+    for (let row = first; row <= last; row += 1) {
+      for (const column of ["AP", "AQ"]) if (sheet.getCell(`${column}${row}`).value) sheet.getCell(`${column}${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: groupColors[groupIndex % groupColors.length] } };
+      for (const column of ["AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ"]) {
+        const cell = sheet.getCell(`${column}${row}`);
+        if (row % 2 === 0) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAFE" } };
+      }
+    }
     setCell(sheet, `AZ${first}`, { formula: last > first ? `SUM(AY${first}:AY${last})` : `AY${first}`, result: group.items.reduce((sum, item) => sum + item.settlementAmount, 0) }, { numeric: true });
     if (last > first) sheet.mergeCells(`AZ${first}:AZ${last}`);
   });
@@ -109,6 +120,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     setCell(sheet, `BD${row}`, { formula: `BE${row}-BC${row}`, result: amount - supply }, { numeric: true });
     setCell(sheet, `BE${row}`, amount, { numeric: true });
     setCell(sheet, `BF${row}`, { formula: `BC${row}+BD${row}`, result: amount }, { numeric: true });
+    if (index % 2 === 0) for (const column of ["BB", "BC", "BD", "BE", "BF"]) sheet.getCell(`${column}${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7FC" } };
   });
   const feeTotalRow = feeDefinitions.length + 4;
   const feeTotal = feeDefinitions.reduce((sum, [, amount]) => sum + amount, 0);
@@ -165,6 +177,7 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     setCell(sheet, `A${row}`, summary.packageName, { accent: true });
     facilityList.forEach((facility, columnIndex) => setCell(sheet, `${sheet.getColumn(facilityStart + columnIndex).letter}${row}`, byFacility[facility.name] || 0, { numeric: true }));
     [summary.allocatedTotal, summary.feeTotal, ...ALLOCATION_DISPLAY_GROUPS.map((item) => displays[item.key])].forEach((amount, columnIndex) => setCell(sheet, `${sheet.getColumn(totalStart + columnIndex).letter}${row}`, amount, { numeric: true }));
+    if (index % 2 === 0) for (let column = facilityStart; column <= totalStart + 1 + ALLOCATION_DISPLAY_GROUPS.length; column += 1) sheet.getCell(row, column).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F8FC" } };
   });
   const costTotalRow = costHeaderRow + result.summaries.length + 1;
   sheet.getRow(costTotalRow).height = 17.25;
@@ -176,22 +189,28 @@ export const addVatVoucherSubmissionSheet = (workbook: Workbook, result: Process
     setCell(sheet, `${letter}${costTotalRow}`, result.summaries.length ? { formula: `SUM(${letter}${costHeaderRow + 1}:${letter}${costTotalRow - 1})`, result: amount } : 0, { numeric: true, total: true });
   }
 
-  const entryTitleRow = Math.max(80, costTotalRow + 10);
-  sheet.getCell(`M${entryTitleRow}`).value = "■ 전표 입력";
-  sheet.getCell(`M${entryTitleRow}`).font = { name: "맑은 고딕", size: 11, bold: true };
+  facilityList.forEach((facility, index) => {
+    const hasActualAllocation = result.summaries.some((summary) => summary.allocations.some((allocation) => allocation.facilityName === facility.name && Math.abs(allocation.allocatedFee) > 0.000001));
+    if (!hasActualAllocation) sheet.getColumn(facilityStart + index).hidden = true;
+  });
+
+  sheet.getCell("BH2").value = "■ 전표 입력 (금액 수정은 이 표에서)";
+  sheet.getCell("BH2").font = { name: "맑은 고딕", size: 11, bold: true, color: { argb: ink } };
   const water = displayTotals.waterTotal;
   const season = facilityTotals["시즌권"] || 0;
   const entryRows: Array<[string, number]> = [["패키지 外", feeTotal - water - season], ["워터파크입장권 外", water], ["워터시즌권 外", season]];
   entryRows.forEach(([label, amount], index) => {
-    const row = entryTitleRow + 1 + index;
-    setCell(sheet, `M${row}`, label);
-    setCell(sheet, `R${row}`, amount, { numeric: true });
-    sheet.mergeCells(`M${row}:Q${row}`);
-    sheet.mergeCells(`R${row}:U${row}`);
+    const row = 3 + index;
+    setCell(sheet, `BH${row}`, label);
+    setCell(sheet, `BN${row}`, amount, { numeric: true });
+    sheet.mergeCells(`BH${row}:BM${row}`);
+    sheet.mergeCells(`BN${row}:BP${row}`);
+    sheet.getCell(`BH${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: groupColors[index] } };
+    sheet.getCell(`BN${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF8E8" } };
   });
-  setCell(sheet, `M${entryTitleRow + 4}`, "計", { total: true });
-  setCell(sheet, `R${entryTitleRow + 4}`, { formula: `SUM(R${entryTitleRow + 1}:R${entryTitleRow + 3})`, result: feeTotal }, { numeric: true, total: true });
-  sheet.mergeCells(`M${entryTitleRow + 4}:Q${entryTitleRow + 4}`);
-  sheet.mergeCells(`R${entryTitleRow + 4}:U${entryTitleRow + 4}`);
+  setCell(sheet, "BH6", "計", { total: true });
+  setCell(sheet, "BN6", { formula: "SUM(BN3:BN5)", result: feeTotal }, { numeric: true, total: true });
+  sheet.mergeCells("BH6:BM6");
+  sheet.mergeCells("BN6:BP6");
   return sheet;
 };
