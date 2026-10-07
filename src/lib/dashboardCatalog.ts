@@ -61,7 +61,7 @@ export const categories: ToolCategory[] = [
       { id: 'naver', title: '🟢 네이버', tools: [
         { id: 'naver-step-1', title: 'STEP 1 · 입금 내역 검증', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '①', path: '/tools/naver-settlement?step=1' },
         { id: 'naver-step-2', title: 'STEP 2 · 정산내역 시트 분리', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '②', path: '/tools/naver-settlement?step=2' },
-        { id: 'naver-step-3', title: 'STEP 3 · 부가세 정산', description: '준비 중 · 제출 양식 확인 후 연결합니다.', icon: '③', path: '/tools/naver-settlement?step=3' },
+        { id: 'naver-step-3', title: 'STEP 3 · 부가세 정산', description: '수수료 상세를 날짜별로 정리해 월별 수수료 내역을 만듭니다.', icon: '③', path: '/tools/naver-settlement?step=3' },
       ] },
     ],
   },

@@ -4,6 +4,7 @@ import { Check, Download, FileSpreadsheet, Printer, Save, UploadCloud } from 'lu
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import './NaverSettlement.css'
+import NaverVatStep3 from './NaverVatStep3'
 
 type BankRow = Record<string, unknown>
 type BankMeta = { title: string; accountNumber: string; accountType: string; balance: number; availableBalance: number; period: string }
@@ -173,10 +174,10 @@ const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
   const maxRow = 124; const maxColumn = 20
   const widths=Array.from({length:maxColumn},(_,index)=>Math.max(4,sheet.getColumn(index+1).width||10));const totalWidth=widths.reduce((sum,width)=>sum+width,0)
   const columns = widths.map(width=>`<col style="width:${(width/totalWidth*100).toFixed(3)}%">`).join('')
-  const rows:string[]=[]
+  const rows:string[]=[];let naturalHeight=0
   for(let rowNumber=1;rowNumber<=maxRow;rowNumber++){
-    if(rowNumber===1)continue // A1 is already displayed as the page heading.
     const row=sheet.getRow(rowNumber); if(row.hidden)continue
+    const rowHeight=Math.max(12,(row.height||15)*.7);naturalHeight+=rowHeight
     const cells:string[]=[]
     for(let column=1;column<=maxColumn;column++){
       const cell=row.getCell(column);const raw=worksheetCellValue(sheet,cell.address);let value:unknown=raw
@@ -187,13 +188,14 @@ const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
         else if(cell.numFmt?.includes('#')||cell.numFmt?.includes('0')){const decimalCount=cell.numFmt.split(';')[0].match(/\.([0#]+)/)?.[1].length||0;const abs=Math.abs(raw).toLocaleString('ko-KR',{minimumFractionDigits:decimalCount,maximumFractionDigits:decimalCount});const negative=raw<0?(cell.numFmt.split(';')[1]?.includes('(')?`(${abs})`:`-${abs}`):abs;value=negative}
         else value=Number.isInteger(raw)?raw.toLocaleString('ko-KR'):raw.toFixed(2)
       }
-      const style=cell.style;const isNumeric=typeof raw==='number';const css:string[]=[`text-align:${cell.alignment?.horizontal||(isNumeric?'right':'center')}`,'vertical-align:middle','overflow:hidden','white-space:nowrap','text-overflow:ellipsis','border:1px solid #8b9299']
-      if(row.height)css.push(`height:${Math.max(12,row.height*.7)}px`)
+      const style=cell.style;const isNumeric=typeof raw==='number';const isTitle=rowNumber===1&&column===1;const css:string[]=[`text-align:${cell.alignment?.horizontal||(isNumeric?'right':'center')}`,'vertical-align:middle','overflow:hidden','white-space:nowrap','text-overflow:ellipsis']
+      css.push(`height:${rowHeight}px`)
       if(style.font?.bold)css.push('font-weight:700');if(style.font?.italic)css.push('font-style:italic')
-      if(style.font?.size)css.push(`font-size:${Math.min(11,style.font.size)}px`)
+      if(style.font?.size)css.push(`font-size:${Math.min(11,style.font.size)*.64*96/72}px`)
       if(style.font?.name)css.push(`font-family:${JSON.stringify(style.font.name)},Arial,sans-serif`)
       const fontColor=excelColor(style.font?.color as never);if(fontColor)css.push(`color:${fontColor}`)
       if(style.fill?.type==='pattern'&&style.fill.pattern==='solid'){const fill=excelColor(style.fill.fgColor as never);if(fill)css.push(`background:${fill}`)}
+      if(isTitle)css.push('overflow:visible','text-overflow:clip','position:relative','z-index:2')
       const edge=(side:string)=>{const border=(style.border as Record<string,{style?:string;color?:{argb?:string;indexed?:number;theme?:number;tint?:number}}>|undefined)?.[side];if(border?.style){const color=excelColor(border.color)||'#000000';return `${border.style==='medium'?2:border.style==='hair'?0.5:1}px solid ${color}`}return ''}
       const borders=[`border-top:${edge('top')}`,`border-right:${edge('right')}`,`border-bottom:${edge('bottom')}`,`border-left:${edge('left')}`].filter(value=>!value.endsWith(':'))
       css.push(...borders)
@@ -201,7 +203,9 @@ const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
     }
     rows.push(`<tr>${cells.join('')}</tr>`)
   }
-  return `<table><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table>`
+  // Match the workbook's landscape, one-page print setting while keeping all visible rows.
+  const scale=Math.min(1,720/Math.max(naturalHeight,1));const scaledHeight=naturalHeight*scale
+  return `<div class="sheet-fit" style="height:${scaledHeight.toFixed(2)}px"><table style="width:calc(100% / ${scale.toFixed(5)});transform:scale(${scale.toFixed(5)})"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table></div>`
 }
 
 const sourceItems = [
@@ -454,11 +458,11 @@ export default function NaverSettlement() {
         if(!sheetMatch||Number(sheetMatch[1])!==monthPart||Number(sheetMatch[2])!==dayPart)return false
         const offset=(sheetMatch[3]?Number(sheetMatch[3])-1:0)*100
         return rows.slice(offset,offset+100).some(row=>isNaverPrintTarget(normalizedNaverProduct(row,savedSettlementMappings)))
-      })).map(sheet=>`<section class="page"><h1>${escapeHtml(String(sheet.getCell('A1').value||sheet.name))}</h1>${printWorksheetHtml(sheet)}</section>`).join('')
+      })).map(sheet=>`<section class="page">${printWorksheetHtml(sheet)}</section>`).join('')
       if(!pages){setSettlementMessage('인쇄 대상 시트가 없습니다. 상품명에 히든힐스객실 또는 객실취소위약금이 있는 날짜만 인쇄할 수 있습니다.');return}
       const printWindow=window.open('','_blank','width=1200,height=850')
       if(!printWindow){setSettlementMessage('인쇄 창이 차단되었습니다. 브라우저의 팝업을 허용해 주세요.');return}
-      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}h1{text-align:center;font-size:14px;margin:0 0 5mm}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:6.5px}td{padding:2px;white-space:nowrap;text-align:center}@media screen{body{padding:18px;background:#e5e7eb}.page{width:283mm;margin:0 auto 18px;padding:8mm;background:#fff;box-shadow:0 3px 16px #0002}}@media print{.page{padding:0}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
+      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{width:285mm;height:198mm;overflow:hidden;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}.sheet-fit{position:relative;width:100%;overflow:hidden}table{position:absolute;top:0;left:0;border-collapse:collapse;table-layout:fixed;font-size:8px;transform-origin:top left}td{padding:1px;white-space:nowrap;text-align:center;line-height:1;overflow:hidden;text-overflow:ellipsis}@media screen{body{padding:18px;background:#e5e7eb}.page{margin:0 auto 18px;padding:0;background:#fff;box-shadow:0 3px 16px #0002}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
       setSettlementMessage('선택된 날짜 시트의 인쇄 창을 열었습니다.')
     } catch(error){setSettlementMessage(error instanceof Error?error.message:'인쇄 자료를 준비하지 못했습니다.')} finally{setSettlementBusy(false)}
   }
@@ -489,6 +493,6 @@ export default function NaverSettlement() {
         <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
         <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button><button type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void printSettlementWorkbook()}><Printer size={16}/>인쇄</button></div>
       </div>}
-    </section> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
+    </section> : step === 3 ? <NaverVatStep3/> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
   </main>
 }
