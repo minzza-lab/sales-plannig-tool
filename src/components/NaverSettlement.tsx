@@ -167,7 +167,7 @@ export default function NaverSettlement() {
     settlementRows.forEach(row => { const date=dateValue(getCell(row,['정산예정일'])); if(date) groups.set(date,[...(groups.get(date)||[]),row]) })
     return Array.from(groups.entries()).sort(([a],[b])=>a.localeCompare(b)).map(([date,rows])=>({date,rows}))
   },[settlementRows])
-  const settlementProductNames = useMemo(()=>Array.from(new Set(settlementRows.map(row=>String(getCell(row,['상품명'])||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'ko')), [settlementRows])
+  const settlementProductNames = useMemo(()=>Array.from(new Set(settlementRows.map(row=>String(getCell(row,['상품명'])??'').trim()))).sort((a,b)=>a.localeCompare(b,'ko')), [settlementRows])
   useEffect(()=>{try{localStorage.setItem('naver-settlement-product-mappings',JSON.stringify(settlementMappings))}catch{/* browser storage can be disabled */}},[settlementMappings])
 
   const handleFile = async (file?: File) => {
@@ -295,7 +295,7 @@ export default function NaverSettlement() {
       <label className="naver-bank-upload naver-step2-upload"><UploadCloud size={21}/><span><b>네이버 정산내역 원본</b><small>{settlementBusy?'파일을 처리하고 있습니다…':settlementFile?.name||'PaySettleDetail 엑셀 파일을 선택하세요.'}</small></span><input type="file" accept=".xlsx,.xls,.csv" onChange={event=>void handleSettlementFile(event.target.files?.[0])}/></label>
       {settlementMessage&&<p className="naver-verification-message" role="status">{settlementMessage}</p>}
       {settlementRows.length>0&&<div className="naver-step2-results"><div className="naver-verification-summary"><span>원본 행 <b>{settlementRows.length.toLocaleString()}건</b></span><span>정산예정일 <b>{settlementGroups.length}일</b></span><span>상품명 종류 <b>{settlementProductNames.length}개</b></span></div>
-        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>예시 파일에서 수동으로 바꾸던 상품명을 여기서 지정하세요. 비워두면 원본 상품명을 그대로 사용하며, 변경명은 이 브라우저에 자동 저장되어 다음 작업에도 유지됩니다.</p></div><div className="naver-step2-mapping-list">{settlementProductNames.map(name=><label key={name}><span title={name}>{name}</span><b>→</b><input value={settlementMappings[name]||''} onChange={event=>updateSettlementMapping(name,event.target.value)} placeholder="원본명 그대로" aria-label={`${name}의 E열 변경명`}/></label>)}</div></div>
+        <div className="naver-step2-mappings"><div><h3>E열 상품명 변경</h3><p>예시 파일에서 수동으로 바꾸던 상품명을 여기서 지정하세요. 비워두면 원본 상품명을 그대로 사용하며, 변경명은 이 브라우저에 자동 저장되어 다음 작업에도 유지됩니다. 원본 상품명이 빈 행도 별도로 지정할 수 있습니다.</p></div><div className="naver-step2-mapping-list">{settlementProductNames.map((name,index)=><label key={`${name || 'empty'}-${index}`}><span title={name||'원본 상품명 빈칸'}>{name||'〈빈 상품명〉'}</span><b>→</b><input value={settlementMappings[name]||''} onChange={event=>updateSettlementMapping(name,event.target.value)} placeholder={name?'원본명 그대로':'변경명 입력'} aria-label={`${name||'빈 상품명'}의 E열 변경명`}/></label>)}</div></div>
         <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
         <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button></div>
       </div>}
