@@ -114,7 +114,7 @@ const cloneTemplateSheet = (workbook: import('exceljs').Workbook, source: import
     row.outlineLevel = sourceRow.outlineLevel
     sourceRow.eachCell({ includeEmpty: true }, sourceCell => {
       const cell = row.getCell(sourceCell.col)
-      cell.value = sourceCell.formula ? { formula: sourceCell.formula } : structuredClone(sourceCell.value)
+      cell.value = sourceCell.formula ? { formula: sourceCell.formula, ...(typeof sourceCell.value === 'object' && sourceCell.value && 'result' in sourceCell.value ? { result: sourceCell.value.result } : {}) } : structuredClone(sourceCell.value)
       cell.style = structuredClone(sourceCell.style)
       if (sourceCell.dataValidation) cell.dataValidation = structuredClone(sourceCell.dataValidation)
     })
@@ -127,6 +127,18 @@ const normalizedNaverProduct = (row: BankRow, overrides: Record<string,string>) 
   return overrides[JSON.stringify([type, raw])]?.trim() || overrides[raw]?.trim() || raw
 }
 const loadNaverMappings = (): Record<string,string> => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } }
+const excelColor = (color?: { argb?: string; indexed?: number; theme?: number; tint?: number }) => {
+  if (!color) return undefined
+  const indexed: Record<number,string> = {0:'000000',1:'FFFFFF',2:'FF0000',3:'00FF00',4:'0000FF',5:'FFFF00',6:'FF00FF',7:'00FFFF',8:'000000',9:'FFFFFF',10:'FF0000',11:'00FF00',12:'0000FF',13:'FFFF00',14:'FF00FF',15:'00FFFF',16:'800000',17:'008000',18:'000080',19:'808000',20:'800080',21:'008080',22:'C0C0C0',23:'808080',64:'000000'}
+  const theme: Record<number,string> = {0:'FFFFFF',1:'000000',2:'E7E6E6',3:'44546A',4:'5B9BD5',5:'ED7D31',6:'A5A5A5',7:'FFC000',8:'4472C4',9:'70AD47',10:'0563C1',11:'954F72'}
+  let hex = color.argb?.slice(-6) || (color.indexed != null ? indexed[color.indexed] : undefined) || (color.theme != null ? theme[color.theme] : undefined)
+  if (!hex) return undefined
+  if (color.tint) {
+    const tint = color.tint
+    hex = hex.match(/.{2}/g)!.map(part => { const value=parseInt(part,16); return Math.max(0,Math.min(255,Math.round(tint<0?value*(1+tint):value*(1-tint)+255*tint))).toString(16).padStart(2,'0') }).join('')
+  }
+  return `#${hex}`
+}
 const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string, seen = new Set<string>()): string | number | Date => {
   const cell = sheet.getCell(address)
   if (!cell.formula) return cell.value instanceof Date || typeof cell.value === 'string' || typeof cell.value === 'number' ? cell.value : ''
@@ -152,14 +164,16 @@ const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string,
   formula = formula.replace(/ABS\(\$?([A-Z]+)\$?(\d+)\)/g, (_whole, column:string, row:string) => String(Math.abs(Number(worksheetCellValue(sheet, `${column}${row}`, new Set(seen))) || 0)))
   formula = formula.replace(/\$([A-Z]+)\$(\d+)/g, '$1$2').replace(/(\d+(?:\.\d+)?)%/g, '($1/100)')
   formula = formula.replace(/\b([A-Z]{1,3}\d+)\b/g, reference => String(Number(worksheetCellValue(sheet, reference, new Set(seen))) || 0))
-  if (!/^[\d\s.+*/()\-]+$/.test(formula)) return 0
-  try { const result = Function(`"use strict";return (${formula})`)(); return Number.isFinite(result) ? result : 0 } catch { return 0 }
+  if (!/^[\d\s.+*/()\-]+$/.test(formula)) return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0
+  try { const result = Function(`"use strict";return (${formula})`)(); return Number.isFinite(result) ? result : (typeof cell.result === 'number' ? cell.result : 0) } catch { return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0 }
 }
 const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
   const maxRow = 124; const maxColumn = 20
-  const columns = Array.from({length:maxColumn},(_,index)=>`<col style="width:${Math.max(4,sheet.getColumn(index+1).width||10)}ch">`).join('')
+  const widths=Array.from({length:maxColumn},(_,index)=>Math.max(4,sheet.getColumn(index+1).width||10));const totalWidth=widths.reduce((sum,width)=>sum+width,0)
+  const columns = widths.map(width=>`<col style="width:${(width/totalWidth*100).toFixed(3)}%">`).join('')
   const rows:string[]=[]
   for(let rowNumber=1;rowNumber<=maxRow;rowNumber++){
+    if(rowNumber===1)continue // A1 is already displayed as the page heading.
     const row=sheet.getRow(rowNumber); if(row.hidden)continue
     const cells:string[]=[]
     for(let column=1;column<=maxColumn;column++){
@@ -167,18 +181,18 @@ const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
       if(raw instanceof Date)value=`${raw.getFullYear()}.${String(raw.getMonth()+1).padStart(2,'0')}.${String(raw.getDate()).padStart(2,'0')}`
       else if(typeof raw==='number'){
         if(cell.numFmt?.includes('%')){const decimals=(cell.numFmt.match(/\.([0#]+)/)?.[1].length)||0;value=`${(raw*100).toFixed(decimals)}%`}
-        else if(raw===0&&cell.numFmt?.includes(';'))value='-'
-        else if(cell.numFmt?.includes('#')||cell.numFmt?.includes('0'))value=Math.round(raw).toLocaleString('ko-KR')
+        else if(raw===0&&cell.numFmt?.includes('"-"'))value='-'
+        else if(cell.numFmt?.includes('#')||cell.numFmt?.includes('0')){const decimalCount=cell.numFmt.split(';')[0].match(/\.([0#]+)/)?.[1].length||0;const abs=Math.abs(raw).toLocaleString('ko-KR',{minimumFractionDigits:decimalCount,maximumFractionDigits:decimalCount});const negative=raw<0?(cell.numFmt.split(';')[1]?.includes('(')?`(${abs})`:`-${abs}`):abs;value=negative}
         else value=Number.isInteger(raw)?raw.toLocaleString('ko-KR'):raw.toFixed(2)
       }
-      const style=cell.style;const css:string[]=['text-align:center','vertical-align:middle','overflow:hidden']
+      const style=cell.style;const isNumeric=typeof raw==='number';const css:string[]=[`text-align:${cell.alignment?.horizontal||(isNumeric?'right':'center')}`,'vertical-align:middle','overflow:hidden','white-space:nowrap','text-overflow:ellipsis','border:1px solid #8b9299']
       if(row.height)css.push(`height:${Math.max(12,row.height*.7)}px`)
       if(style.font?.bold)css.push('font-weight:700');if(style.font?.italic)css.push('font-style:italic')
       if(style.font?.size)css.push(`font-size:${Math.min(11,style.font.size)}px`)
       if(style.font?.name)css.push(`font-family:${JSON.stringify(style.font.name)},Arial,sans-serif`)
-      const fontColor=style.font?.color?.argb;if(fontColor)css.push(`color:#${fontColor.slice(-6)}`)
-      if(style.fill?.type==='pattern'&&style.fill.pattern==='solid'&&style.fill.fgColor?.argb)css.push(`background:#${style.fill.fgColor.argb.slice(-6)}`)
-      const edge=(side:string)=>{const border=(style.border as Record<string,{style?:string;color?:{argb?:string}}>|undefined)?.[side];if(border?.style){const color=border.color?.argb?.slice(-6)||'000000';return `${border.style==='medium'?2:1}px solid #${color}`}return ''}
+      const fontColor=excelColor(style.font?.color as never);if(fontColor)css.push(`color:${fontColor}`)
+      if(style.fill?.type==='pattern'&&style.fill.pattern==='solid'){const fill=excelColor(style.fill.fgColor as never);if(fill)css.push(`background:${fill}`)}
+      const edge=(side:string)=>{const border=(style.border as Record<string,{style?:string;color?:{argb?:string;indexed?:number;theme?:number;tint?:number}}>|undefined)?.[side];if(border?.style){const color=excelColor(border.color)||'#000000';return `${border.style==='medium'?2:border.style==='hair'?0.5:1}px solid ${color}`}return ''}
       const borders=[`border-top:${edge('top')}`,`border-right:${edge('right')}`,`border-bottom:${edge('bottom')}`,`border-left:${edge('left')}`].filter(value=>!value.endsWith(':'))
       css.push(...borders)
       cells.push(`<td style="${css.join(';')}">${escapeHtml(value)}</td>`)
@@ -342,6 +356,7 @@ export default function NaverSettlement() {
       if(missingDateRows.length)createSplitSheets('날짜확인',`${monthText}/날짜확인`,missingDateRows)
       for(const sheet of workbook.worksheets){
         sheet.eachRow({includeEmpty:true},row=>row.eachCell({includeEmpty:true},cell=>{cell.alignment={...cell.alignment,horizontal:'center',vertical:'middle'}}))
+        sheet.getCell('A1').alignment={...sheet.getCell('A1').alignment,horizontal:'left',vertical:'middle'}
       }
       // Daily sheets keep the 100-row template capacity while hiding unused rows.
       for(const sheet of workbook.worksheets){
