@@ -59,8 +59,8 @@ export const categories: ToolCategory[] = [
         { id: 'nicepay-step-3', title: 'STEP 3 · 부가세 정산', description: '부가세 정산과 전표 제출 자료를 만듭니다.', icon: '③', path: '/tools/nicepay-vat-settlement' },
       ] },
       { id: 'naver', title: '🟢 네이버', tools: [
-        { id: 'naver-step-1', title: 'STEP 1 · 입금 내역 검증', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '①', path: '/tools/naver-settlement?step=1' },
-        { id: 'naver-step-2', title: 'STEP 2 · 정산내역 시트 분리', description: '준비 중 · 원본 자료 확인 후 연결합니다.', icon: '②', path: '/tools/naver-settlement?step=2' },
+        { id: 'naver-step-1', title: 'STEP 1 · 입금 내역 검증', description: '은행 내역에서 Npay정산 입금을 찾아 날짜별 합계와 상세를 확인합니다.', icon: '①', path: '/tools/naver-settlement?step=1' },
+        { id: 'naver-step-2', title: 'STEP 2 · 정산내역 시트 분리', description: 'PaySettleDetail을 정산예정일별 시트로 나누고 상품명을 매핑합니다.', icon: '②', path: '/tools/naver-settlement?step=2' },
         { id: 'naver-step-3', title: 'STEP 3 · 부가세 정산', description: '수수료 상세를 날짜별로 정리해 월별 수수료 내역을 만듭니다.', icon: '③', path: '/tools/naver-settlement?step=3' },
       ] },
     ],

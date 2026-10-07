@@ -159,11 +159,6 @@ const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string,
   if (!/^[\d\s.+*/()\-]+$/.test(formula)) return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0
   try { const result = Function(`"use strict";return (${formula})`)(); return Number.isFinite(result) ? result : (typeof cell.result === 'number' ? cell.result : 0) } catch { return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0 }
 }
-const sourceItems = [
-  { icon: FileSpreadsheet, title: '네이버 정산내역', description: '정산 기간 한 달치 엑셀 원본' },
-  { icon: UploadCloud, title: '입금전표·계좌 입금내역', description: '같은 기간의 실제 입금액을 확인할 수 있는 파일' },
-  { icon: FileSpreadsheet, title: '완성한 결과 예시', description: '현재 수작업으로 제출하는 엑셀 또는 전표 양식' },
-]
 const stepTitles = ['입금 내역 확인', '정산내역 시트 분리', '부가세 정산']
 
 export default function NaverSettlement() {
@@ -421,7 +416,7 @@ export default function NaverSettlement() {
   return <main className="naver-settlement">
     <header className="naver-settlement-hero"><span>NAVER SETTLEMENT</span><h1>네이버 정산</h1><p>은행 입금내역에서 적요가 Npay정산인 행을 자동으로 찾아 날짜별로 정리합니다. MID 구분이나 별도 기준 금액 입력은 필요하지 않습니다.</p></header>
     <nav className="naver-settlement-steps" aria-label="네이버 정산 단계">
-      {stepTitles.map((title, index) => <button key={title} type="button" className={step === index + 1 ? 'active' : ''} onClick={() => setSearchParams({ step: String(index + 1) })} aria-current={step === index + 1 ? 'step' : undefined}><small>STEP {index + 1}{index > 0 ? ' · 준비 중' : ''}</small><strong>{title}</strong></button>)}
+      {stepTitles.map((title, index) => <button key={title} type="button" className={step === index + 1 ? 'active' : ''} onClick={() => setSearchParams({ step: String(index + 1) })} aria-current={step === index + 1 ? 'step' : undefined}><small>STEP {index + 1}</small><strong>{title}</strong></button>)}
     </nav>
     {step === 1 ? <section className="naver-settlement-card naver-verification">
       <div className="naver-verification-heading"><div><span>STEP 01 · DEPOSIT LIST</span><h2>Npay정산 입금 내역</h2><p>은행 파일을 올리면 적요에서 자동으로 찾아 결과를 표시합니다.</p></div><FileSpreadsheet size={30} /></div>
@@ -444,6 +439,6 @@ export default function NaverSettlement() {
         <h3>생성될 날짜별 시트</h3><div className="naver-step2-dates">{settlementGroups.map(group=><span key={group.date}>{Number(group.date.slice(5,7))}.{Number(group.date.slice(8))} <b>{group.rows.length}건</b></span>)}</div>
         <div className="naver-verification-actions"><button className="primary" type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void exportSettlementWorkbook()}><Download size={16}/>{settlementBusy?'만드는 중…':'날짜별 정산 엑셀 다운로드'}</button><button type="button" disabled={settlementBusy||hasUnsavedMappings||mappingLoadState!=='ready'} onClick={()=>void printSettlementWorkbook()}><Printer size={16}/>인쇄</button></div>
       </div>}
-    </section> : step === 3 ? <NaverVatStep3/> : <section className="naver-settlement-card" aria-labelledby="naver-source-title"><h2 id="naver-source-title">STEP {step} · {stepTitles[step - 1]} — 준비 중</h2><p>네이버 정산 전체 흐름을 연결하기 위한 자료가 필요합니다. 계좌번호와 개인정보는 가려도 됩니다.</p><div className="naver-settlement-sources">{sourceItems.map(({ icon: Icon, title, description }) => <div key={title} className="naver-settlement-source"><Icon size={20} aria-hidden="true" /><div><strong>{title}</strong><small>{description}</small></div></div>)}</div></section>}
+    </section> : <NaverVatStep3/>}
   </main>
 }

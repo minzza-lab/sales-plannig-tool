@@ -70,7 +70,14 @@ export const visibleEntries = (entries: SidebarEntry[], settings: NavigationSett
 export async function loadNavigationSettings(): Promise<NavigationSettings> {
   const { data, error } = await supabase.from('app_navigation_settings').select('settings').eq('id', 'main').maybeSingle()
   if (error) throw error
-  return data?.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) ? data.settings as NavigationSettings : {}
+  const settings = data?.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) ? structuredClone(data.settings) as NavigationSettings : {}
+  for (const id of ['naver-step-1', 'naver-step-2', 'naver-step-3']) {
+    const entry = settings[id]
+    if (!entry) continue
+    if (entry.title) entry.title = entry.title.replace(/\s*\(준비\s*중\)/g, '').trim()
+    if (entry.description?.startsWith('준비 중')) delete entry.description
+  }
+  return settings
 }
 
 export function useNavigationSettings() {
