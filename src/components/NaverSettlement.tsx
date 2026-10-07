@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Check, Download, FileSpreadsheet, Printer, Save, UploadCloud } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
+import { worksheetToPrintHtml } from '../lib/spreadsheetPrint'
 import './NaverSettlement.css'
 import NaverVatStep3 from './NaverVatStep3'
 
@@ -130,18 +131,6 @@ const normalizedNaverProduct = (row: BankRow, overrides: Record<string,string>) 
 }
 const isNaverPrintTarget = (product:string) => product.includes('객실취소위약금') || product.includes('히든힐스객실')
 const loadNaverMappings = (): Record<string,string> => { try { return JSON.parse(localStorage.getItem('naver-settlement-product-mappings') || '{}') } catch { return {} } }
-const excelColor = (color?: { argb?: string; indexed?: number; theme?: number; tint?: number }) => {
-  if (!color) return undefined
-  const indexed: Record<number,string> = {0:'000000',1:'FFFFFF',2:'FF0000',3:'00FF00',4:'0000FF',5:'FFFF00',6:'FF00FF',7:'00FFFF',8:'000000',9:'FFFFFF',10:'FF0000',11:'00FF00',12:'0000FF',13:'FFFF00',14:'FF00FF',15:'00FFFF',16:'800000',17:'008000',18:'000080',19:'808000',20:'800080',21:'008080',22:'C0C0C0',23:'808080',64:'000000'}
-  const theme: Record<number,string> = {0:'FFFFFF',1:'000000',2:'E7E6E6',3:'44546A',4:'5B9BD5',5:'ED7D31',6:'A5A5A5',7:'FFC000',8:'4472C4',9:'70AD47',10:'0563C1',11:'954F72'}
-  let hex = color.argb?.slice(-6) || (color.indexed != null ? indexed[color.indexed] : undefined) || (color.theme != null ? theme[color.theme] : undefined)
-  if (!hex) return undefined
-  if (color.tint) {
-    const tint = color.tint
-    hex = hex.match(/.{2}/g)!.map(part => { const value=parseInt(part,16); return Math.max(0,Math.min(255,Math.round(tint<0?value*(1+tint):value*(1-tint)+255*tint))).toString(16).padStart(2,'0') }).join('')
-  }
-  return `#${hex}`
-}
 const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string, seen = new Set<string>()): string | number | Date => {
   const cell = sheet.getCell(address)
   if (!cell.formula) return cell.value instanceof Date || typeof cell.value === 'string' || typeof cell.value === 'number' ? cell.value : ''
@@ -170,44 +159,6 @@ const worksheetCellValue = (sheet: import('exceljs').Worksheet, address: string,
   if (!/^[\d\s.+*/()\-]+$/.test(formula)) return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0
   try { const result = Function(`"use strict";return (${formula})`)(); return Number.isFinite(result) ? result : (typeof cell.result === 'number' ? cell.result : 0) } catch { return typeof cell.result === 'number' || typeof cell.result === 'string' ? cell.result : 0 }
 }
-const printWorksheetHtml = (sheet: import('exceljs').Worksheet) => {
-  const maxRow = 124; const maxColumn = 20
-  const widths=Array.from({length:maxColumn},(_,index)=>Math.max(4,sheet.getColumn(index+1).width||10));const totalWidth=widths.reduce((sum,width)=>sum+width,0)
-  const columns = widths.map(width=>`<col style="width:${(width/totalWidth*100).toFixed(3)}%">`).join('')
-  const rows:string[]=[];let naturalHeight=0
-  for(let rowNumber=1;rowNumber<=maxRow;rowNumber++){
-    const row=sheet.getRow(rowNumber); if(row.hidden)continue
-    const rowHeight=Math.max(12,(row.height||15)*.7);naturalHeight+=rowHeight
-    const cells:string[]=[]
-    for(let column=1;column<=maxColumn;column++){
-      const cell=row.getCell(column);const raw=worksheetCellValue(sheet,cell.address);let value:unknown=raw
-      if(raw instanceof Date)value=`${raw.getFullYear()}.${String(raw.getMonth()+1).padStart(2,'0')}.${String(raw.getDate()).padStart(2,'0')}`
-      else if(typeof raw==='number'){
-        if(cell.numFmt?.includes('%')){const decimals=(cell.numFmt.match(/\.([0#]+)/)?.[1].length)||0;value=`${(raw*100).toFixed(decimals)}%`}
-        else if(raw===0&&cell.numFmt?.includes('"-"'))value='-'
-        else if(cell.numFmt?.includes('#')||cell.numFmt?.includes('0')){const decimalCount=cell.numFmt.split(';')[0].match(/\.([0#]+)/)?.[1].length||0;const abs=Math.abs(raw).toLocaleString('ko-KR',{minimumFractionDigits:decimalCount,maximumFractionDigits:decimalCount});const negative=raw<0?(cell.numFmt.split(';')[1]?.includes('(')?`(${abs})`:`-${abs}`):abs;value=negative}
-        else value=Number.isInteger(raw)?raw.toLocaleString('ko-KR'):raw.toFixed(2)
-      }
-      const style=cell.style;const isNumeric=typeof raw==='number';const isTitle=rowNumber===1&&column===1;const css:string[]=[`text-align:${cell.alignment?.horizontal||(isNumeric?'right':'center')}`,'vertical-align:middle','overflow:hidden','white-space:nowrap','text-overflow:ellipsis']
-      css.push(`height:${rowHeight}px`)
-      if(style.font?.bold)css.push('font-weight:700');if(style.font?.italic)css.push('font-style:italic')
-      if(style.font?.size)css.push(`font-size:${Math.min(11,style.font.size)*.64*96/72}px`)
-      if(style.font?.name)css.push(`font-family:${JSON.stringify(style.font.name)},Arial,sans-serif`)
-      const fontColor=excelColor(style.font?.color as never);if(fontColor)css.push(`color:${fontColor}`)
-      if(style.fill?.type==='pattern'&&style.fill.pattern==='solid'){const fill=excelColor(style.fill.fgColor as never);if(fill)css.push(`background:${fill}`)}
-      if(isTitle)css.push('overflow:visible','text-overflow:clip','position:relative','z-index:2')
-      const edge=(side:string)=>{const border=(style.border as Record<string,{style?:string;color?:{argb?:string;indexed?:number;theme?:number;tint?:number}}>|undefined)?.[side];if(border?.style){const color=excelColor(border.color)||'#000000';return `${border.style==='medium'?2:border.style==='hair'?0.5:1}px solid ${color}`}return ''}
-      const borders=[`border-top:${edge('top')}`,`border-right:${edge('right')}`,`border-bottom:${edge('bottom')}`,`border-left:${edge('left')}`].filter(value=>!value.endsWith(':'))
-      css.push(...borders)
-      cells.push(`<td style="${css.join(';')}">${escapeHtml(value)}</td>`)
-    }
-    rows.push(`<tr>${cells.join('')}</tr>`)
-  }
-  // Match the workbook's landscape, one-page print setting while keeping all visible rows.
-  const scale=Math.min(1,720/Math.max(naturalHeight,1));const scaledHeight=naturalHeight*scale
-  return `<div class="sheet-fit" style="height:${scaledHeight.toFixed(2)}px"><table style="width:calc(100% / ${scale.toFixed(5)});transform:scale(${scale.toFixed(5)})"><colgroup>${columns}</colgroup><tbody>${rows.join('')}</tbody></table></div>`
-}
-
 const sourceItems = [
   { icon: FileSpreadsheet, title: '네이버 정산내역', description: '정산 기간 한 달치 엑셀 원본' },
   { icon: UploadCloud, title: '입금전표·계좌 입금내역', description: '같은 기간의 실제 입금액을 확인할 수 있는 파일' },
@@ -458,11 +409,11 @@ export default function NaverSettlement() {
         if(!sheetMatch||Number(sheetMatch[1])!==monthPart||Number(sheetMatch[2])!==dayPart)return false
         const offset=(sheetMatch[3]?Number(sheetMatch[3])-1:0)*100
         return rows.slice(offset,offset+100).some(row=>isNaverPrintTarget(normalizedNaverProduct(row,savedSettlementMappings)))
-      })).map(sheet=>`<section class="page">${printWorksheetHtml(sheet)}</section>`).join('')
+      })).map(sheet=>`<section class="page">${worksheetToPrintHtml(sheet,worksheetCellValue,690,true)}</section>`).join('')
       if(!pages){setSettlementMessage('인쇄 대상 시트가 없습니다. 상품명에 히든힐스객실 또는 객실취소위약금이 있는 날짜만 인쇄할 수 있습니다.');return}
       const printWindow=window.open('','_blank','width=1200,height=850')
       if(!printWindow){setSettlementMessage('인쇄 창이 차단되었습니다. 브라우저의 팝업을 허용해 주세요.');return}
-      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{width:285mm;height:198mm;overflow:hidden;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}.sheet-fit{position:relative;width:100%;overflow:hidden}table{position:absolute;top:0;left:0;border-collapse:collapse;table-layout:fixed;font-size:8px;transform-origin:top left}td{padding:1px;white-space:nowrap;text-align:center;line-height:1;overflow:hidden;text-overflow:ellipsis}@media screen{body{padding:18px;background:#e5e7eb}.page{margin:0 auto 18px;padding:0;background:#fff;box-shadow:0 3px 16px #0002}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
+      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 정산</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{width:277mm;height:190mm;overflow:hidden;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}.sheet-fit{position:relative;width:100%;overflow:hidden}table{position:absolute;top:0;left:0;border-collapse:collapse;table-layout:fixed;transform-origin:top left}td{line-height:1}@media screen{body{padding:18px;background:#e5e7eb}.page{margin:0 auto 18px;padding:0;background:#fff;box-shadow:0 3px 16px #0002}}</style></head><body>${pages}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close()
       setSettlementMessage('선택된 날짜 시트의 인쇄 창을 열었습니다.')
     } catch(error){setSettlementMessage(error instanceof Error?error.message:'인쇄 자료를 준비하지 못했습니다.')} finally{setSettlementBusy(false)}
   }

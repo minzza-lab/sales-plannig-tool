@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Download, FileSpreadsheet, UploadCloud } from 'lucide-react'
+import { Download, FileSpreadsheet, Printer, UploadCloud } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { buildNaverVatStep3Workbook, NAVER_VAT_CATEGORIES } from '../lib/naverVatStep3Workbook'
+import { worksheetToPrintHtml } from '../lib/spreadsheetPrint'
 
 type Row = Record<string, unknown>
 type ProductMap = Record<string, { product: string; voucher: string }>
@@ -104,13 +105,24 @@ export default function NaverVatStep3() {
   const save=async()=>{setBusy(true);try{const {data:auth}=await supabase.auth.getUser();const {error}=await supabase.from('naver_vat_step3_settings').upsert({id:'main',product_mappings:mappings,updated_at:new Date().toISOString(),updated_by:auth.user?.id??null},{onConflict:'id'});if(error)throw error;setSaved(mappings);setMessage('상품별 수수료 구분을 팀 공용 설정으로 저장했습니다.')}catch(error){setMessage(`공유 설정을 저장하지 못했습니다. ${error instanceof Error?error.message:''}`)}finally{setBusy(false)}}
   const update=(product:string,value:string)=>setMappings(current=>({...current,[product]:{product:current[product]?.product??product,voucher:value}}))
 
-  const exportExcel=async()=>{
-    const {saveAs}=await import('file-saver')
+  const createWorkbook=async()=>{
     const template=await fetch('/templates/naver-vat-step3-template.xlsx')
     if(!template.ok)throw new Error('수수료 내역 양식 파일을 불러오지 못했습니다.')
     const details=feeRows.filter(row=>baseDate(row).startsWith(month)).map(row=>{const product=productFor(row);const parts=feeParts(row);const amount=(label:string)=>parts.find(part=>part.label===label)?.amount||0;return{date:baseDate(row),product,order:get(row,['주문번호']),productOrder:get(row,['상품주문번호']),npayFee:amount('Npay 수수료(B)'),salesFee:amount('매출연동 수수료(C)'),installmentFee:amount('무이자할부 수수료(D)'),total:Math.abs(feeAmount(row)),category:mappings[product]?.voucher||guessCategory(product)||'미분류'}})
-    const result=await buildNaverVatStep3Workbook({template:await template.arrayBuffer(),month,dates,totals,details})
-    saveAs(new Blob([result.slice().buffer as ArrayBuffer]),file.replace(/\.(xlsx|xls)$/i,'')+'_최종수수료내역.xlsx')
+    return buildNaverVatStep3Workbook({template:await template.arrayBuffer(),month,dates,totals,details})
+  }
+  const exportExcel=async()=>{const {saveAs}=await import('file-saver');const result=await createWorkbook();saveAs(new Blob([result.slice().buffer as ArrayBuffer]),file.replace(/\.(xlsx|xls)$/i,'')+'_최종수수료내역.xlsx')}
+  const printSummary=async()=>{
+    const printWindow=window.open('','_blank','width=1200,height=850')
+    if(!printWindow){setMessage('인쇄 창이 차단되었습니다. 브라우저의 팝업을 허용해 주세요.');return}
+    setBusy(true);setMessage('첫 번째 월별 수수료 시트를 인쇄용으로 준비하고 있습니다…')
+    try{
+      const bytes=await createWorkbook();const ExcelJS=await import('exceljs');const book=new ExcelJS.Workbook();await book.xlsx.load(bytes.slice().buffer as ArrayBuffer)
+      const firstSheet=book.worksheets[0]
+      if(!firstSheet)throw new Error('인쇄할 첫 번째 시트를 찾지 못했습니다.')
+      const content=worksheetToPrintHtml(firstSheet,(sheet,address)=>{const cell=sheet.getCell(address);const value=cell.value;if(value instanceof Date||typeof value==='string'||typeof value==='number')return value;if(value&&typeof value==='object'&&'result'in value)return (value as {result?:string|number}).result??'';return ''})
+      printWindow.document.open();printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${month} 네이버 수수료 내역</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}html,body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111}.page{width:277mm;height:190mm;overflow:hidden}.sheet-fit{position:relative;width:100%;overflow:hidden}table{position:absolute;top:0;left:0;border-collapse:collapse;table-layout:fixed;transform-origin:top left}td{line-height:1}@media screen{body{padding:18px;background:#e5e7eb}.page{margin:0 auto;padding:0;background:#fff;box-shadow:0 3px 16px #0002}}</style></head><body><main class="page">${content}</main><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);printWindow.document.close();setMessage('첫 번째 월별 수수료 시트를 인쇄 창으로 열었습니다.')
+    }catch(error){printWindow.close();setMessage(error instanceof Error?error.message:'인쇄 자료를 준비하지 못했습니다.')}finally{setBusy(false)}
   }
 
   return <section className="naver-settlement-card naver-vat-step3"><div className="naver-verification-heading"><div><span>STEP 03 · VAT & VOUCHER</span><h2>부가세 정산 · 월별 수수료 내역</h2><p>STEP 3에 올린 수수료 원본의 상품명을 분류하고, 같은 파일에 있는 수수료 금액을 정산기준일별로 집계해 월별 수수료 내역으로 출력합니다.</p></div><FileSpreadsheet size={30}/></div>
@@ -120,7 +132,7 @@ export default function NaverVatStep3() {
       <div className="naver-vat-step3-mapping"><h3>상품별 월별표 구분</h3><p>상품명 기준으로 구분을 제안합니다. 비어 있는 상품명처럼 분류가 불확실한 항목은 직접 선택해 저장하세요.</p><div className="naver-vat-step3-list">{products.map(product=><label key={product}><span title={product}>{product}</span><select value={mappings[product]?.voucher||guessCategory(product)} onChange={event=>update(product,event.target.value)} aria-label={`${product} 월별표 구분`}><option value="">구분 선택</option>{CATEGORIES.map(category=><option key={category} value={category}>{category}</option>)}</select></label>)}</div><div className="naver-step2-savebar"><span className={unsaved?'unsaved':'saved'}>{unsaved?'저장되지 않은 변경이 있습니다.':unassigned.length?`미분류 상품 ${unassigned.length}종`:'팀 공용 기준과 일치합니다.'}</span><button type="button" disabled={!unsaved||busy} onClick={()=>void save()}>{busy?'저장 중…':'구분 기준 저장'}</button></div></div>
       <h3>{month} 날짜별 수수료 집계</h3><div className="naver-verification-table-wrap"><table><thead><tr><th>정산기준일</th><th>월별표 구분</th><th>공급가액</th><th>세액</th><th>소계</th><th>수수료 건수</th></tr></thead><tbody>{totals.map(item=><tr key={`${item.date}-${item.category}`}><td>{item.date}</td><td>{item.category||'미분류'}</td><td>{item.supply.toLocaleString(undefined,{maximumFractionDigits:2})}원</td><td>{item.tax.toLocaleString(undefined,{maximumFractionDigits:2})}원</td><td>{item.total.toLocaleString()}원</td><td>{item.count}건</td></tr>)}</tbody></table></div>
       <div className="naver-vat-step3-mapping naver-vat-invoice-check"><h3>세금계산서 금액 검증</h3><p>네이버 세금계산서 목록의 표를 복사해 붙여넣으면 날짜와 공급가액·세액을 자동으로 읽어 이번 달 수수료 합계와 비교합니다.</p><textarea value={taxInvoiceText} onChange={event=>setTaxInvoiceText(event.target.value)} rows={5} placeholder="네이버 세금계산서 목록을 복사해 여기에 붙여넣으세요." aria-label="세금계산서 목록 붙여넣기"/>{taxInvoices.length>0&&<><div className="naver-verification-table-wrap"><table><thead><tr><th>발행일</th><th>공급자</th><th>구분</th><th>공급가액</th><th>세액</th><th>상태</th><th>합계</th></tr></thead><tbody>{taxInvoices.map((row,index)=><tr key={`${row.date}-${index}`}><td>{row.date}</td><td>{row.supplier}</td><td>{row.category}</td><td>{row.supply.toLocaleString()}원</td><td>{row.tax.toLocaleString()}원</td><td>{row.status}</td><td>{(row.supply+row.tax).toLocaleString()}원</td></tr>)}</tbody></table></div><p className={invoiceDifference===0?'naver-vat-invoice-match':'naver-vat-invoice-mismatch'}>로우데이터 수수료 합계 {feeGrandTotal.toLocaleString()}원 · 세금계산서 합계 {invoiceGrandTotal.toLocaleString()}원 · 차이 {invoiceDifference.toLocaleString()}원 {invoiceDifference===0?'일치':'확인 필요'}</p></>}</div>
-      <div className="naver-verification-actions"><button className="primary" type="button" disabled={unsaved||busy||unassigned.length>0||totals.length===0} onClick={()=>void exportExcel()}><Download size={16}/>최종 수수료 내역 엑셀 다운로드</button>{unassigned.length>0&&<span className="naver-verification-message">모든 상품의 월별표 구분을 입력하고 저장해야 다운로드할 수 있습니다.</span>}</div>
+      <div className="naver-verification-actions"><button className="primary" type="button" disabled={unsaved||busy||unassigned.length>0||totals.length===0} onClick={()=>void exportExcel()}><Download size={16}/>최종 수수료 내역 엑셀 다운로드</button><button type="button" disabled={unsaved||busy||unassigned.length>0||totals.length===0} onClick={()=>void printSummary()}><Printer size={16}/>첫 시트 바로 인쇄</button>{unassigned.length>0&&<span className="naver-verification-message">모든 상품의 월별표 구분을 입력하고 저장해야 다운로드와 인쇄를 할 수 있습니다.</span>}</div>
     </>}
   </section>
 }

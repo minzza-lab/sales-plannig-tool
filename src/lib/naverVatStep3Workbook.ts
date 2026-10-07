@@ -10,7 +10,8 @@ export async function buildNaverVatStep3Workbook(input: {
   totals: NaverFeeTotal[]
   details: NaverFeeDetail[]
 }): Promise<Uint8Array> {
-  const ExcelJS = await import('exceljs')
+  const ExcelJSModule = await import('exceljs')
+  const ExcelJS = ExcelJSModule.default ?? ExcelJSModule
   const book = new ExcelJS.Workbook()
   await book.xlsx.load(input.template)
   book.creator = 'WELLIHILLI Sales Planning'
@@ -70,8 +71,9 @@ export async function buildNaverVatStep3Workbook(input: {
         const subtotalLetter = summary.getColumn(start + 2).letter
         const supplyLetter = summary.getColumn(start).letter
         const roundSupply = [1, 5, 6, 7].includes(index)
-        supplyCell.value = { formula: roundSupply ? `ROUND(${subtotalLetter}${rowNumber}/1.1,0)` : `${subtotalLetter}${rowNumber}/1.1` }
-        taxCell.value = { formula: `${subtotalLetter}${rowNumber}-${supplyLetter}${rowNumber}` }
+        const supply = roundSupply ? Math.round(subtotal / 1.1) : subtotal / 1.1
+        supplyCell.value = { formula: roundSupply ? `ROUND(${subtotalLetter}${rowNumber}/1.1,0)` : `${subtotalLetter}${rowNumber}/1.1`, result: supply }
+        taxCell.value = { formula: `${subtotalLetter}${rowNumber}-${supplyLetter}${rowNumber}`, result: subtotal - supply }
       }
       summary.getCell(rowNumber, start + 2).value = subtotal
     })
@@ -79,9 +81,15 @@ export async function buildNaverVatStep3Workbook(input: {
 
   for (let index = 0; index < 16; index++) {
     const start = 2 + index * 3
+    const category = categories[index]
+    const categoryTotals = input.totals.filter(item => item.category === category)
+    const roundSupply = [1, 5, 6, 7].includes(index)
+    const totalSupply = categoryTotals.reduce((sum, item) => sum + (roundSupply ? Math.round(item.total / 1.1) : item.total / 1.1), 0)
+    const totalTax = categoryTotals.reduce((sum, item) => sum + item.total - (roundSupply ? Math.round(item.total / 1.1) : item.total / 1.1), 0)
+    const totalFee = categoryTotals.reduce((sum, item) => sum + item.total, 0)
     for (let offset = 0; offset < 3; offset++) {
       const letter = summary.getColumn(start + offset).letter
-      summary.getCell(totalRow, start + offset).value = { formula: `SUM(${letter}${firstDateRow}:${letter}${lastDateRow})` }
+      summary.getCell(totalRow, start + offset).value = { formula: `SUM(${letter}${firstDateRow}:${letter}${lastDateRow})`, result: [totalSupply, totalTax, totalFee][offset] }
     }
   }
   summary.getCell(totalRow, 1).value = '합 계'
@@ -89,13 +97,20 @@ export async function buildNaverVatStep3Workbook(input: {
   const taxLetters = Array.from({ length: 16 }, (_, index) => summary.getColumn(3 + index * 3).letter)
   for (let index = 0; index < input.dates.length; index++) {
     const rowNumber = firstDateRow + index
-    summary.getCell(rowNumber, 50).value = { formula: `SUM(${supplyLetters.map(letter => `${letter}${rowNumber}`).join(',')})` }
-    summary.getCell(rowNumber, 51).value = { formula: `SUM(${taxLetters.map(letter => `${letter}${rowNumber}`).join(',')})` }
-    summary.getCell(rowNumber, 52).value = { formula: `ROUND(SUM(AX${rowNumber}:AY${rowNumber}),1)` }
+    const dayTotals = input.totals.filter(item => item.date === input.dates[index])
+    const supply = dayTotals.reduce((sum, item) => { const categoryIndex = NAVER_VAT_CATEGORIES.indexOf(item.category); return sum + ([1, 5, 6, 7].includes(categoryIndex) ? Math.round(item.total / 1.1) : item.total / 1.1) }, 0)
+    const tax = dayTotals.reduce((sum, item) => { const categoryIndex = NAVER_VAT_CATEGORIES.indexOf(item.category); return sum + item.total - ([1, 5, 6, 7].includes(categoryIndex) ? Math.round(item.total / 1.1) : item.total / 1.1) }, 0)
+    const total = Math.round((supply + tax) * 10) / 10
+    summary.getCell(rowNumber, 50).value = { formula: `SUM(${supplyLetters.map(letter => `${letter}${rowNumber}`).join(',')})`, result: supply }
+    summary.getCell(rowNumber, 51).value = { formula: `SUM(${taxLetters.map(letter => `${letter}${rowNumber}`).join(',')})`, result: tax }
+    summary.getCell(rowNumber, 52).value = { formula: `ROUND(SUM(AX${rowNumber}:AY${rowNumber}),1)`, result: total }
   }
-  summary.getCell(totalRow, 50).value = { formula: `SUM(AX${firstDateRow}:AX${lastDateRow})` }
-  summary.getCell(totalRow, 51).value = { formula: `SUM(AY${firstDateRow}:AY${lastDateRow})` }
-  summary.getCell(totalRow, 52).value = { formula: `ROUNDDOWN(SUM(AZ${firstDateRow}:AZ${lastDateRow}),0)` }
+  const grandSupply = input.totals.reduce((sum, item) => { const categoryIndex = NAVER_VAT_CATEGORIES.indexOf(item.category); return sum + ([1, 5, 6, 7].includes(categoryIndex) ? Math.round(item.total / 1.1) : item.total / 1.1) }, 0)
+  const grandTax = input.totals.reduce((sum, item) => { const categoryIndex = NAVER_VAT_CATEGORIES.indexOf(item.category); return sum + item.total - ([1, 5, 6, 7].includes(categoryIndex) ? Math.round(item.total / 1.1) : item.total / 1.1) }, 0)
+  const grandTotal = Math.floor(input.totals.reduce((sum, item) => sum + Math.round(item.total * 10) / 10, 0))
+  summary.getCell(totalRow, 50).value = { formula: `SUM(AX${firstDateRow}:AX${lastDateRow})`, result: grandSupply }
+  summary.getCell(totalRow, 51).value = { formula: `SUM(AY${firstDateRow}:AY${lastDateRow})`, result: grandTax }
+  summary.getCell(totalRow, 52).value = { formula: `ROUNDDOWN(SUM(AZ${firstDateRow}:AZ${lastDateRow}),0)`, result: grandTotal }
   summary.pageSetup.printArea = `A1:AZ${totalRow}`
   summary.pageSetup.fitToPage = true
   summary.pageSetup.fitToWidth = 1
