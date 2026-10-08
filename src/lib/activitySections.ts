@@ -15,6 +15,8 @@ export const activitySections: Record<string, string> = {
   "/tools/water-operations": "워터 운영 통합 현황",
   "/tools/waterpark-sales": "워터파크 매출 관리",
   "/tools/water-operations-analysis": "워터 권종·대여 분석",
+  "/tools/competitor-waterpark-sales": "동종사 워터파크 매출현황",
+  "/tools/competitor-occupancy": "동종사 가동률 현황",
   "/tools/room-state": "객실 투숙 현황",
   "/tools/sports-sales": "리조트 발권 현황",
   "/tools/nicepay-settlement": "나이스페이 정산 분리기",

@@ -40,6 +40,8 @@ export const categories: ToolCategory[] = [
       { id: 'water-operations', title: '워터 운영 통합 현황', description: '매출·권종·대여상품 가동률을 한 화면에서 확인합니다.', icon: '📍', path: '/tools/water-operations' },
       { id: 'waterpark-sales', title: '워터파크 매출 관리', description: '일별 실적과 날씨, 전년 데이터를 함께 분석합니다.', icon: '🌊', path: '/tools/waterpark-sales' },
       { id: 'water-operations-analysis', title: '워터 권종·대여 분석', description: '권종 구성·취소와 대여 상품 사용 현황을 분석합니다.', icon: '🛟', path: '/tools/water-operations-analysis' },
+      { id: 'competitor-waterpark-sales', title: '동종사 워터파크 매출현황', description: '동종사 입장객·총매출·객단가를 비교하고 웰리힐리의 위치를 분석합니다.', icon: '📊', path: '/tools/competitor-waterpark-sales' },
+      { id: 'competitor-occupancy', title: '동종사 가동률 현황', description: '1월부터 8월까지 동종사 객실 가동률과 웰리힐리의 순위를 비교합니다.', icon: '📈', path: '/tools/competitor-occupancy' },
       { id: 'room-state', title: '객실 투숙 현황', description: '날짜별 객실 구성과 단체 입·퇴실 일정을 확인합니다.', icon: '🏨', path: '/tools/room-state' },
       { id: 'sports-sales', title: '리조트 발권 현황', description: '일자별 스포츠 발권수와 업장별 매출을 확인합니다.', icon: '🎟️', path: '/tools/sports-sales' },
       { id: 'season-pass-tracker', title: '시즌권 주문 추적', description: '목표 대비 판매 실적과 권종별 주문을 관리합니다.', icon: '🎟️', path: '/tools/season-pass-tracker' },

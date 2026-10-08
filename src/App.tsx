@@ -21,6 +21,8 @@ const AutomationRequest = lazy(() => import('./components/AutomationRequest'))
 const WaterParkSales = lazy(() => import('./components/WaterParkSales'))
 const WaterOperationsDashboard = lazy(() => import('./components/WaterOperationsDashboard'))
 const WaterOperationsAnalysis = lazy(() => import('./components/WaterOperationsAnalysis'))
+const CompetitorWaterparkSales = lazy(() => import('./components/CompetitorWaterparkSales'))
+const CompetitorOccupancy = lazy(() => import('./components/CompetitorOccupancy'))
 const NicepaySettlement = lazy(() => import('./components/NicepaySettlement'))
 const NaverSettlement = lazy(() => import('./components/NaverSettlement'))
 const NicepayVatSettlement = lazy(() => import('./components/NicepayVatSettlement'))
@@ -117,6 +119,8 @@ function App() {
                 <Route path="tools/waterpark-sales" element={<WaterParkSales />} />
                 <Route path="tools/water-operations" element={<WaterOperationsDashboard />} />
                 <Route path="tools/water-operations-analysis" element={<WaterOperationsAnalysis />} />
+                <Route path="tools/competitor-waterpark-sales" element={<CompetitorWaterparkSales />} />
+                <Route path="tools/competitor-occupancy" element={<CompetitorOccupancy />} />
                 <Route path="tools/nicepay-settlement" element={<NicepaySettlement />} />
                 <Route path="tools/naver-settlement" element={<NaverSettlement />} />
                 <Route path="tools/nicepay-vat-settlement" element={<NicepayVatSettlement />} />

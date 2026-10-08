@@ -29,6 +29,8 @@ export const sidebarEntries: SidebarEntry[] = [
   { id: 'water-operations', title: '워터 운영 통합 현황', icon: '📍', path: '/tools/water-operations', section: 'sales' },
   { id: 'waterpark-sales', title: '워터파크 매출 관리', icon: '🌊', path: '/tools/waterpark-sales', section: 'sales' },
   { id: 'water-operations-analysis', title: '워터 권종·대여 분석', icon: '🛟', path: '/tools/water-operations-analysis', section: 'sales' },
+  { id: 'competitor-waterpark-sales', title: '동종사 워터파크 매출현황', icon: '📊', path: '/tools/competitor-waterpark-sales', section: 'sales' },
+  { id: 'competitor-occupancy', title: '동종사 가동률 현황', icon: '📈', path: '/tools/competitor-occupancy', section: 'sales' },
   { id: 'room-state', title: '객실 투숙 현황', icon: '🏨', path: '/tools/room-state', section: 'sales' },
   { id: 'sports-sales', title: '리조트 발권 현황', icon: '🎟️', path: '/tools/sports-sales', section: 'sales' },
   { id: 'season-pass-tracker', title: '시즌권 주문 추적 관리', icon: '🎟️', path: '/tools/season-pass-tracker', section: 'sales' },
