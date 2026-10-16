@@ -130,7 +130,8 @@ export default function MetaAdsManager() {
         if (!amount || (!dateValue && !transactionId)) return null
         const paymentMethod = methodIndex >= 0 ? String(row[methodIndex] ?? '').trim() : ''
         const kindText = `${kindIndex >= 0 ? String(row[kindIndex] ?? '') : ''} ${paymentMethod}`
-        const kind: PaymentKind = /충전|추가|입금|top.?up|credit/i.test(kindText) ? '충전' : /선불\s*잔액|광고|사용|청구|spend|charge/i.test(kindText) || /청구 보고서|Meta 광고 결제|invoice summary/i.test(reportContext) ? '사용' : '기타'
+        const isCardOrFundingMethod = Boolean(paymentMethod) && !/해당\s*사항\s*없음|선불\s*잔액/i.test(paymentMethod)
+        const kind: PaymentKind = /충전|추가|입금|top.?up|credit/i.test(kindText) || (isCardOrFundingMethod && /청구 보고서|Meta 광고 결제|invoice summary/i.test(reportContext)) ? '충전' : /선불\s*잔액|광고|사용|청구|spend|charge/i.test(kindText) || /청구 보고서|Meta 광고 결제|invoice summary/i.test(reportContext) ? '사용' : '기타'
         return { id: `meta-payment-${Date.now()}-${rowIndex}`, date: paymentDate(dateValue), transactionId: transactionId || '-', amount, paymentMethod: paymentMethod || '-', status: statusIndex >= 0 ? String(row[statusIndex] ?? '').trim() : '-', invoiceId: invoiceIndex >= 0 ? String(row[invoiceIndex] ?? '').trim() : '-', kind }
       }).filter((item): item is PaymentActivity => Boolean(item))
       if (!imported.length) throw new Error('가져올 결제 활동 행이 없습니다.')
