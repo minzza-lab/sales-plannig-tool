@@ -13,6 +13,49 @@ type MetaInsight = {
   reach?: string
 }
 
+type MetaAdSet = {
+  campaign_id?: string
+  targeting?: {
+    age_min?: number
+    age_max?: number
+    genders?: number[]
+    geo_locations?: { countries?: string[]; regions?: { name?: string }[]; cities?: { name?: string }[] }
+    interests?: { name?: string }[]
+    flexible_spec?: { interests?: { name?: string }[] }[]
+    excluded_custom_audiences?: { name?: string }[]
+    custom_audiences?: { name?: string }[]
+    publisher_platforms?: string[]
+    facebook_positions?: string[]
+    instagram_positions?: string[]
+    device_platforms?: string[]
+  }
+}
+
+const join = (values: unknown[] | undefined) => (values || []).filter(Boolean).join(', ')
+const summarizeTargeting = (targeting: MetaAdSet['targeting']) => {
+  if (!targeting) return ''
+  const parts: string[] = []
+  if (targeting.age_min || targeting.age_max) parts.push(`연령 ${targeting.age_min || 13}-${targeting.age_max || 65}`)
+  if (targeting.genders?.length) parts.push(`성별 ${targeting.genders.map(gender => gender === 1 ? '남성' : gender === 2 ? '여성' : '전체').join('/')}`)
+  const locations = [
+    ...(targeting.geo_locations?.countries || []),
+    ...(targeting.geo_locations?.regions || []).map(region => region.name),
+    ...(targeting.geo_locations?.cities || []).map(city => city.name),
+  ].filter(Boolean)
+  if (locations.length) parts.push(`지역 ${join(locations)}`)
+  const interests = [
+    ...(targeting.interests || []).map(interest => interest.name),
+    ...(targeting.flexible_spec || []).flatMap(spec => (spec.interests || []).map(interest => interest.name)),
+  ].filter(Boolean)
+  if (interests.length) parts.push(`관심사 ${join(interests)}`)
+  if (targeting.custom_audiences?.length) parts.push(`맞춤 ${join(targeting.custom_audiences.map(audience => audience.name))}`)
+  if (targeting.excluded_custom_audiences?.length) parts.push(`제외 맞춤 ${join(targeting.excluded_custom_audiences.map(audience => audience.name))}`)
+  if (targeting.publisher_platforms?.length) parts.push(`플랫폼 ${join(targeting.publisher_platforms)}`)
+  if (targeting.facebook_positions?.length || targeting.instagram_positions?.length) parts.push(`게재위치 ${join([...(targeting.facebook_positions || []), ...(targeting.instagram_positions || [])])}`)
+  if (targeting.device_platforms?.length) parts.push(`기기 ${join(targeting.device_platforms)}`)
+  return parts.join(' · ')
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
@@ -40,10 +83,23 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   else endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
   endpoint.searchParams.set('limit', '500')
 
-  const response = await fetch(endpoint)
+  const adSetsEndpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/adsets`)
+  adSetsEndpoint.searchParams.set('access_token', token)
+  adSetsEndpoint.searchParams.set('fields', 'id,campaign_id,name,targeting')
+  adSetsEndpoint.searchParams.set('limit', '500')
+
+  const [response, adSetsResponse] = await Promise.all([fetch(endpoint), fetch(adSetsEndpoint)])
   const payload = await response.json() as { data?: MetaInsight[]; error?: { message?: string; code?: number } }
+  const adSetsPayload = await adSetsResponse.json() as { data?: MetaAdSet[] }
   if (!response.ok || payload.error) {
     return json({ error: payload.error?.message || 'Meta API request failed.', code: payload.error?.code }, response.status >= 400 ? response.status : 502)
+  }
+
+  const targetingsByCampaign = new Map<string, string>()
+  for (const adSet of adSetsPayload.data || []) {
+    if (!adSet.campaign_id || targetingsByCampaign.has(adSet.campaign_id)) continue
+    const targeting = summarizeTargeting(adSet.targeting)
+    if (targeting) targetingsByCampaign.set(adSet.campaign_id, targeting)
   }
 
   const items = (payload.data || []).map((row) => ({
@@ -54,7 +110,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     budget: 0,
     actual: Number(row.spend || 0),
     status: '완료' as const,
-    memo: `노출 ${Number(row.impressions || 0).toLocaleString('ko-KR')} · 클릭 ${Number(row.clicks || 0).toLocaleString('ko-KR')} · 도달 ${Number(row.reach || 0).toLocaleString('ko-KR')}`,
+    targeting: targetingsByCampaign.get(row.campaign_id || '') || '',
+    memo: `노출 ${Number(row.impressions || 0).toLocaleString('ko-KR')} · 클릭 ${Number(row.clicks || 0).toLocaleString('ko-KR')} · 도달 ${Number(row.reach || 0).toLocaleString('ko-KR')}${targetingsByCampaign.get(row.campaign_id || '') ? ` · 타겟 ${targetingsByCampaign.get(row.campaign_id || '')}` : ''}`,
   }))
 
   return json({ period, month: month || null, since, until, items })

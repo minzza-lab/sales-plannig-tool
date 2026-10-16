@@ -9,6 +9,7 @@ type Campaign = {
   name: string
   actual: number
   memo: string
+  targeting?: string
 }
 
 const CHARGED_KEY = 'sales-planning-meta-charged-v1'
@@ -18,7 +19,7 @@ const numberFromMemo = (memo: string, label: string) => Number(memo.match(new Re
 const won = (value: number) => `${Math.round(value).toLocaleString('ko-KR')}원`
 
 export default function MetaAdsManager() {
-  const [period, setPeriod] = useState<'month' | 'all'>('month')
+  const [period, setPeriod] = useState<'month' | 'all'>('all')
   const [month, setMonth] = useState(currentMonth)
   const [chargedAmount, setChargedAmount] = useState(() => localStorage.getItem(CHARGED_KEY) || '')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -138,7 +139,7 @@ export default function MetaAdsManager() {
     <div className="meta-manager-summary"><article><span>캠페인</span><strong>{campaigns.length}개</strong></article><article><span>광고비</span><strong>{won(totals.spend)}</strong></article><article><span>노출</span><strong>{totals.impressions.toLocaleString('ko-KR')}</strong></article><article><span>클릭</span><strong>{totals.clicks.toLocaleString('ko-KR')}</strong><small>CTR {totals.impressions ? (totals.clicks / totals.impressions * 100).toFixed(2) : '0.00'}%</small></article></div>
 
     <div className="meta-manager-grid">
-      <article className="meta-panel campaign-panel"><div className="meta-panel-heading"><div><p className="eyebrow">CAMPAIGN PERFORMANCE</p><h2>캠페인 성과</h2></div><BarChart3 size={20} /></div><div className="meta-table-wrap"><table><thead><tr><th>캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>도달</th><th>CTR</th></tr></thead><tbody>{campaigns.length === 0 ? <tr><td colSpan={6} className="meta-empty">선택한 월의 캠페인이 없습니다.</td></tr> : campaigns.map(campaign => { const impressions = numberFromMemo(campaign.memo, '노출'); const clicks = numberFromMemo(campaign.memo, '클릭'); return <tr key={campaign.id}><td>{campaign.name}</td><td>{won(campaign.actual)}</td><td>{impressions.toLocaleString('ko-KR')}</td><td>{clicks.toLocaleString('ko-KR')}</td><td>{numberFromMemo(campaign.memo, '도달').toLocaleString('ko-KR')}</td><td>{impressions ? `${(clicks / impressions * 100).toFixed(2)}%` : '0.00%'}</td></tr> })}</tbody></table></div></article>
+      <article className="meta-panel campaign-panel"><div className="meta-panel-heading"><div><p className="eyebrow">CAMPAIGN PERFORMANCE</p><h2>캠페인 성과</h2></div><BarChart3 size={20} /></div><div className="meta-table-wrap"><table><thead><tr><th>캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>도달</th><th>CTR</th><th>상세 타겟</th></tr></thead><tbody>{campaigns.length === 0 ? <tr><td colSpan={7} className="meta-empty">선택한 기간의 캠페인이 없습니다.</td></tr> : campaigns.map(campaign => { const impressions = numberFromMemo(campaign.memo, '노출'); const clicks = numberFromMemo(campaign.memo, '클릭'); return <tr key={campaign.id}><td>{campaign.name}</td><td>{won(campaign.actual)}</td><td>{impressions.toLocaleString('ko-KR')}</td><td>{clicks.toLocaleString('ko-KR')}</td><td>{numberFromMemo(campaign.memo, '도달').toLocaleString('ko-KR')}</td><td>{impressions ? `${(clicks / impressions * 100).toFixed(2)}%` : '0.00%'}</td><td className="meta-targeting-cell">{campaign.targeting || '확인되지 않음'}</td></tr> })}</tbody></table></div></article>
 
     </div>
   </section>
