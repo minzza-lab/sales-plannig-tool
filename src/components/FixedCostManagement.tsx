@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, ChevronDown, Megaphone, MessageCircle, Plus, Save, Trash2 } from 'lucide-react'
+import { CalendarDays, ChevronDown, Megaphone, MessageCircle, Plus, Save, Trash2, Upload } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import './FixedCostManagement.css'
 
 type Channel = 'meta' | 'kakao'
@@ -24,6 +25,16 @@ const seedItems: CostItem[] = [
 
 const formatWon = (value: number) => `${Math.round(value || 0).toLocaleString('ko-KR')}원`
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const normalizeHeader = (value: unknown) => String(value ?? '').replace(/\s+/g, '').toLowerCase()
+const firstColumn = (headers: string[], names: string[]) => headers.findIndex(header => names.some(name => header.includes(name)))
+const amountFromCell = (value: unknown) => Number(String(value ?? '').replace(/[^\d.-]/g, '')) || 0
+const dateFromCell = (value: unknown, fallback: string) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10)
+  const text = String(value ?? '').trim()
+  const match = text.match(/(20\d{2})[./-](\d{1,2})(?:[./-](\d{1,2}))?/)
+  if (!match) return `${fallback}-01`
+  return `${match[1]}-${match[2].padStart(2, '0')}-${(match[3] || '01').padStart(2, '0')}`
+}
 
 export default function FixedCostManagement() {
   const [items, setItems] = useState<CostItem[]>(() => {
@@ -71,6 +82,41 @@ export default function FixedCostManagement() {
     }
   }
 
+  const importKakaoReport = async (file: File) => {
+    setSyncing(true)
+    setSyncMessage('카카오모먼트 보고서를 읽는 중입니다.')
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+      const headerIndex = matrix.findIndex(row => row.some(cell => /캠페인|광고그룹|소재/.test(String(cell))) && row.some(cell => /광고비|비용|소진|spend/i.test(String(cell))))
+      if (headerIndex < 0) throw new Error('캠페인명과 광고비 열을 찾지 못했습니다. 카카오모먼트 보고서 파일인지 확인해 주세요.')
+      const headers = matrix[headerIndex].map(normalizeHeader)
+      const nameIndex = firstColumn(headers, ['캠페인명', '캠페인', '광고그룹명', '광고그룹', '소재명'])
+      const spendIndex = firstColumn(headers, ['광고비', '비용', '소진금액', '소진', 'spend'])
+      const impressionsIndex = firstColumn(headers, ['노출수', '노출', 'impressions'])
+      const clicksIndex = firstColumn(headers, ['클릭수', '클릭', 'clicks'])
+      const reachIndex = firstColumn(headers, ['도달수', '도달', 'reach'])
+      const dateIndex = firstColumn(headers, ['날짜', '일자', '기준일', 'date', '기간'])
+      if (nameIndex < 0 || spendIndex < 0) throw new Error('캠페인명 또는 광고비 열을 찾지 못했습니다.')
+      const imported: CostItem[] = matrix.slice(headerIndex + 1).map((row, rowIndex) => {
+        const name = String(row[nameIndex] ?? '').trim()
+        if (!name) return null
+        const spend = amountFromCell(row[spendIndex])
+        const impressions = impressionsIndex >= 0 ? amountFromCell(row[impressionsIndex]) : 0
+        const clicks = clicksIndex >= 0 ? amountFromCell(row[clicksIndex]) : 0
+        const reach = reachIndex >= 0 ? amountFromCell(row[reachIndex]) : 0
+        const memoParts = [`노출 ${impressions.toLocaleString('ko-KR')}`, `클릭 ${clicks.toLocaleString('ko-KR')}`, `도달 ${reach.toLocaleString('ko-KR')}`]
+        return { id: `kakao-import-${Date.now()}-${rowIndex}`, channel: 'kakao', date: dateFromCell(dateIndex >= 0 ? row[dateIndex] : '', month), name, budget: 0, actual: spend, status: '완료', memo: memoParts.join(' · ') }
+      }).filter((item): item is CostItem => Boolean(item && item.name))
+      if (!imported.length) throw new Error('가져올 캠페인 행이 없습니다.')
+      setItems(current => [...current.filter(item => !(item.channel === 'kakao' && item.id.startsWith('kakao-import-'))), ...imported])
+      setSyncMessage(`${imported.length}개 카카오 캠페인을 반영했습니다.`)
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : '카카오 보고서를 읽지 못했습니다.')
+    } finally { setSyncing(false) }
+  }
+
   return <section className="fixed-cost-page">
     <div className="fixed-cost-hero">
       <div>
@@ -78,7 +124,7 @@ export default function FixedCostManagement() {
         <h1>고정비 관리</h1>
         <p className="hero-description">광고·메시지 채널의 월별 예산과 실제 집행액을 한눈에 관리합니다.</p>
       </div>
-      <div className="fixed-hero-actions"><button className="fixed-sync-button" onClick={syncMetaAds} disabled={syncing}><Megaphone size={16} />{syncing ? '불러오는 중' : 'Meta 데이터 가져오기'}</button><button className="fixed-save-button" onClick={markSaved}><Save size={16} />{saved ? '저장됨' : '저장'}</button></div>
+      <div className="fixed-hero-actions"><button className="fixed-sync-button" onClick={syncMetaAds} disabled={syncing}><Megaphone size={16} />{syncing ? '불러오는 중' : 'Meta 데이터 가져오기'}</button><label className="fixed-upload-button"><Upload size={16} /> 카카오 보고서 업로드<input type="file" accept=".xlsx,.xls,.csv" onChange={event => { const file = event.target.files?.[0]; if (file) void importKakaoReport(file); event.currentTarget.value = '' }} /></label><button className="fixed-save-button" onClick={markSaved}><Save size={16} />{saved ? '저장됨' : '저장'}</button></div>
     </div>
 
     <div className="fixed-cost-toolbar">
@@ -88,6 +134,7 @@ export default function FixedCostManagement() {
       </div>
     </div>
     {syncMessage && <p className="fixed-sync-message" role="status">{syncMessage}</p>}
+    <details className="kakao-import-guide"><summary>카카오모먼트 보고서 가져오는 방법</summary><ol><li><a href="https://moment.kakao.com" target="_blank" rel="noreferrer">카카오모먼트</a>에 로그인합니다.</li><li>광고계정을 선택하고 보고서 또는 캠페인 성과 화면으로 이동합니다.</li><li>조회 기간을 설정한 뒤 `엑셀 다운로드`로 파일을 저장합니다.</li><li>이 화면의 `카카오 보고서 업로드` 버튼으로 파일을 등록합니다.</li></ol><p>캠페인명, 광고비, 노출, 클릭, 도달, 날짜 열을 자동 인식합니다. 카카오모먼트의 충전·결제 내역은 별도로 자동 가져오지 않으며, 광고 보고서의 집행액을 반영합니다.</p></details>
 
     <div className="fixed-summary-grid">
       <article><span>이번 달 예산</span><strong>{formatWon(totals.budget)}</strong><small>{visibleItems.length}개 항목</small></article>
