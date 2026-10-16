@@ -28,6 +28,7 @@ const numberFromMemo = (memo: string, label: string) => Number(memo.match(new Re
 const won = (value: number) => `${Math.round(value).toLocaleString('ko-KR')}원`
 
 export default function MetaAdsManager() {
+  const [period, setPeriod] = useState<'month' | 'all'>('month')
   const [month, setMonth] = useState(currentMonth)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(false)
@@ -40,17 +41,18 @@ export default function MetaAdsManager() {
     setLoading(true)
     setMessage('Meta 캠페인 성과를 불러오는 중입니다.')
     try {
-      const response = await fetch(`/api/meta-ads?month=${encodeURIComponent(month)}`)
+      const query = period === 'all' ? 'period=all' : `month=${encodeURIComponent(month)}`
+      const response = await fetch(`/api/meta-ads?${query}`)
       const payload = await response.json() as { items?: Campaign[]; error?: string }
       if (!response.ok) throw new Error(payload.error || 'Meta 데이터를 불러오지 못했습니다.')
       setCampaigns(payload.items || [])
-      setMessage(`${payload.items?.length || 0}개 캠페인을 확인했습니다.`)
+      setMessage(`${period === 'all' ? '전체 기간' : month} 기준 ${payload.items?.length || 0}개 캠페인을 확인했습니다.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Meta 데이터를 불러오지 못했습니다.')
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { void loadCampaigns() }, [month])
+  useEffect(() => { void loadCampaigns() }, [month, period])
 
   const totals = useMemo(() => campaigns.reduce((sum, campaign) => ({
     spend: sum.spend + campaign.actual,
@@ -70,7 +72,7 @@ export default function MetaAdsManager() {
       <a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1436358091097418" target="_blank" rel="noreferrer"><ExternalLink size={15} /> Meta 광고 관리자 열기</a>
     </div>
 
-    <div className="meta-manager-toolbar"><label><CalendarDays size={15} /> 기준월 <input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label><button onClick={() => void loadCampaigns()} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button></div>
+    <div className="meta-manager-toolbar"><label><CalendarDays size={15} /> 조회기간 <select value={period} onChange={event => setPeriod(event.target.value as 'month' | 'all')}><option value="month">월별 조회</option><option value="all">전체 기간</option></select>{period === 'month' && <input type="month" value={month} onChange={event => setMonth(event.target.value)} />}</label><button onClick={() => void loadCampaigns()} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button></div>
     {message && <p className="meta-manager-message" role="status">{message}</p>}
 
     <div className="meta-manager-summary"><article><span>캠페인</span><strong>{campaigns.length}개</strong></article><article><span>광고비</span><strong>{won(totals.spend)}</strong></article><article><span>노출</span><strong>{totals.impressions.toLocaleString('ko-KR')}</strong></article><article><span>클릭</span><strong>{totals.clicks.toLocaleString('ko-KR')}</strong><small>CTR {totals.impressions ? (totals.clicks / totals.impressions * 100).toFixed(2) : '0.00'}%</small></article></div>

@@ -23,19 +23,21 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!token) return json({ error: 'Meta API secret is not configured.' }, 503)
 
   const url = new URL(request.url)
+  const period = url.searchParams.get('period') || 'month'
   const month = url.searchParams.get('month')
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) return json({ error: 'month must be YYYY-MM.' }, 400)
+  if (period !== 'all' && (!month || !/^\d{4}-\d{2}$/.test(month))) return json({ error: 'month must be YYYY-MM.' }, 400)
 
-  const [year, monthNumber] = month.split('-').map(Number)
-  const since = `${month}-01`
-  const until = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
+  const [year, monthNumber] = month ? month.split('-').map(Number) : [0, 0]
+  const since = period === 'all' ? null : `${month}-01`
+  const until = period === 'all' ? null : new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
   const accountId = env.META_AD_ACCOUNT_ID || 'act_1436358091097418'
   const version = env.META_GRAPH_API_VERSION || 'v23.0'
   const endpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/insights`)
   endpoint.searchParams.set('access_token', token)
   endpoint.searchParams.set('level', 'campaign')
   endpoint.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,reach')
-  endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
+  if (period === 'all') endpoint.searchParams.set('date_preset', 'maximum')
+  else endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
   endpoint.searchParams.set('limit', '500')
 
   const response = await fetch(endpoint)
@@ -45,9 +47,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const items = (payload.data || []).map((row) => ({
-    id: `meta-api-${row.campaign_id || row.campaign_name || 'unknown'}-${month}`,
+    id: `meta-api-${row.campaign_id || row.campaign_name || 'unknown'}-${period === 'all' ? 'all' : month}`,
     channel: 'meta' as const,
-    date: since,
+    date: since || '전체 기간',
     name: row.campaign_name || row.campaign_id || '이름 없는 캠페인',
     budget: 0,
     actual: Number(row.spend || 0),
@@ -55,5 +57,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     memo: `노출 ${Number(row.impressions || 0).toLocaleString('ko-KR')} · 클릭 ${Number(row.clicks || 0).toLocaleString('ko-KR')} · 도달 ${Number(row.reach || 0).toLocaleString('ko-KR')}`,
   }))
 
-  return json({ month, since, until, items })
+  return json({ period, month: month || null, since, until, items })
 }
