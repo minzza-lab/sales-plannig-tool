@@ -20,6 +20,7 @@ type PaymentActivity = { id: string; date: string; transactionId: string; amount
 
 const CHARGED_KEY = 'sales-planning-meta-charged-v1'
 const PAYMENTS_KEY = 'sales-planning-meta-payments-v1'
+const PAYMENTS_IMPORTED_AT_KEY = 'sales-planning-meta-payments-imported-at-v1'
 const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(new Date())
 
 const numberFromMemo = (memo: string, label: string) => Number(memo.match(new RegExp(`${label} ([\\d,]+)`))?.[1]?.replaceAll(',', '') || 0)
@@ -55,6 +56,7 @@ export default function MetaAdsManager() {
   const [payments, setPayments] = useState<PaymentActivity[]>(() => {
     try { return JSON.parse(localStorage.getItem(PAYMENTS_KEY) || '[]') as PaymentActivity[] } catch { return [] }
   })
+  const [lastPaymentImport, setLastPaymentImport] = useState(() => localStorage.getItem(PAYMENTS_IMPORTED_AT_KEY) || '')
 
   const loadCampaigns = async () => {
     setLoading(true)
@@ -92,6 +94,8 @@ export default function MetaAdsManager() {
     other: sum.other + (payment.kind === '기타' ? payment.amount : 0),
   }), { charged: 0, used: 0, other: 0 }), [payments])
   const effectiveCharged = paymentTotals.charged || Number(chargedAmount || 0)
+  const paymentApiDifference = totals.spend - paymentTotals.used
+  const estimatedBalance = effectiveCharged ? effectiveCharged - (paymentTotals.used || totals.spend) : 0
   const chartData = useMemo(() => selectedCampaigns.map(campaign => {
     const values = campaignMetrics(campaign)
     return { name: campaign.name.length > 18 ? `${campaign.name.slice(0, 18)}…` : campaign.name, fullName: campaign.name, value: values[metric], campaignId: campaign.id }
@@ -135,9 +139,15 @@ export default function MetaAdsManager() {
         return { id: `meta-payment-${Date.now()}-${rowIndex}`, date: paymentDate(dateValue), transactionId: transactionId || '-', amount, paymentMethod: paymentMethod || '-', status: statusIndex >= 0 ? String(row[statusIndex] ?? '').trim() : '-', invoiceId: invoiceIndex >= 0 ? String(row[invoiceIndex] ?? '').trim() : '-', kind }
       }).filter((item): item is PaymentActivity => Boolean(item))
       if (!imported.length) throw new Error('가져올 결제 활동 행이 없습니다.')
-      setPayments(imported)
-      localStorage.setItem(PAYMENTS_KEY, JSON.stringify(imported))
-      setMessage(`${imported.length}건의 결제 활동을 반영했습니다.`)
+      const mergedByTransaction = new Map(payments.map(payment => [`${payment.transactionId}-${payment.date}`, payment]))
+      imported.forEach(payment => mergedByTransaction.set(`${payment.transactionId}-${payment.date}`, payment))
+      const merged = [...mergedByTransaction.values()].sort((a, b) => b.date.localeCompare(a.date))
+      setPayments(merged)
+      localStorage.setItem(PAYMENTS_KEY, JSON.stringify(merged))
+      const importedAt = new Date().toISOString()
+      setLastPaymentImport(importedAt)
+      localStorage.setItem(PAYMENTS_IMPORTED_AT_KEY, importedAt)
+      setMessage(`${imported.length}건을 반영했습니다. 기존 내역과 거래 ID 기준으로 중복을 정리했습니다.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '결제 활동 파일을 읽지 못했습니다.')
     } finally { setReporting(false) }
@@ -223,7 +233,8 @@ export default function MetaAdsManager() {
     <div className="meta-manager-toolbar"><div className="meta-toolbar-fields"><label><CalendarDays size={15} /> 조회기간 <select value={period} onChange={event => setPeriod(event.target.value as 'month' | 'all')}><option value="month">월별 조회</option><option value="all">전체 기간</option></select>{period === 'month' && <input type="month" value={month} onChange={event => setMonth(event.target.value)} />}</label><label>누적 충전액 <input type="number" min="0" value={chargedAmount} onChange={event => saveChargedAmount(event.target.value)} placeholder="원" /></label></div><div className="meta-toolbar-actions"><button onClick={() => void loadCampaigns()} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button><button onClick={() => void downloadReport()} disabled={reporting}><Download size={15} /> {reporting ? '보고서 생성 중' : '보고서 다운로드'}</button></div></div>
     {message && <p className="meta-manager-message" role="status">{message}</p>}
     <details className="meta-payment-guide"><summary>Meta 결제 활동 가져오는 방법</summary><ol><li>Meta 광고 관리자에서 왼쪽 메뉴의 <strong>결제 활동</strong>을 엽니다.</li><li><strong>광고 계정</strong>을 선택하고 날짜 범위를 지정합니다.</li><li>오른쪽 위 <strong>다운로드</strong>를 눌러 거래내역 파일을 저장합니다.</li><li>이 화면의 <strong>결제 활동 업로드</strong> 버튼으로 파일을 등록합니다.</li></ol><p>날짜·금액·거래 ID·결제수단·결제상태·VAT 인보이스 ID·거래 유형을 자동 인식합니다. Meta 파일의 열 이름이 달라도 가능한 범위에서 매칭합니다.</p></details>
-    <section className="meta-payment-panel"><div className="meta-payment-heading"><div><p className="eyebrow">BILLING ACTIVITY</p><h2>선불·결제 활동</h2><p>{payments.length ? `${payments.length}건의 업로드 내역` : '결제 활동 파일을 업로드하면 충전과 사용 내역이 표시됩니다.'}</p></div><Receipt size={21} /></div><div className="meta-payment-summary"><article><span><WalletCards size={14} /> 선불 추가·충전</span><strong>{won(paymentTotals.charged)}</strong></article><article><span><Receipt size={14} /> 결제 활동 사용</span><strong>{won(paymentTotals.used)}</strong></article><article><span>광고비 API 집행</span><strong>{won(totals.spend)}</strong></article><article><span>추정 잔액</span><strong>{effectiveCharged ? won(effectiveCharged - (paymentTotals.used || totals.spend)) : '입력 필요'}</strong></article></div>{payments.length > 0 && <div className="meta-payment-table-wrap"><table><thead><tr><th>날짜</th><th>구분</th><th>거래 ID</th><th>금액</th><th>결제수단</th><th>상태</th><th>VAT 인보이스 ID</th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td>{payment.date}</td><td><span className={`meta-payment-kind ${payment.kind}`}>{payment.kind}</span></td><td>{payment.transactionId}</td><td>{won(payment.amount)}</td><td>{payment.paymentMethod}</td><td>{payment.status}</td><td>{payment.invoiceId}</td></tr>)}</tbody></table></div>}</section>
+    <section className="meta-admin-overview"><div className="meta-admin-overview-heading"><div><p className="eyebrow">ADMIN OVERVIEW</p><h2>관리자 한눈 요약</h2><p>결제 CSV와 Meta 광고비 API를 구분해 보여줍니다.</p></div><span>{lastPaymentImport ? `마지막 결제자료 업로드 ${new Date(lastPaymentImport).toLocaleString('ko-KR')}` : '결제자료 업로드 전'}</span></div><div className="meta-admin-overview-grid"><article className="charged"><span>선불 추가·충전</span><strong>{won(effectiveCharged)}</strong><small>결제 활동 CSV 기준</small></article><article className="used"><span>결제 활동 사용</span><strong>{won(paymentTotals.used)}</strong><small>선불 잔액에서 실제 사용</small></article><article className="api"><span>광고비 API 집행</span><strong>{won(totals.spend)}</strong><small>Meta Insights 기준</small></article><article className={Math.abs(paymentApiDifference) > 0 ? 'difference warning' : 'difference'}><span>결제·API 차이</span><strong>{won(Math.abs(paymentApiDifference))}</strong><small>{paymentApiDifference >= 0 ? 'API 집행액이 더 큼' : '결제 활동 사용액이 더 큼'}</small></article><article className="balance"><span>추정 잔액</span><strong>{effectiveCharged ? won(estimatedBalance) : '입력 필요'}</strong><small>충전액 - 결제 활동 사용액</small></article></div><p className="meta-admin-note">결제 활동과 광고비 API는 집계 기준일이 달라 차이가 발생할 수 있습니다. 관리자는 결제 CSV를 충전하거나 결제할 때마다 업로드하면 누적 내역으로 관리됩니다.</p></section>
+    <section className="meta-payment-panel"><div className="meta-payment-heading"><div><p className="eyebrow">BILLING ACTIVITY</p><h2>선불·결제 활동 원장</h2><p>{payments.length ? `${payments.length}건의 누적 업로드 내역` : '결제 활동 파일을 업로드하면 충전과 사용 내역이 표시됩니다.'}</p></div><Receipt size={21} /></div><div className="meta-payment-summary"><article><span><WalletCards size={14} /> 선불 추가·충전</span><strong>{won(paymentTotals.charged)}</strong></article><article><span><Receipt size={14} /> 결제 활동 사용</span><strong>{won(paymentTotals.used)}</strong></article><article><span>광고비 API 집행</span><strong>{won(totals.spend)}</strong></article><article><span>추정 잔액</span><strong>{effectiveCharged ? won(estimatedBalance) : '입력 필요'}</strong></article></div>{payments.length > 0 && <div className="meta-payment-table-wrap"><table><thead><tr><th>날짜</th><th>구분</th><th>거래 ID</th><th>금액</th><th>결제수단</th><th>상태</th><th>VAT 인보이스 ID</th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td>{payment.date}</td><td><span className={`meta-payment-kind ${payment.kind}`}>{payment.kind}</span></td><td>{payment.transactionId}</td><td>{won(payment.amount)}</td><td>{payment.paymentMethod}</td><td>{payment.status}</td><td>{payment.invoiceId}</td></tr>)}</tbody></table></div>}</section>
 
     <div className="meta-manager-summary"><article><span>전체 캠페인</span><strong>{campaigns.length}개</strong><small>선택 {selectedCampaigns.length}개</small></article><article><span>광고비</span><strong>{won(totals.spend)}</strong></article><article><span>노출</span><strong>{totals.impressions.toLocaleString('ko-KR')}</strong></article><article><span>클릭</span><strong>{totals.clicks.toLocaleString('ko-KR')}</strong><small>CTR {totals.impressions ? (totals.clicks / totals.impressions * 100).toFixed(2) : '0.00'}%</small></article></div>
 
