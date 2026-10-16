@@ -75,6 +75,7 @@ export const categories: ToolCategory[] = [
     description: 'Gemini를 활용해 현장 콘텐츠와 홍보물을 제작합니다.',
     tools: [
       { id: 'fixed-cost-management', title: '고정비 관리', description: '메타 광고와 카카오 플러스친구 운영비를 월별로 관리합니다.', icon: '💳', path: '/tools/fixed-cost-management' },
+      { id: 'meta-ads-manager', title: 'Meta 광고 관리자', description: 'Meta 캠페인 성과를 조회하고 광고 제작 초안을 준비합니다.', icon: '📣', path: '/tools/meta-ads-manager' },
       { id: 'field-sketch', title: '현장 스케치 생성기', description: '현장 사진을 블로그와 SNS용 콘텐츠로 변환합니다.', icon: '📸', path: '/tools/field-sketch' },
       { id: 'tts-generator', title: '안내방송 TTS', description: '상황에 맞는 안내 대본과 음성을 제작합니다.', icon: '🎙️', path: '/tools/tts-generator' },
       { id: 'thumbnail-generator', title: '상품 썸네일 제작기', description: '홍보 배경과 카피를 조합해 썸네일을 만듭니다.', icon: '🎨', path: '/tools/thumbnail-generator' },

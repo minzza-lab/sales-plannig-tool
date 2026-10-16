@@ -45,6 +45,7 @@ const ApprovalCoverSplitter = lazy(() => import('./components/ApprovalCoverSplit
 const LunchRoulette = lazy(() => import('./components/LunchRoulette'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
 const FixedCostManagement = lazy(() => import('./components/FixedCostManagement'))
+const MetaAdsManager = lazy(() => import('./components/MetaAdsManager'))
 
 const AppLoader = () => (
   <div className="app-loader" role="status" aria-live="polite">
@@ -152,6 +153,7 @@ function App() {
                 <Route path="tools/team-workspace" element={<TeamWorkspace />} />
                 <Route path="tools/sales-schedule-performance" element={<SalesSchedulePerformance />} />
                 <Route path="tools/fixed-cost-management" element={<FixedCostManagement />} />
+                <Route path="tools/meta-ads-manager" element={<MetaAdsManager />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>
