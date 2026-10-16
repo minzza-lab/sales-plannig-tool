@@ -11,10 +11,56 @@ type MetaInsight = {
   impressions?: string
   clicks?: string
   reach?: string
+  frequency?: string
+  cpm?: string
+  cpp?: string
+  ctr?: string
+  cpc?: string
+  cost_per_inline_link_click?: string
+  cost_per_conversion?: { action_type?: string; value?: string }[]
+  inline_link_clicks?: string
+  inline_link_click_ctr?: string
+  outbound_clicks_ctr?: { action_type?: string; value?: string }[]
+  unique_inline_link_clicks?: string
+  unique_outbound_clicks?: string
+  website_ctr?: { action_type?: string; value?: string }[]
+  social_spend?: string
+  outbound_clicks?: { action_type?: string; value?: string }[]
+  unique_clicks?: string
+  unique_ctr?: string
+  video_play_actions?: { action_type?: string; value?: string }[]
+  video_p25_watched_actions?: { action_type?: string; value?: string }[]
+  video_p50_watched_actions?: { action_type?: string; value?: string }[]
+  video_p75_watched_actions?: { action_type?: string; value?: string }[]
+  video_p95_watched_actions?: { action_type?: string; value?: string }[]
+  video_p100_watched_actions?: { action_type?: string; value?: string }[]
+  video_thruplay_watched_actions?: { action_type?: string; value?: string }[]
+  video_15_sec_watched_actions?: { action_type?: string; value?: string }[]
+  video_30_sec_watched_actions?: { action_type?: string; value?: string }[]
+  video_avg_time_watched_actions?: { action_type?: string; value?: string }[]
+  actions?: { action_type?: string; value?: string }[]
+  action_values?: { action_type?: string; value?: string }[]
+  cost_per_action_type?: { action_type?: string; value?: string }[]
+  conversions?: { action_type?: string; value?: string }[]
+  conversion_values?: { action_type?: string; value?: string }[]
+  purchase_roas?: { action_type?: string; value?: string }[]
+  website_purchase_roas?: { action_type?: string; value?: string }[]
+  date_start?: string
+  date_stop?: string
 }
 
 type MetaAdSet = {
+  id?: string
   campaign_id?: string
+  name?: string
+  status?: string
+  effective_status?: string
+  daily_budget?: string
+  lifetime_budget?: string
+  optimization_goal?: string
+  billing_event?: string
+  start_time?: string
+  end_time?: string
   targeting?: {
     age_min?: number
     age_max?: number
@@ -31,7 +77,27 @@ type MetaAdSet = {
   }
 }
 
+type MetaCampaign = {
+  id?: string
+  name?: string
+  status?: string
+  effective_status?: string
+  objective?: string
+  buying_type?: string
+  daily_budget?: string
+  lifetime_budget?: string
+  start_time?: string
+  stop_time?: string
+  created_time?: string
+  updated_time?: string
+}
+
 const join = (values: unknown[] | undefined) => (values || []).filter(Boolean).join(', ')
+const actionValue = (actions: { action_type?: string; value?: string }[] | undefined, names: string[]) => {
+  const match = (actions || []).find(action => names.includes(action.action_type || ''))
+  return match?.value || '0'
+}
+const numericActionValue = (actions: { action_type?: string; value?: string }[] | undefined, names: string[]) => Number(actionValue(actions, names)) || 0
 const summarizeTargeting = (targeting: MetaAdSet['targeting']) => {
   if (!targeting) return ''
   const parts: string[] = []
@@ -78,29 +144,40 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const endpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/insights`)
   endpoint.searchParams.set('access_token', token)
   endpoint.searchParams.set('level', 'campaign')
-  endpoint.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,reach')
+  endpoint.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,cpm,cpp,ctr,cpc,cost_per_inline_link_click,cost_per_conversion,inline_link_clicks,inline_link_click_ctr,outbound_clicks,outbound_clicks_ctr,unique_clicks,unique_ctr,unique_inline_link_clicks,unique_outbound_clicks,website_ctr,social_spend,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_thruplay_watched_actions,video_15_sec_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions,actions,action_values,cost_per_action_type,conversions,conversion_values,purchase_roas,website_purchase_roas,date_start,date_stop')
   if (period === 'all') endpoint.searchParams.set('date_preset', 'maximum')
   else endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
   endpoint.searchParams.set('limit', '500')
 
   const adSetsEndpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/adsets`)
   adSetsEndpoint.searchParams.set('access_token', token)
-  adSetsEndpoint.searchParams.set('fields', 'id,campaign_id,name,targeting')
+  adSetsEndpoint.searchParams.set('fields', 'id,campaign_id,name,status,effective_status,targeting,daily_budget,lifetime_budget,optimization_goal,billing_event,start_time,end_time')
   adSetsEndpoint.searchParams.set('limit', '500')
 
-  const [response, adSetsResponse] = await Promise.all([fetch(endpoint), fetch(adSetsEndpoint)])
+  const campaignsEndpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/campaigns`)
+  campaignsEndpoint.searchParams.set('access_token', token)
+  campaignsEndpoint.searchParams.set('fields', 'id,name,status,effective_status,objective,buying_type,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time')
+  campaignsEndpoint.searchParams.set('limit', '500')
+
+  const [response, adSetsResponse, campaignsResponse] = await Promise.all([fetch(endpoint), fetch(adSetsEndpoint), fetch(campaignsEndpoint)])
   const payload = await response.json() as { data?: MetaInsight[]; error?: { message?: string; code?: number } }
   const adSetsPayload = await adSetsResponse.json() as { data?: MetaAdSet[] }
+  const campaignsPayload = await campaignsResponse.json() as { data?: MetaCampaign[] }
   if (!response.ok || payload.error) {
     return json({ error: payload.error?.message || 'Meta API request failed.', code: payload.error?.code }, response.status >= 400 ? response.status : 502)
   }
 
   const targetingsByCampaign = new Map<string, string>()
+  const adSetsByCampaign = new Map<string, MetaAdSet[]>()
   for (const adSet of adSetsPayload.data || []) {
-    if (!adSet.campaign_id || targetingsByCampaign.has(adSet.campaign_id)) continue
+    if (!adSet.campaign_id) continue
+    const current = adSetsByCampaign.get(adSet.campaign_id) || []
+    adSetsByCampaign.set(adSet.campaign_id, [...current, adSet])
+    if (targetingsByCampaign.has(adSet.campaign_id)) continue
     const targeting = summarizeTargeting(adSet.targeting)
     if (targeting) targetingsByCampaign.set(adSet.campaign_id, targeting)
   }
+  const campaignDetails = new Map((campaignsPayload.data || []).map(campaign => [campaign.id || '', campaign]))
 
   const items = (payload.data || []).map((row) => ({
     id: `meta-api-${row.campaign_id || row.campaign_name || 'unknown'}-${period === 'all' ? 'all' : month}`,
@@ -111,6 +188,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     actual: Number(row.spend || 0),
     status: '완료' as const,
     targeting: targetingsByCampaign.get(row.campaign_id || '') || '',
+    details: {
+      campaignId: row.campaign_id || '',
+      period: { start: row.date_start || since || '', end: row.date_stop || until || '' },
+      metadata: campaignDetails.get(row.campaign_id || '') || {},
+      adSets: (adSetsByCampaign.get(row.campaign_id || '') || []).map(adSet => ({
+        id: adSet.id || '', name: adSet.name || '', status: adSet.status || '', effectiveStatus: adSet.effective_status || '',
+        dailyBudget: Number(adSet.daily_budget || 0), lifetimeBudget: Number(adSet.lifetime_budget || 0), optimizationGoal: adSet.optimization_goal || '', billingEvent: adSet.billing_event || '',
+        startTime: adSet.start_time || '', endTime: adSet.end_time || '', targeting: summarizeTargeting(adSet.targeting),
+      })),
+      metrics: {
+        frequency: Number(row.frequency || 0), cpm: Number(row.cpm || 0), cpp: Number(row.cpp || 0), ctr: Number(row.ctr || 0), cpc: Number(row.cpc || 0), costPerInlineLinkClick: Number(row.cost_per_inline_link_click || 0),
+        inlineLinkClicks: Number(row.inline_link_clicks || 0), inlineLinkCtr: Number(row.inline_link_click_ctr || 0), outboundClicks: numericActionValue(row.outbound_clicks, ['outbound_clicks']), outboundCtr: numericActionValue(row.outbound_clicks_ctr, ['outbound_clicks']), uniqueClicks: Number(row.unique_clicks || 0), uniqueCtr: Number(row.unique_ctr || 0), uniqueInlineLinkClicks: Number(row.unique_inline_link_clicks || 0), uniqueOutboundClicks: Number(row.unique_outbound_clicks || 0), socialSpend: Number(row.social_spend || 0),
+        videoPlays: numericActionValue(row.video_play_actions, ['video_view', 'video_play']), video25: numericActionValue(row.video_p25_watched_actions, ['video_view']), video50: numericActionValue(row.video_p50_watched_actions, ['video_view']), video75: numericActionValue(row.video_p75_watched_actions, ['video_view']), video95: numericActionValue(row.video_p95_watched_actions, ['video_view']), video100: numericActionValue(row.video_p100_watched_actions, ['video_view']), thruplays: numericActionValue(row.video_thruplay_watched_actions, ['video_view']), video15: numericActionValue(row.video_15_sec_watched_actions, ['video_view']), video30: numericActionValue(row.video_30_sec_watched_actions, ['video_view']), avgVideoSeconds: numericActionValue(row.video_avg_time_watched_actions, ['video_view']),
+      },
+      actions: row.actions || [], actionValues: row.action_values || [], costPerAction: row.cost_per_action_type || [], conversions: row.conversions || [], conversionValues: row.conversion_values || [], purchaseRoas: row.purchase_roas || [], websitePurchaseRoas: row.website_purchase_roas || [],
+    },
     memo: `노출 ${Number(row.impressions || 0).toLocaleString('ko-KR')} · 클릭 ${Number(row.clicks || 0).toLocaleString('ko-KR')} · 도달 ${Number(row.reach || 0).toLocaleString('ko-KR')}${targetingsByCampaign.get(row.campaign_id || '') ? ` · 타겟 ${targetingsByCampaign.get(row.campaign_id || '')}` : ''}`,
   }))
 
