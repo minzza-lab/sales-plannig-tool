@@ -28,6 +28,7 @@ export const categories: ToolCategory[] = [
       { id: 'knowledge-base', title: '공유 지식 베이스', description: '업무 노하우와 참고 자료를 팀원들과 축적합니다.', icon: '🤝', path: '/tools/knowledge-base' },
       { id: 'approvals', title: '품의서 보관함', description: '품의서를 보관하고 Gemini로 핵심 내용을 요약합니다.', icon: '📄', path: '/tools/approvals' },
       { id: 'product-proposals', title: '상품안 보관함', description: '상품안과 의견을 관리하고 AI 요약을 확인합니다.', icon: '💡', path: '/tools/product-proposals' },
+      { id: 'official-letter', title: '발송공문제작기', description: '회사 공식 양식을 유지한 발송 공문을 작성하고 엑셀로 내려받습니다.', icon: '📨', path: '/tools/official-letter' },
       { id: 'voc-assistant', title: 'VOC 어시스턴트', description: '고객 문의를 분석해 답변 초안을 빠르게 작성합니다.', icon: '🎧', path: '/tools/voc-assistant' },
     ],
   },
@@ -73,6 +74,7 @@ export const categories: ToolCategory[] = [
     title: '홍보 콘텐츠 제작',
     description: 'Gemini를 활용해 현장 콘텐츠와 홍보물을 제작합니다.',
     tools: [
+      { id: 'fixed-cost-management', title: '고정비 관리', description: '메타 광고와 카카오 플러스친구 운영비를 월별로 관리합니다.', icon: '💳', path: '/tools/fixed-cost-management' },
       { id: 'field-sketch', title: '현장 스케치 생성기', description: '현장 사진을 블로그와 SNS용 콘텐츠로 변환합니다.', icon: '📸', path: '/tools/field-sketch' },
       { id: 'tts-generator', title: '안내방송 TTS', description: '상황에 맞는 안내 대본과 음성을 제작합니다.', icon: '🎙️', path: '/tools/tts-generator' },
       { id: 'thumbnail-generator', title: '상품 썸네일 제작기', description: '홍보 배경과 카피를 조합해 썸네일을 만듭니다.', icon: '🎨', path: '/tools/thumbnail-generator' },

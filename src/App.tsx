@@ -36,13 +36,15 @@ const SeasonPassTracker = lazy(() => import('./components/SeasonPassTracker'))
 const ProductProposalGenerator = lazy(() => import('./components/ProductProposalGenerator'))
 const PackageSalesDashboard = lazy(() => import('./components/PackageSalesDashboard'))
 const QRVerifier = lazy(() => import('./components/QRVerifier'))
+const OfficialLetterGenerator = lazy(() => import('./components/OfficialLetterGenerator'))
+const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
+const SportsSalesDashboard = lazy(() => import('./components/SportsSalesDashboard'))
 const TeamWorkspace = lazy(() => import('./components/TeamWorkspace'))
 const SalesSchedulePerformance = lazy(() => import('./components/SalesSchedulePerformance'))
 const ApprovalCoverSplitter = lazy(() => import('./components/ApprovalCoverSplitter'))
 const LunchRoulette = lazy(() => import('./components/LunchRoulette'))
-const RoomStateDashboard = lazy(() => import('./components/RoomStateDashboard'))
-const SportsSalesDashboard = lazy(() => import('./components/SportsSalesDashboard'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
+const FixedCostManagement = lazy(() => import('./components/FixedCostManagement'))
 
 const AppLoader = () => (
   <div className="app-loader" role="status" aria-live="polite">
@@ -142,12 +144,14 @@ function App() {
                 <Route path="tools/proposal-generator" element={<ProductProposalGenerator />} />
                 <Route path="tools/package-sales" element={<PackageSalesDashboard />} />
                 <Route path="tools/qr-verifier" element={<QRVerifier />} />
-                <Route path="tools/team-workspace" element={<TeamWorkspace />} />
-                <Route path="tools/sales-schedule-performance" element={<SalesSchedulePerformance />} />
+                <Route path="tools/official-letter" element={<OfficialLetterGenerator />} />
                 <Route path="tools/approval-cover-splitter" element={<ApprovalCoverSplitter />} />
                 <Route path="tools/lunch-roulette" element={<LunchRoulette />} />
                 <Route path="tools/room-state" element={<RoomStateDashboard />} />
                 <Route path="tools/sports-sales" element={<SportsSalesDashboard />} />
+                <Route path="tools/team-workspace" element={<TeamWorkspace />} />
+                <Route path="tools/sales-schedule-performance" element={<SalesSchedulePerformance />} />
+                <Route path="tools/fixed-cost-management" element={<FixedCostManagement />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>
