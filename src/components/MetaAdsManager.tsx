@@ -122,13 +122,16 @@ export default function MetaAdsManager() {
       const statusIndex = firstColumn(headers, ['결제상태', '상태', 'status'])
       const invoiceIndex = firstColumn(headers, ['vat인보이스id', '인보이스id', 'invoiceid', 'invoice'])
       const kindIndex = firstColumn(headers, ['유형', '구분', '거래유형', 'type'])
+      const reportContext = matrix.slice(0, headerIndex + 1).flat().map(cell => String(cell ?? '')).join(' ')
       const imported = matrix.slice(headerIndex + 1).map((row, rowIndex) => {
         const amount = amountFromCell(row[amountIndex])
-        if (!amount) return null
+        const dateValue = row[dateIndex]
+        const transactionId = transactionIndex >= 0 ? String(row[transactionIndex] ?? '').trim() : ''
+        if (!amount || (!dateValue && !transactionId)) return null
         const paymentMethod = methodIndex >= 0 ? String(row[methodIndex] ?? '').trim() : ''
         const kindText = `${kindIndex >= 0 ? String(row[kindIndex] ?? '') : ''} ${paymentMethod}`
-        const kind: PaymentKind = /충전|추가|입금|top.?up|credit/i.test(kindText) ? '충전' : /선불\s*잔액|광고|사용|청구|spend|charge/i.test(kindText) ? '사용' : '기타'
-        return { id: `meta-payment-${Date.now()}-${rowIndex}`, date: paymentDate(row[dateIndex]), transactionId: transactionIndex >= 0 ? String(row[transactionIndex] ?? '').trim() : '-', amount, paymentMethod: paymentMethod || '-', status: statusIndex >= 0 ? String(row[statusIndex] ?? '').trim() : '-', invoiceId: invoiceIndex >= 0 ? String(row[invoiceIndex] ?? '').trim() : '-', kind }
+        const kind: PaymentKind = /충전|추가|입금|top.?up|credit/i.test(kindText) ? '충전' : /선불\s*잔액|광고|사용|청구|spend|charge/i.test(kindText) || /청구 보고서|Meta 광고 결제|invoice summary/i.test(reportContext) ? '사용' : '기타'
+        return { id: `meta-payment-${Date.now()}-${rowIndex}`, date: paymentDate(dateValue), transactionId: transactionId || '-', amount, paymentMethod: paymentMethod || '-', status: statusIndex >= 0 ? String(row[statusIndex] ?? '').trim() : '-', invoiceId: invoiceIndex >= 0 ? String(row[invoiceIndex] ?? '').trim() : '-', kind }
       }).filter((item): item is PaymentActivity => Boolean(item))
       if (!imported.length) throw new Error('가져올 결제 활동 행이 없습니다.')
       setPayments(imported)
