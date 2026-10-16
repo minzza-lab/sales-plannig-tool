@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { BarChart3, CalendarDays, ChevronDown, Download, ExternalLink, RefreshCw } from 'lucide-react'
+import { BarChart3, CalendarDays, ChevronDown, Download, ExternalLink, RefreshCw, Receipt, Upload, WalletCards } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import * as XLSX from 'xlsx'
 import './MetaAdsManager.css'
 
 type Campaign = {
@@ -14,12 +15,24 @@ type Campaign = {
 }
 
 type MetricKey = 'spend' | 'impressions' | 'clicks' | 'reach' | 'ctr'
+type PaymentKind = '충전' | '사용' | '기타'
+type PaymentActivity = { id: string; date: string; transactionId: string; amount: number; paymentMethod: string; status: string; invoiceId: string; kind: PaymentKind }
 
 const CHARGED_KEY = 'sales-planning-meta-charged-v1'
+const PAYMENTS_KEY = 'sales-planning-meta-payments-v1'
 const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(new Date())
 
 const numberFromMemo = (memo: string, label: string) => Number(memo.match(new RegExp(`${label} ([\\d,]+)`))?.[1]?.replaceAll(',', '') || 0)
 const won = (value: number) => `${Math.round(value).toLocaleString('ko-KR')}원`
+const normalizeHeader = (value: unknown) => String(value ?? '').replace(/\s+/g, '').toLowerCase()
+const firstColumn = (headers: string[], names: string[]) => headers.findIndex(header => names.some(name => header.includes(name)))
+const amountFromCell = (value: unknown) => Math.abs(Number(String(value ?? '').replace(/[^\d.-]/g, '')) || 0)
+const paymentDate = (value: unknown) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10)
+  const text = String(value ?? '').trim()
+  const match = text.match(/(20\d{2})[./-](\d{1,2})(?:[./-](\d{1,2}))?/) 
+  return match ? `${match[1]}-${match[2].padStart(2, '0')}-${(match[3] || '01').padStart(2, '0')}` : text || '-'
+}
 const metricLabels: Record<MetricKey, string> = { spend: '광고비', impressions: '노출', clicks: '클릭', reach: '도달', ctr: 'CTR' }
 const campaignMetrics = (campaign: Campaign) => {
   const impressions = numberFromMemo(campaign.memo, '노출')
@@ -39,6 +52,9 @@ export default function MetaAdsManager() {
   const [metric, setMetric] = useState<MetricKey>('spend')
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([])
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null)
+  const [payments, setPayments] = useState<PaymentActivity[]>(() => {
+    try { return JSON.parse(localStorage.getItem(PAYMENTS_KEY) || '[]') as PaymentActivity[] } catch { return [] }
+  })
 
   const loadCampaigns = async () => {
     setLoading(true)
@@ -70,6 +86,12 @@ export default function MetaAdsManager() {
   }), { spend: 0, impressions: 0, clicks: 0, reach: 0 }), [campaigns])
 
   const selectedCampaigns = useMemo(() => campaigns.filter(campaign => selectedCampaignIds.includes(campaign.id)), [campaigns, selectedCampaignIds])
+  const paymentTotals = useMemo(() => payments.reduce((sum, payment) => ({
+    charged: sum.charged + (payment.kind === '충전' ? payment.amount : 0),
+    used: sum.used + (payment.kind === '사용' ? payment.amount : 0),
+    other: sum.other + (payment.kind === '기타' ? payment.amount : 0),
+  }), { charged: 0, used: 0, other: 0 }), [payments])
+  const effectiveCharged = paymentTotals.charged || Number(chargedAmount || 0)
   const chartData = useMemo(() => selectedCampaigns.map(campaign => {
     const values = campaignMetrics(campaign)
     return { name: campaign.name.length > 18 ? `${campaign.name.slice(0, 18)}…` : campaign.name, fullName: campaign.name, value: values[metric], campaignId: campaign.id }
@@ -81,6 +103,40 @@ export default function MetaAdsManager() {
   const saveChargedAmount = (value: string) => {
     setChargedAmount(value)
     localStorage.setItem(CHARGED_KEY, value)
+  }
+
+  const importPaymentActivity = async (file: File) => {
+    setReporting(true)
+    setMessage('Meta 결제 활동 파일을 읽는 중입니다.')
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+      const headerIndex = matrix.findIndex(row => row.some(cell => /날짜|일자|date/i.test(String(cell))) && row.some(cell => /금액|amount|결제액|거래금액/i.test(String(cell))))
+      if (headerIndex < 0) throw new Error('날짜와 금액 열을 찾지 못했습니다. Meta 결제 활동 다운로드 파일인지 확인해 주세요.')
+      const headers = matrix[headerIndex].map(normalizeHeader)
+      const dateIndex = firstColumn(headers, ['날짜', '일자', 'date'])
+      const amountIndex = firstColumn(headers, ['금액', 'amount', '결제액', '거래금액'])
+      const transactionIndex = firstColumn(headers, ['거래id', '거래번호', 'transactionid', 'reference'])
+      const methodIndex = firstColumn(headers, ['결제수단', '결제방법', 'paymentmethod'])
+      const statusIndex = firstColumn(headers, ['결제상태', '상태', 'status'])
+      const invoiceIndex = firstColumn(headers, ['vat인보이스id', '인보이스id', 'invoiceid', 'invoice'])
+      const kindIndex = firstColumn(headers, ['유형', '구분', '거래유형', 'type'])
+      const imported = matrix.slice(headerIndex + 1).map((row, rowIndex) => {
+        const amount = amountFromCell(row[amountIndex])
+        if (!amount) return null
+        const paymentMethod = methodIndex >= 0 ? String(row[methodIndex] ?? '').trim() : ''
+        const kindText = `${kindIndex >= 0 ? String(row[kindIndex] ?? '') : ''} ${paymentMethod}`
+        const kind: PaymentKind = /충전|추가|입금|top.?up|credit/i.test(kindText) ? '충전' : /선불\s*잔액|광고|사용|청구|spend|charge/i.test(kindText) ? '사용' : '기타'
+        return { id: `meta-payment-${Date.now()}-${rowIndex}`, date: paymentDate(row[dateIndex]), transactionId: transactionIndex >= 0 ? String(row[transactionIndex] ?? '').trim() : '-', amount, paymentMethod: paymentMethod || '-', status: statusIndex >= 0 ? String(row[statusIndex] ?? '').trim() : '-', invoiceId: invoiceIndex >= 0 ? String(row[invoiceIndex] ?? '').trim() : '-', kind }
+      }).filter((item): item is PaymentActivity => Boolean(item))
+      if (!imported.length) throw new Error('가져올 결제 활동 행이 없습니다.')
+      setPayments(imported)
+      localStorage.setItem(PAYMENTS_KEY, JSON.stringify(imported))
+      setMessage(`${imported.length}건의 결제 활동을 반영했습니다.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '결제 활동 파일을 읽지 못했습니다.')
+    } finally { setReporting(false) }
   }
 
   const downloadReport = async () => {
@@ -156,12 +212,14 @@ export default function MetaAdsManager() {
 
   return <section className="meta-manager-page">
     <div className="meta-manager-hero">
-      <div><p className="eyebrow">META ADS MANAGER</p><h1>Meta 광고 관리자</h1><p>캠페인 성과를 확인하고 집행 보고서를 내려받습니다.</p></div>
-      <a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1436358091097418" target="_blank" rel="noreferrer"><ExternalLink size={15} /> Meta 광고 관리자 열기</a>
+      <div><p className="eyebrow">META ADS MANAGER</p><h1>Meta 광고 관리자</h1><p>캠페인 성과를 확인하고 결제 활동·집행 보고서를 관리합니다.</p></div>
+      <div className="meta-hero-actions"><label className="meta-upload-button"><Upload size={15} /> 결제 활동 업로드<input type="file" accept=".xlsx,.xls,.csv" onChange={event => { const file = event.target.files?.[0]; if (file) void importPaymentActivity(file); event.currentTarget.value = '' }} /></label><a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1436358091097418" target="_blank" rel="noreferrer"><ExternalLink size={15} /> Meta 광고 관리자 열기</a></div>
     </div>
 
     <div className="meta-manager-toolbar"><div className="meta-toolbar-fields"><label><CalendarDays size={15} /> 조회기간 <select value={period} onChange={event => setPeriod(event.target.value as 'month' | 'all')}><option value="month">월별 조회</option><option value="all">전체 기간</option></select>{period === 'month' && <input type="month" value={month} onChange={event => setMonth(event.target.value)} />}</label><label>누적 충전액 <input type="number" min="0" value={chargedAmount} onChange={event => saveChargedAmount(event.target.value)} placeholder="원" /></label></div><div className="meta-toolbar-actions"><button onClick={() => void loadCampaigns()} disabled={loading}><RefreshCw size={15} className={loading ? 'spin' : ''} /> 새로고침</button><button onClick={() => void downloadReport()} disabled={reporting}><Download size={15} /> {reporting ? '보고서 생성 중' : '보고서 다운로드'}</button></div></div>
     {message && <p className="meta-manager-message" role="status">{message}</p>}
+    <details className="meta-payment-guide"><summary>Meta 결제 활동 가져오는 방법</summary><ol><li>Meta 광고 관리자에서 왼쪽 메뉴의 <strong>결제 활동</strong>을 엽니다.</li><li><strong>광고 계정</strong>을 선택하고 날짜 범위를 지정합니다.</li><li>오른쪽 위 <strong>다운로드</strong>를 눌러 거래내역 파일을 저장합니다.</li><li>이 화면의 <strong>결제 활동 업로드</strong> 버튼으로 파일을 등록합니다.</li></ol><p>날짜·금액·거래 ID·결제수단·결제상태·VAT 인보이스 ID·거래 유형을 자동 인식합니다. Meta 파일의 열 이름이 달라도 가능한 범위에서 매칭합니다.</p></details>
+    <section className="meta-payment-panel"><div className="meta-payment-heading"><div><p className="eyebrow">BILLING ACTIVITY</p><h2>선불·결제 활동</h2><p>{payments.length ? `${payments.length}건의 업로드 내역` : '결제 활동 파일을 업로드하면 충전과 사용 내역이 표시됩니다.'}</p></div><Receipt size={21} /></div><div className="meta-payment-summary"><article><span><WalletCards size={14} /> 선불 추가·충전</span><strong>{won(paymentTotals.charged)}</strong></article><article><span><Receipt size={14} /> 결제 활동 사용</span><strong>{won(paymentTotals.used)}</strong></article><article><span>광고비 API 집행</span><strong>{won(totals.spend)}</strong></article><article><span>추정 잔액</span><strong>{effectiveCharged ? won(effectiveCharged - (paymentTotals.used || totals.spend)) : '입력 필요'}</strong></article></div>{payments.length > 0 && <div className="meta-payment-table-wrap"><table><thead><tr><th>날짜</th><th>구분</th><th>거래 ID</th><th>금액</th><th>결제수단</th><th>상태</th><th>VAT 인보이스 ID</th></tr></thead><tbody>{payments.map(payment => <tr key={payment.id}><td>{payment.date}</td><td><span className={`meta-payment-kind ${payment.kind}`}>{payment.kind}</span></td><td>{payment.transactionId}</td><td>{won(payment.amount)}</td><td>{payment.paymentMethod}</td><td>{payment.status}</td><td>{payment.invoiceId}</td></tr>)}</tbody></table></div>}</section>
 
     <div className="meta-manager-summary"><article><span>전체 캠페인</span><strong>{campaigns.length}개</strong><small>선택 {selectedCampaigns.length}개</small></article><article><span>광고비</span><strong>{won(totals.spend)}</strong></article><article><span>노출</span><strong>{totals.impressions.toLocaleString('ko-KR')}</strong></article><article><span>클릭</span><strong>{totals.clicks.toLocaleString('ko-KR')}</strong><small>CTR {totals.impressions ? (totals.clicks / totals.impressions * 100).toFixed(2) : '0.00'}%</small></article></div>
 
