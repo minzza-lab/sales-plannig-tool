@@ -141,9 +141,10 @@ export async function parseCompetitorOccupancyPdf(file: File): Promise<ParsedOcc
     });
     return anchorIndex >= 0 ? { ...row, region: anchors[anchorIndex].region } : row;
   });
+  const dedupedRows = resolvedRows.filter((row, index, all) => all.findIndex((candidate) => candidate.region === row.region && candidate.company === row.company && candidate.rooms === row.rooms && candidate.rates.join('|') === row.rates.join('|')) === index);
 
   return {
-    rows: resolvedRows,
+    rows: dedupedRows,
     months: months.length >= monthCount ? months : Array.from({ length: monthCount }, (_, index) => `${index + 1}월`),
     sourceDate: `${file.name} 업로드본`,
     pageCount: document.numPages,
