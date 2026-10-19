@@ -36,8 +36,10 @@ function parseMatrixSheet(workbook: XLSX.WorkBook, sheetName: string) {
   if (headerIndex < 0) return { rows: [], months: [] as string[] };
   const header = rows[headerIndex].map(clean);
   const monthColumns = header.map((value, index) => ({ value, index })).filter(({ value }) => /^\d{1,2}월$/.test(value));
+  const companyIndex = Math.max(0, header.findIndex((value) => /호텔앤리조트|호텔|리조트/.test(value)));
+  const roomsIndex = companyIndex + 1;
   const parsed = rows.slice(headerIndex + 1).map((row) => ({
-    company: clean(row[0]), rooms: number(row[1]), values: monthColumns.map(({ index }) => number(row[index])),
+    company: clean(row[companyIndex]), rooms: number(row[roomsIndex]), values: monthColumns.map(({ index }) => number(row[index])),
   })).filter((row) => row.company && !/월별|지역|호텔앤리조트|호텔/.test(row.company));
   return { rows: parsed, months: monthColumns.map(({ value }) => value) };
 }
