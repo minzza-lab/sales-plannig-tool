@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, FileUp, RotateCcw, TrendingUp } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { parseCompetitorOccupancyPdf, type ParsedOccupancyRow } from '../lib/competitorOccupancyPdf';
+import { parseCompetitorPerformancePdf, parseCompetitorWorkbook, type CompetitorSourceMetrics } from '../lib/competitorOccupancySources';
+import { supabase } from '../lib/supabase';
 import './CompetitorOccupancy.css';
 
 type OccupancyRow = ParsedOccupancyRow;
 
 const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월'];
 const sourceDate = '2026년 8월 PDF 기준';
-const storageKey = 'competitor-occupancy-uploaded-pdf-v1';
 const rows: OccupancyRow[] = [
   { region: '강원도 서부 지역', company: '소노캄 비발디파크', rooms: 1762, rates: [77.0, 79.2, 20.8, 25.4, 39.9, 37.5, 59.8, 70.9] }, { region: '강원도 서부 지역', company: '소노펠리체 비발디', rooms: 500, rates: [52.9, 58.9, 12.0, 19.6, 30.2, 27.8, 42.8, 49.4] }, { region: '강원도 서부 지역', company: '소노펠리체 빌리지 비발디', rooms: 219, rates: [42.0, 43.3, 15.3, 24.0, 36.5, 34.3, 46.6, 57.4] }, { region: '강원도 서부 지역', company: '용평', rooms: 1298, rates: [85.3, 81.8, 26.8, 20.6, 33.6, 24.6, 48.1, 58.5] }, { region: '강원도 서부 지역', company: '휘닉스파크', rooms: 962, rates: [75.1, 65.3, 10.5, 27.2, 33.2, 48.4, 61.4, 73.7] }, { region: '강원도 서부 지역', company: '오크밸리', rooms: 1105, rates: [51.4, 56.2, 24.4, 39.8, 50.4, 48.3, 58.1, 74.1] }, { region: '강원도 서부 지역', company: '웰리힐리', rooms: 766, rates: [64.3, 60.0, 9.6, 16.2, 30.6, 24.6, 53.9, 73.1] },
   { region: '강원도 동부 지역', company: '소노벨 양평', rooms: 193, rates: [52.9, 56.3, 38.6, 49.4, 61.7, 48.6, 50.3, 54.9] }, { region: '강원도 동부 지역', company: '델피노', rooms: 1257, rates: [59.0, 62.3, 25.9, 42.5, 52.4, 51.8, 73.6, 84.4] }, { region: '강원도 동부 지역', company: '쏠비치 양양', rooms: 497, rates: [55.6, 61.2, 33.9, 50.7, 59.2, 70.4, 91.2, 96.3] }, { region: '강원도 동부 지역', company: '쏠비치 삼척', rooms: 707, rates: [61.6, 69.6, 38.1, 63.6, 67.6, 85.2, 97.3, 98.4] }, { region: '강원도 동부 지역', company: '롯데리조트 속초', rooms: 392, rates: [64.6, 71.5, 47.9, 65.2, 75.0, 88.5, 89.0, 87.4] }, { region: '강원도 동부 지역', company: '카시아리조트', rooms: 674, rates: [38.0, 42.0, 30.0, 36.0, 45.0, 46.0, 58.0, 67.0] }, { region: '강원도 동부 지역', company: '한화리조트 속초', rooms: 1554, rates: [29.9, 29.3, 11.5, 43.9, 30.3, 23.3, 70.2, 59.6] }, { region: '강원도 동부 지역', company: '한화브리드 양양', rooms: 56, rates: [72.5, 71.3, 56.0, 61.8, 66.5, 72.9, 82.5, 89.1] }, { region: '강원도 동부 지역', company: '윈덤 호텔 고성', rooms: 529, rates: [15.0, 19.0, 9.0, 20.0, 31.7, 40.5, 54.7, 81.0] }, { region: '강원도 동부 지역', company: '르네블루 by 쏠비치 고성', rooms: 87, rates: [80.4, 82.6, 57.5, 66.3, 77.0, 90.8, 91.3, 95.3] }, { region: '강원도 동부 지역', company: '켄싱턴리조트 속초', rooms: 176, rates: [73.5, 70.8, 41.9, 64.6, 71.5, 87.6, 92.1, 92.1] },
@@ -27,6 +28,8 @@ export default function CompetitorOccupancy() {
   const [monthIndex, setMonthIndex] = useState(7);
   const [region, setRegion] = useState('전체 지역');
   const [uploadedData, setUploadedData] = useState<{ rows: OccupancyRow[]; months: string[]; sourceDate: string; fileName: string } | null>(null);
+  const [sourceMetrics, setSourceMetrics] = useState<CompetitorSourceMetrics>({ months: [], adr: {}, revpar: {}, revenue: [], rooms: {}, sourceFileNames: [] });
+  const [serverSavedAt, setServerSavedAt] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,12 +48,15 @@ export default function CompetitorOccupancy() {
   const ranking = activeRows.map((row) => ({ company: row.company, 가동률: row.rates[activeMonthIndex], isWelli: isWelli(row.company) })).reverse();
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved) setUploadedData(JSON.parse(saved) as typeof uploadedData);
-    } catch {
-      window.localStorage.removeItem(storageKey);
-    }
+    void (async () => {
+      const { data, error } = await supabase.from('competitor_occupancy_sources').select('period,source_files,occupancy_rows,performance_metrics,uploaded_at').order('period', { ascending: false }).limit(1).maybeSingle();
+      if (error || !data) return;
+      const rows = Array.isArray(data.occupancy_rows) ? data.occupancy_rows as OccupancyRow[] : [];
+      const metrics = data.performance_metrics && typeof data.performance_metrics === 'object' ? data.performance_metrics as CompetitorSourceMetrics : null;
+      if (rows.length) setUploadedData({ rows, months: metrics?.months?.length ? metrics.months : months, sourceDate: `${data.period} 서버 저장 자료`, fileName: Array.isArray(data.source_files) ? data.source_files.join(', ') : '서버 저장 자료' });
+      if (metrics) setSourceMetrics(metrics);
+      setServerSavedAt(data.uploaded_at);
+    })();
   }, []);
 
   useEffect(() => {
@@ -61,19 +67,44 @@ export default function CompetitorOccupancy() {
     if (region !== '전체 지역' && !regions.includes(region)) setRegion('전체 지역');
   }, [region, regions]);
 
-  const handlePdfUpload = async (file: File | undefined) => {
-    if (!file) return;
+  const handleSourceUpload = async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
     setUploadBusy(true);
     setUploadError('');
     try {
-      const parsed = await parseCompetitorOccupancyPdf(file);
-      const nextData = { rows: parsed.rows, months: parsed.months, sourceDate: parsed.sourceDate, fileName: file.name };
+      const files = Array.from(fileList);
+      let market: Awaited<ReturnType<typeof parseCompetitorOccupancyPdf>> | null = null;
+      let workbook: Awaited<ReturnType<typeof parseCompetitorWorkbook>> | null = null;
+      let performance: Partial<Awaited<ReturnType<typeof parseCompetitorWorkbook>>> | null = null;
+      for (const file of files) {
+        const name = file.name.normalize('NFC');
+        if (/\.xlsx?$/i.test(name)) workbook = await parseCompetitorWorkbook(file);
+        else if (/투숙|실적/.test(name)) performance = await parseCompetitorPerformancePdf(file);
+        else if (/\.pdf$/i.test(name)) market = await parseCompetitorOccupancyPdf(file);
+      }
+      if (!market && !workbook) throw new Error('시장 현황 PDF 또는 동종사 실적 Excel이 필요합니다.');
+      const base = market ?? workbook!;
+      const metrics: CompetitorSourceMetrics = {
+        ...(workbook?.metrics ?? { months: base.months, adr: {}, revpar: {}, revenue: [], rooms: {}, sourceFileNames: [] }),
+        revenue: performance?.metrics?.revenue ?? [],
+        sourceFileNames: files.map((file) => file.name),
+      };
+      const nextData = { rows: base.rows, months: base.months, sourceDate: `${files.length}개 원자료 서버 저장본`, fileName: files.map((file) => file.name).join(', ') };
       setUploadedData(nextData);
-      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
+      setSourceMetrics(metrics);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+      if (!userId) throw new Error('로그인이 필요합니다.');
+      const periodMatch = files.map((file) => file.name.normalize('NFC').match(/(20\d{2})[^\d]?([01]?\d)월|26[._-](\d{2})/)).find(Boolean);
+      const year = periodMatch?.[1] ?? '2026';
+      const month = periodMatch?.[2] ?? periodMatch?.[3] ?? String(new Date().getMonth() + 1).padStart(2, '0');
+      const { error: saveError } = await supabase.from('competitor_occupancy_sources').upsert({ period: `${year}-${String(Number(month)).padStart(2, '0')}-01`, source_files: files.map((file) => file.name), occupancy_rows: base.rows, performance_metrics: metrics, uploaded_by: userId, uploaded_at: new Date().toISOString() }, { onConflict: 'period' });
+      if (saveError) throw new Error(`서버 저장 실패: ${saveError.message}`);
+      setServerSavedAt(new Date().toISOString());
       setRegion('전체 지역');
-      setMonthIndex(Math.max(0, parsed.months.length - 1));
+      setMonthIndex(Math.max(0, base.months.length - 1));
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'PDF를 읽지 못했습니다.');
+      setUploadError(error instanceof Error ? error.message : '자료를 읽지 못했습니다.');
     } finally {
       setUploadBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -83,16 +114,17 @@ export default function CompetitorOccupancy() {
   const resetUploadedPdf = () => {
     setUploadedData(null);
     setUploadError('');
-    window.localStorage.removeItem(storageKey);
     setRegion('전체 지역');
     setMonthIndex(7);
   };
 
   return <main className="occupancy-dashboard">
     <header className="occupancy-hero"><div><p>COMPETITOR OCCUPANCY REPORT</p><h1>동종사 가동률 현황</h1><span>PDF 전체 리조트의 월별 객실 가동률을 지역별로 비교합니다.</span></div><div className="occupancy-source">{dataSourceDate}<small>가용객실수 기준 · 총 {dataRows.length}개사</small></div></header>
-    <section className="occupancy-upload occupancy-panel"><div className="occupancy-upload-copy"><div className="occupancy-upload-icon"><FileUp size={20} /></div><div><strong>새 가동률 자료 업로드</strong><p>{uploadedData ? `${uploadedData.fileName}을 적용 중입니다.` : '동종사 시장 현황 PDF를 올리면 업체별 표를 자동으로 읽습니다.'}</p><small>표 형태의 PDF · 업로드 자료는 현재 브라우저에 저장됩니다.</small></div></div><div className="occupancy-upload-actions"><input ref={fileInputRef} type="file" accept="application/pdf,.pdf" onChange={(event) => void handlePdfUpload(event.target.files?.[0])} hidden /><button type="button" className="occupancy-upload-button" onClick={() => fileInputRef.current?.click()} disabled={uploadBusy}><FileUp size={16} />{uploadBusy ? '자료 읽는 중…' : 'PDF 업로드'}</button>{uploadedData && <button type="button" className="occupancy-reset-button" onClick={resetUploadedPdf}><RotateCcw size={15} />기본 자료로 복원</button>}</div>{uploadError && <p className="occupancy-upload-error" role="alert">{uploadError}</p>}</section>
+    <section className="occupancy-upload occupancy-panel"><div className="occupancy-upload-copy"><div className="occupancy-upload-icon"><FileUp size={20} /></div><div><strong>월별 자료 세트 업로드</strong><p>{uploadedData ? `${uploadedData.fileName}을 적용 중입니다.` : '시장 현황 PDF, 투숙 실적 PDF, Excel을 한 번에 선택합니다.'}</p><small>서버에 저장되므로 다른 기기에서도 조회할 수 있습니다.{serverSavedAt ? ` 최근 저장 ${new Date(serverSavedAt).toLocaleString('ko-KR')}` : ''}</small></div></div><div className="occupancy-upload-actions"><input ref={fileInputRef} type="file" accept="application/pdf,.pdf,.xlsx,.xls" multiple onChange={(event) => void handleSourceUpload(event.target.files)} hidden /><button type="button" className="occupancy-upload-button" onClick={() => fileInputRef.current?.click()} disabled={uploadBusy}><FileUp size={16} />{uploadBusy ? '읽고 저장 중…' : '3개 자료 선택'}</button>{uploadedData && <button type="button" className="occupancy-reset-button" onClick={resetUploadedPdf}><RotateCcw size={15} />기본 자료로 복원</button>}</div>{uploadError && <p className="occupancy-upload-error" role="alert">{uploadError}</p>}</section>
     <nav className="occupancy-toolbar" aria-label="가동률 조회 조건"><label>지역<select value={region} onChange={(event) => setRegion(event.target.value)}>{regions.map((item) => <option key={item}>{item}</option>)}</select></label><div className="occupancy-months">{dataMonths.map((month, index) => <button key={month} className={activeMonthIndex === index ? 'active' : ''} onClick={() => setMonthIndex(index)}>{month}</button>)}</div></nav>
     <section className="occupancy-metrics"><article><small>웰리힐리 {activeMonth} 가동률</small><strong>{welli ? percent(welli.rates[activeMonthIndex]) : '미집계'}</strong><span>{welli ? `${welliRank}위 / ${dataRows.length}개사` : '해당 PDF에 웰리힐리 행 없음'}</span></article><article><small>동종사 평균</small><strong>{percent(average)}</strong><span>{welli ? `웰리힐리 대비 ${(welli.rates[activeMonthIndex] - average >= 0 ? '+' : '') + (welli.rates[activeMonthIndex] - average).toFixed(1)}%p` : '선택 지역 기준'}</span></article><article><small>웰리힐리 가용객실수</small><strong>{welli ? `${welli.rooms.toLocaleString()}실` : '미집계'}</strong><span>업로드 표 기준</span></article><article><small>최고 가동률</small><strong>{activeRows[0] ? percent(activeRows[0].rates[activeMonthIndex]) : '미집계'}</strong><span>{activeRows[0]?.company ?? '업체 없음'}</span></article></section>
+    <section className="occupancy-panel occupancy-finance"><header><div><p>PERFORMANCE & REVENUE</p><h2>투숙 실적·금액 요약</h2></div><span>{sourceMetrics.revenue.length ? `${sourceMetrics.revenue.length}개사 매출` : '금액 자료 업로드 필요'}</span></header><div className="occupancy-finance-grid"><article><small>2026 누계 매출</small><strong>{sourceMetrics.revenue.length ? sourceMetrics.revenue.reduce((sum, row) => sum + row.total, 0).toLocaleString() : '미집계'}</strong><span>투숙 실적 PDF 원자료 합계</span></article><article><small>전년 대비 매출</small><strong>{sourceMetrics.revenue.length ? `${sourceMetrics.revenue.reduce((sum, row) => sum + row.change, 0) >= 0 ? '+' : ''}${sourceMetrics.revenue.reduce((sum, row) => sum + row.change, 0).toLocaleString()}` : '미집계'}</strong><span>2026년 합계 - 2025년 합계</span></article><article><small>Excel RevPAR</small><strong>{sourceMetrics.revpar['웰리힐리']?.[activeMonthIndex] ? `${sourceMetrics.revpar['웰리힐리'][activeMonthIndex].toLocaleString()}원` : '미집계'}</strong><span>웰리힐리 {activeMonth} 기준</span></article></div></section>
+    {sourceMetrics.revenue.length > 0 && <details className="occupancy-panel occupancy-finance-detail"><summary>동종사별 Revenue 상세 보기</summary><div className="occupancy-table-wrap"><table><thead><tr><th>업체</th><th>2026년 합계</th><th>2025년 합계</th><th>증감액</th><th>증감률</th></tr></thead><tbody>{sourceMetrics.revenue.map((row) => <tr key={row.company}><td>{row.company}</td><td>{row.total.toLocaleString()}</td><td>{row.previousTotal.toLocaleString()}</td><td className={row.change >= 0 ? 'positive' : 'negative'}>{row.change >= 0 ? '+' : ''}{row.change.toLocaleString()}</td><td>{row.changeRate === null ? '—' : `${row.changeRate >= 0 ? '+' : ''}${row.changeRate.toFixed(1)}%`}</td></tr>)}</tbody></table></div></details>}
     <section className="occupancy-grid"><article className="occupancy-panel"><header><div><p>MONTHLY TREND</p><h2>{dataMonths[0]}~{dataMonths[dataMonths.length - 1]} 가동률 추이</h2></div><TrendingUp size={20} /></header><div className="occupancy-chart occupancy-chart--trend"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend} margin={{ left: 0, right: 16, top: 10, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5eeeb" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} axisLine={false} tickLine={false} width={44} /><Tooltip formatter={(value) => value === null ? '미집계' : percent(Number(value))} /><Legend /><Line type="monotone" dataKey="웰리힐리" stroke="#e87936" strokeWidth={3} dot={{ r: 4 }} connectNulls={false} /><Line type="monotone" dataKey="선택 지역 평균" stroke="#247767" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div></article><article className="occupancy-panel"><header><div><p>{activeMonth} RANKING</p><h2>{region} 가동률 순위</h2></div><span>{activeRows.length}개사</span></header><div className="occupancy-chart occupancy-chart--rank"><ResponsiveContainer width="100%" height="100%"><BarChart data={ranking} layout="vertical" margin={{ left: 4, right: 24, top: 4, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5eeeb" /><XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} axisLine={false} tickLine={false} /><YAxis type="category" dataKey="company" width={118} axisLine={false} tickLine={false} fontSize={11} /><Tooltip formatter={(value) => percent(Number(value))} /><Bar dataKey="가동률" radius={[0, 5, 5, 0]}>{ranking.map((entry) => <Cell key={entry.company} fill={entry.isWelli ? '#e87936' : '#247767'} />)}</Bar></BarChart></ResponsiveContainer></div></article></section>
     <section className="occupancy-panel occupancy-table"><header><div><p>COMPANY DETAIL</p><h2>{activeMonth} 업체별 상세</h2></div><span>웰리힐리 강조 표시</span></header><div className="occupancy-table-wrap"><table><thead><tr><th>순위</th><th>업체</th><th>가용객실수</th>{dataMonths.map((month) => <th key={month}>{month}</th>)}</tr></thead><tbody>{activeRows.map((row, index) => <tr key={row.company} className={isWelli(row.company) ? 'is-welli' : ''}><td>{index + 1}</td><td><span>{isWelli(row.company) && <Building2 size={15} />}{row.company}</span></td><td>{row.rooms.toLocaleString()}실</td>{dataMonths.map((_, rateIndex) => <td key={`${row.company}-${rateIndex}`}>{row.rates[rateIndex] === undefined ? '—' : percent(row.rates[rateIndex])}</td>)}</tr>)}</tbody></table></div></section>
     <footer className="occupancy-note">※ 기본 자료는 제공된 PDF 54개 행입니다. 새 PDF를 업로드하면 현재 화면의 비교·순위·추이가 업로드 자료 기준으로 바뀌고, 다음 방문에도 유지됩니다.</footer>
