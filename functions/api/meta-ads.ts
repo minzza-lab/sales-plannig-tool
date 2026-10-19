@@ -127,7 +127,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 })
 
-const baseInsightFields = 'campaign_id,campaign_name,spend,impressions,clicks,reach,date_start,date_stop'
+const baseInsightFields = 'campaign_id,campaign_name,spend,impressions,clicks,reach'
 const optionalInsightFieldGroups = [
   'frequency,cpm,cpp,ctr,cpc,cost_per_inline_link_click,inline_link_clicks,unique_clicks,unique_ctr',
   'outbound_clicks,outbound_clicks_ctr,inline_link_click_ctr,unique_inline_link_clicks,unique_outbound_clicks,website_ctr,social_spend',
@@ -149,7 +149,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const since = period === 'all' ? null : `${month}-01`
   const until = period === 'all' ? null : new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
   const accountId = env.META_AD_ACCOUNT_ID || 'act_1436358091097418'
-  const version = env.META_GRAPH_API_VERSION || 'v23.0'
+  const version = env.META_GRAPH_API_VERSION || 'v26.0'
   const buildInsightsEndpoint = (fields: string) => {
     const endpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/insights`)
     endpoint.searchParams.set('access_token', token)
