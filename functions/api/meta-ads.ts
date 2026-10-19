@@ -127,6 +127,15 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 })
 
+const baseInsightFields = 'campaign_id,campaign_name,spend,impressions,clicks,reach,date_start,date_stop'
+const optionalInsightFieldGroups = [
+  'frequency,cpm,cpp,ctr,cpc,cost_per_inline_link_click,inline_link_clicks,unique_clicks,unique_ctr',
+  'outbound_clicks,outbound_clicks_ctr,inline_link_click_ctr,unique_inline_link_clicks,unique_outbound_clicks,website_ctr,social_spend',
+  'actions,action_values,cost_per_action_type,conversions,conversion_values,purchase_roas,website_purchase_roas',
+  'video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions',
+  'video_thruplay_watched_actions,video_15_sec_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions',
+]
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const token = env.META_ACCESS_TOKEN
   if (!token) return json({ error: 'Meta API secret is not configured.' }, 503)
@@ -141,13 +150,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const until = period === 'all' ? null : new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10)
   const accountId = env.META_AD_ACCOUNT_ID || 'act_1436358091097418'
   const version = env.META_GRAPH_API_VERSION || 'v23.0'
-  const endpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/insights`)
-  endpoint.searchParams.set('access_token', token)
-  endpoint.searchParams.set('level', 'campaign')
-  endpoint.searchParams.set('fields', 'campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,cpm,cpp,ctr,cpc,cost_per_inline_link_click,cost_per_conversion,inline_link_clicks,inline_link_click_ctr,outbound_clicks,outbound_clicks_ctr,unique_clicks,unique_ctr,unique_inline_link_clicks,unique_outbound_clicks,website_ctr,social_spend,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_thruplay_watched_actions,video_15_sec_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions,actions,action_values,cost_per_action_type,conversions,conversion_values,purchase_roas,website_purchase_roas,date_start,date_stop')
-  if (period === 'all') endpoint.searchParams.set('date_preset', 'maximum')
-  else endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
-  endpoint.searchParams.set('limit', '500')
+  const buildInsightsEndpoint = (fields: string) => {
+    const endpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/insights`)
+    endpoint.searchParams.set('access_token', token)
+    endpoint.searchParams.set('level', 'campaign')
+    endpoint.searchParams.set('fields', fields)
+    if (period === 'all') endpoint.searchParams.set('date_preset', 'maximum')
+    else endpoint.searchParams.set('time_range', JSON.stringify({ since, until }))
+    endpoint.searchParams.set('limit', '500')
+    return endpoint
+  }
 
   const adSetsEndpoint = new URL(`https://graph.facebook.com/${version}/${accountId}/adsets`)
   adSetsEndpoint.searchParams.set('access_token', token)
@@ -159,13 +171,36 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   campaignsEndpoint.searchParams.set('fields', 'id,name,status,effective_status,objective,buying_type,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time')
   campaignsEndpoint.searchParams.set('limit', '500')
 
-  const [response, adSetsResponse, campaignsResponse] = await Promise.all([fetch(endpoint), fetch(adSetsEndpoint), fetch(campaignsEndpoint)])
-  const payload = await response.json() as { data?: MetaInsight[]; error?: { message?: string; code?: number } }
+  const fetchInsights = async (fields: string) => {
+    const response = await fetch(buildInsightsEndpoint(fields))
+    const payload = await response.json() as { data?: MetaInsight[]; error?: { message?: string; code?: number } }
+    return { response, payload }
+  }
+
+  const [baseInsights, ...optionalInsights] = await Promise.all([
+    fetchInsights(baseInsightFields),
+    ...optionalInsightFieldGroups.map(group => fetchInsights(`${baseInsightFields},${group}`)),
+  ])
+  const [adSetsResponse, campaignsResponse] = await Promise.all([fetch(adSetsEndpoint), fetch(campaignsEndpoint)])
+  const { response, payload } = baseInsights
   const adSetsPayload = await adSetsResponse.json() as { data?: MetaAdSet[] }
   const campaignsPayload = await campaignsResponse.json() as { data?: MetaCampaign[] }
   if (!response.ok || payload.error) {
     return json({ error: payload.error?.message || 'Meta API request failed.', code: payload.error?.code }, response.status >= 400 ? response.status : 502)
   }
+
+  const mergedInsights = new Map<string, MetaInsight>()
+  const mergeInsightRows = (rows: MetaInsight[] | undefined) => {
+    for (const row of rows || []) {
+      const key = row.campaign_id || row.campaign_name || `unknown-${mergedInsights.size}`
+      mergedInsights.set(key, { ...(mergedInsights.get(key) || {}), ...row })
+    }
+  }
+  mergeInsightRows(payload.data)
+  optionalInsights.forEach(({ response: optionalResponse, payload: optionalPayload }) => {
+    if (optionalResponse.ok && !optionalPayload.error) mergeInsightRows(optionalPayload.data)
+  })
+  const insightRows = [...mergedInsights.values()]
 
   const targetingsByCampaign = new Map<string, string>()
   const adSetsByCampaign = new Map<string, MetaAdSet[]>()
@@ -179,7 +214,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
   const campaignDetails = new Map((campaignsPayload.data || []).map(campaign => [campaign.id || '', campaign]))
 
-  const items = (payload.data || []).map((row) => ({
+  const items = insightRows.map((row) => ({
     id: `meta-api-${row.campaign_id || row.campaign_name || 'unknown'}-${period === 'all' ? 'all' : month}`,
     channel: 'meta' as const,
     date: since || '전체 기간',
@@ -207,5 +242,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     memo: `노출 ${Number(row.impressions || 0).toLocaleString('ko-KR')} · 클릭 ${Number(row.clicks || 0).toLocaleString('ko-KR')} · 도달 ${Number(row.reach || 0).toLocaleString('ko-KR')}${targetingsByCampaign.get(row.campaign_id || '') ? ` · 타겟 ${targetingsByCampaign.get(row.campaign_id || '')}` : ''}`,
   }))
 
-  return json({ period, month: month || null, since, until, items })
+  const hasUnavailableOptionalFields = optionalInsights.some(({ response: optionalResponse, payload: optionalPayload }) => !optionalResponse.ok || Boolean(optionalPayload.error))
+  return json({
+    period,
+    month: month || null,
+    since,
+    until,
+    items,
+    warnings: hasUnavailableOptionalFields ? ['일부 상세 지표는 Meta 계정 또는 API 버전에서 제공되지 않아 제외되었습니다.'] : [],
+  })
 }
