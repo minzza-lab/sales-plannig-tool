@@ -5,15 +5,16 @@ import './AutomationRequest.css';
 interface AutomationComment {
   id: string;
   request_id: string;
-  user_name: string;
+  author: string;
   content: string;
   created_at: string;
 }
 
 interface AutomationRequestItem {
   id: string;
-  user_name: string;
-  department: string;
+  title: string;
+  user_name?: string;
+  author: string;
   content: string;
   likes: number;
   created_at: string;
@@ -63,8 +64,7 @@ const AutomationRequest: React.FC = () => {
 
     const { error } = await supabase.from('automation_requests').insert([{
       title: generatedTitle,
-      user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
-      department: user?.user_metadata?.department || '영업부',
+      author: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '사용자',
       content: contentText,
       likes: 0
     }]);
@@ -98,7 +98,7 @@ const AutomationRequest: React.FC = () => {
 
     const { error } = await supabase.from('automation_comments').insert([{
       request_id: requestId,
-      user_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '사용자',
+      author: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '사용자',
       content: content.trim()
     }]);
 
@@ -143,8 +143,7 @@ const AutomationRequest: React.FC = () => {
           <div key={req.id} className="request-item-card">
             <div className="item-header">
               <div className="user-meta">
-                <span className="dept">{req.department}</span>
-                <span className="name">{req.user_name}</span>
+                <span className="name">{req.author || req.user_name || '사용자'}</span>
                 <span className="dot">•</span>
                 <span className="date">{new Date(req.created_at).toLocaleDateString()}</span>
               </div>
@@ -163,7 +162,7 @@ const AutomationRequest: React.FC = () => {
               {req.comments?.map(comment => (
                 <div key={comment.id} className="comment-row">
                   <div className="comment-main">
-                    <span className="c-user">{comment.user_name}</span>
+                    <span className="c-user">{comment.author || '사용자'}</span>
                     <span className="c-text">{comment.content}</span>
                   </div>
                   <button className="c-delete" onClick={() => handleDeleteComment(comment.id)}>✕</button>
