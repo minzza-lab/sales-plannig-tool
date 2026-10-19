@@ -78,7 +78,6 @@ export async function parseCompetitorPerformancePdf(file: File): Promise<Partial
     const section = pageLines.findIndex((line) => line.some((item) => item.str === 'Revenue'));
     if (section < 0 || !companies.length) continue;
     const relevant = pageLines.slice(section, section + 7);
-    const rows2025 = relevant[0] ?? [];
     const totals2025 = relevant[2] ?? [];
     const rows2026 = relevant[3] ?? [];
     const totals2026 = relevant[5] ?? [];
