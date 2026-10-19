@@ -30,6 +30,8 @@ export default function CompetitorOccupancy() {
   const [uploadedData, setUploadedData] = useState<{ rows: OccupancyRow[]; months: string[]; sourceDate: string; fileName: string } | null>(null);
   const [sourceMetrics, setSourceMetrics] = useState<CompetitorSourceMetrics>({ months: [], adr: {}, revpar: {}, revenue: [], rooms: {}, sourceFileNames: [] });
   const [serverSavedAt, setServerSavedAt] = useState<string | null>(null);
+  const [pendingSource, setPendingSource] = useState<{ data: { rows: OccupancyRow[]; months: string[]; sourceDate: string; fileName: string }; metrics: CompetitorSourceMetrics; period: string } | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState('');
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +43,10 @@ export default function CompetitorOccupancy() {
   const activeMonth = dataMonths[activeMonthIndex] ?? '1월';
   const filteredRows = region === '전체 지역' ? dataRows : dataRows.filter((row) => row.region === region);
   const activeRows = useMemo(() => [...filteredRows].sort((a, b) => b.rates[activeMonthIndex] - a.rates[activeMonthIndex]), [filteredRows, activeMonthIndex]);
+  const companyNames = useMemo(() => dataRows.map((row) => row.company).filter((company, index, all) => all.indexOf(company) === index).sort(), [dataRows]);
+  const activeCompany = selectedCompany && companyNames.includes(selectedCompany) ? selectedCompany : companyNames[0] ?? '';
+  const selectedRow = dataRows.find((row) => row.company === activeCompany);
+  const selectedRevenue = sourceMetrics.revenue.find((row) => row.company === activeCompany);
   const welli = dataRows.find((row) => isWelli(row.company));
   const welliRank = activeRows.findIndex((row) => isWelli(row.company)) + 1;
   const average = activeRows.length ? activeRows.reduce((sum, row) => sum + row.rates[activeMonthIndex], 0) / activeRows.length : 0;
@@ -55,6 +61,7 @@ export default function CompetitorOccupancy() {
       const metrics = data.performance_metrics && typeof data.performance_metrics === 'object' ? data.performance_metrics as CompetitorSourceMetrics : null;
       if (rows.length) setUploadedData({ rows, months: metrics?.months?.length ? metrics.months : months, sourceDate: `${data.period} 서버 저장 자료`, fileName: Array.isArray(data.source_files) ? data.source_files.join(', ') : '서버 저장 자료' });
       if (metrics) setSourceMetrics(metrics);
+      if (rows[0]) setSelectedCompany(rows[0].company);
       setServerSavedAt(data.uploaded_at);
     })();
   }, []);
@@ -92,15 +99,11 @@ export default function CompetitorOccupancy() {
       const nextData = { rows: base.rows, months: base.months, sourceDate: `${files.length}개 원자료 서버 저장본`, fileName: files.map((file) => file.name).join(', ') };
       setUploadedData(nextData);
       setSourceMetrics(metrics);
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
-      if (!userId) throw new Error('로그인이 필요합니다.');
       const periodMatch = files.map((file) => file.name.normalize('NFC').match(/(20\d{2})[^\d]?([01]?\d)월|26[._-](\d{2})/)).find(Boolean);
       const year = periodMatch?.[1] ?? '2026';
       const month = periodMatch?.[2] ?? periodMatch?.[3] ?? String(new Date().getMonth() + 1).padStart(2, '0');
-      const { error: saveError } = await supabase.from('competitor_occupancy_sources').upsert({ period: `${year}-${String(Number(month)).padStart(2, '0')}-01`, source_files: files.map((file) => file.name), occupancy_rows: base.rows, performance_metrics: metrics, uploaded_by: userId, uploaded_at: new Date().toISOString() }, { onConflict: 'period' });
-      if (saveError) throw new Error(`서버 저장 실패: ${saveError.message}`);
-      setServerSavedAt(new Date().toISOString());
+      setPendingSource({ data: nextData, metrics, period: `${year}-${String(Number(month)).padStart(2, '0')}-01` });
+      setSelectedCompany(base.rows[0]?.company ?? '');
       setRegion('전체 지역');
       setMonthIndex(Math.max(0, base.months.length - 1));
     } catch (error) {
@@ -108,6 +111,25 @@ export default function CompetitorOccupancy() {
     } finally {
       setUploadBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const saveSourceSet = async () => {
+    if (!pendingSource) return;
+    setUploadBusy(true);
+    setUploadError('');
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+      if (!userId) throw new Error('로그인이 필요합니다.');
+      const { error: saveError } = await supabase.from('competitor_occupancy_sources').upsert({ period: pendingSource.period, source_files: pendingSource.metrics.sourceFileNames, occupancy_rows: pendingSource.data.rows, performance_metrics: pendingSource.metrics, uploaded_by: userId, uploaded_at: new Date().toISOString() }, { onConflict: 'period' });
+      if (saveError) throw new Error(`서버 저장 실패: ${saveError.message}`);
+      setServerSavedAt(new Date().toISOString());
+      setPendingSource(null);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : '서버 저장에 실패했습니다.');
+    } finally {
+      setUploadBusy(false);
     }
   };
 
@@ -120,11 +142,12 @@ export default function CompetitorOccupancy() {
 
   return <main className="occupancy-dashboard">
     <header className="occupancy-hero"><div><p>COMPETITOR OCCUPANCY REPORT</p><h1>동종사 가동률 현황</h1><span>PDF 전체 리조트의 월별 객실 가동률을 지역별로 비교합니다.</span></div><div className="occupancy-source">{dataSourceDate}<small>가용객실수 기준 · 총 {dataRows.length}개사</small></div></header>
-    <section className="occupancy-upload occupancy-panel"><div className="occupancy-upload-copy"><div className="occupancy-upload-icon"><FileUp size={20} /></div><div><strong>월별 자료 세트 업로드</strong><p>{uploadedData ? `${uploadedData.fileName}을 적용 중입니다.` : '시장 현황 PDF, 투숙 실적 PDF, Excel을 한 번에 선택합니다.'}</p><small>서버에 저장되므로 다른 기기에서도 조회할 수 있습니다.{serverSavedAt ? ` 최근 저장 ${new Date(serverSavedAt).toLocaleString('ko-KR')}` : ''}</small></div></div><div className="occupancy-upload-actions"><input ref={fileInputRef} type="file" accept="application/pdf,.pdf,.xlsx,.xls" multiple onChange={(event) => void handleSourceUpload(event.target.files)} hidden /><button type="button" className="occupancy-upload-button" onClick={() => fileInputRef.current?.click()} disabled={uploadBusy}><FileUp size={16} />{uploadBusy ? '읽고 저장 중…' : '3개 자료 선택'}</button>{uploadedData && <button type="button" className="occupancy-reset-button" onClick={resetUploadedPdf}><RotateCcw size={15} />기본 자료로 복원</button>}</div>{uploadError && <p className="occupancy-upload-error" role="alert">{uploadError}</p>}</section>
+    <section className="occupancy-upload occupancy-panel"><div className="occupancy-upload-copy"><div className="occupancy-upload-icon"><FileUp size={20} /></div><div><strong>월별 자료 세트 업로드</strong><p>{uploadedData ? `${uploadedData.fileName}을 적용 중입니다.` : '시장 현황 PDF, 투숙 실적 PDF, Excel을 한 번에 선택합니다.'}</p><small>{pendingSource ? '자료를 확인했습니다. 아래 저장 버튼을 눌러 서버에 반영하세요.' : serverSavedAt ? `서버 저장 완료 · ${new Date(serverSavedAt).toLocaleString('ko-KR')}` : '자료를 선택한 뒤 저장해야 서버에 반영됩니다.'}</small></div></div><div className="occupancy-upload-actions"><input ref={fileInputRef} type="file" accept="application/pdf,.pdf,.xlsx,.xls" multiple onChange={(event) => void handleSourceUpload(event.target.files)} hidden /><button type="button" className="occupancy-upload-button" onClick={() => fileInputRef.current?.click()} disabled={uploadBusy}><FileUp size={16} />{uploadBusy ? '자료 읽는 중…' : '3개 자료 선택'}</button>{pendingSource && <button type="button" className="occupancy-save-button" onClick={() => void saveSourceSet()} disabled={uploadBusy}>{uploadBusy ? '서버 저장 중…' : '서버에 저장'}</button>}{serverSavedAt && !pendingSource && <span className="occupancy-saved-badge">✓ 서버 저장됨</span>}{uploadedData && <button type="button" className="occupancy-reset-button" onClick={resetUploadedPdf}><RotateCcw size={15} />기본 자료로 복원</button>}</div>{uploadError && <p className="occupancy-upload-error" role="alert">{uploadError}</p>}</section>
     <nav className="occupancy-toolbar" aria-label="가동률 조회 조건"><label>지역<select value={region} onChange={(event) => setRegion(event.target.value)}>{regions.map((item) => <option key={item}>{item}</option>)}</select></label><div className="occupancy-months">{dataMonths.map((month, index) => <button key={month} className={activeMonthIndex === index ? 'active' : ''} onClick={() => setMonthIndex(index)}>{month}</button>)}</div></nav>
     <section className="occupancy-metrics"><article><small>웰리힐리 {activeMonth} 가동률</small><strong>{welli ? percent(welli.rates[activeMonthIndex]) : '미집계'}</strong><span>{welli ? `${welliRank}위 / ${dataRows.length}개사` : '해당 PDF에 웰리힐리 행 없음'}</span></article><article><small>동종사 평균</small><strong>{percent(average)}</strong><span>{welli ? `웰리힐리 대비 ${(welli.rates[activeMonthIndex] - average >= 0 ? '+' : '') + (welli.rates[activeMonthIndex] - average).toFixed(1)}%p` : '선택 지역 기준'}</span></article><article><small>웰리힐리 가용객실수</small><strong>{welli ? `${welli.rooms.toLocaleString()}실` : '미집계'}</strong><span>업로드 표 기준</span></article><article><small>최고 가동률</small><strong>{activeRows[0] ? percent(activeRows[0].rates[activeMonthIndex]) : '미집계'}</strong><span>{activeRows[0]?.company ?? '업체 없음'}</span></article></section>
     <section className="occupancy-panel occupancy-finance"><header><div><p>PERFORMANCE & REVENUE</p><h2>투숙 실적·금액 요약</h2></div><span>{sourceMetrics.revenue.length ? `${sourceMetrics.revenue.length}개사 매출` : '금액 자료 업로드 필요'}</span></header><div className="occupancy-finance-grid"><article><small>2026 누계 매출</small><strong>{sourceMetrics.revenue.length ? sourceMetrics.revenue.reduce((sum, row) => sum + row.total, 0).toLocaleString() : '미집계'}</strong><span>투숙 실적 PDF 원자료 합계</span></article><article><small>전년 대비 매출</small><strong>{sourceMetrics.revenue.length ? `${sourceMetrics.revenue.reduce((sum, row) => sum + row.change, 0) >= 0 ? '+' : ''}${sourceMetrics.revenue.reduce((sum, row) => sum + row.change, 0).toLocaleString()}` : '미집계'}</strong><span>2026년 합계 - 2025년 합계</span></article><article><small>Excel RevPAR</small><strong>{sourceMetrics.revpar['웰리힐리']?.[activeMonthIndex] ? `${sourceMetrics.revpar['웰리힐리'][activeMonthIndex].toLocaleString()}원` : '미집계'}</strong><span>웰리힐리 {activeMonth} 기준</span></article></div></section>
     {sourceMetrics.revenue.length > 0 && <details className="occupancy-panel occupancy-finance-detail"><summary>동종사별 Revenue 상세 보기</summary><div className="occupancy-table-wrap"><table><thead><tr><th>업체</th><th>2026년 합계</th><th>2025년 합계</th><th>증감액</th><th>증감률</th></tr></thead><tbody>{sourceMetrics.revenue.map((row) => <tr key={row.company}><td>{row.company}</td><td>{row.total.toLocaleString()}</td><td>{row.previousTotal.toLocaleString()}</td><td className={row.change >= 0 ? 'positive' : 'negative'}>{row.change >= 0 ? '+' : ''}{row.change.toLocaleString()}</td><td>{row.changeRate === null ? '—' : `${row.changeRate >= 0 ? '+' : ''}${row.changeRate.toFixed(1)}%`}</td></tr>)}</tbody></table></div></details>}
+    <section className="occupancy-panel occupancy-company-detail"><header><div><p>COMPANY DETAIL</p><h2>업체별 상세 분석</h2></div><label>업체 선택<select value={activeCompany} onChange={(event) => setSelectedCompany(event.target.value)}>{companyNames.map((company) => <option key={company}>{company}</option>)}</select></label></header>{selectedRow ? <div className="occupancy-company-detail-grid"><article><small>가용객실수</small><strong>{selectedRow.rooms.toLocaleString()}실</strong><span>업로드 자료 기준</span></article><article><small>{activeMonth} 가동률</small><strong>{percent(selectedRow.rates[activeMonthIndex] ?? 0)}</strong><span>전체 업체 순위 {dataRows.filter((row) => (row.rates[activeMonthIndex] ?? 0) > (selectedRow.rates[activeMonthIndex] ?? 0)).length + 1}위</span></article><article><small>{activeMonth} ADR</small><strong>{sourceMetrics.adr[activeCompany]?.[activeMonthIndex] ? `${sourceMetrics.adr[activeCompany][activeMonthIndex].toLocaleString()}원` : '미집계'}</strong><span>Excel 원자료 기준</span></article><article><small>{activeMonth} RevPAR</small><strong>{sourceMetrics.revpar[activeCompany]?.[activeMonthIndex] ? `${sourceMetrics.revpar[activeCompany][activeMonthIndex].toLocaleString()}원` : '미집계'}</strong><span>Excel 원자료 기준</span></article><div className="occupancy-company-months"><h3>월별 가동률·ADR·RevPAR</h3><div className="occupancy-table-wrap"><table><thead><tr><th>월</th><th>가동률</th><th>ADR</th><th>RevPAR</th></tr></thead><tbody>{dataMonths.map((month, index) => <tr key={month}><td>{month}</td><td>{selectedRow.rates[index] === undefined ? '—' : percent(selectedRow.rates[index])}</td><td>{sourceMetrics.adr[activeCompany]?.[index] ? `${sourceMetrics.adr[activeCompany][index].toLocaleString()}원` : '—'}</td><td>{sourceMetrics.revpar[activeCompany]?.[index] ? `${sourceMetrics.revpar[activeCompany][index].toLocaleString()}원` : '—'}</td></tr>)}</tbody></table></div></div>{selectedRevenue && <div className="occupancy-company-revenue"><h3>투숙 실적·매출</h3><div><span>2026년 합계 <strong>{selectedRevenue.total.toLocaleString()}</strong></span><span>2025년 합계 <strong>{selectedRevenue.previousTotal.toLocaleString()}</strong></span><span>증감률 <strong className={selectedRevenue.change >= 0 ? 'positive' : 'negative'}>{selectedRevenue.changeRate === null ? '—' : `${selectedRevenue.changeRate >= 0 ? '+' : ''}${selectedRevenue.changeRate.toFixed(1)}%`}</strong></span></div></div>}</div> : <p className="occupancy-empty">선택된 업체의 상세 자료가 없습니다.</p>}</section>
     <section className="occupancy-grid"><article className="occupancy-panel"><header><div><p>MONTHLY TREND</p><h2>{dataMonths[0]}~{dataMonths[dataMonths.length - 1]} 가동률 추이</h2></div><TrendingUp size={20} /></header><div className="occupancy-chart occupancy-chart--trend"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend} margin={{ left: 0, right: 16, top: 10, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5eeeb" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} axisLine={false} tickLine={false} width={44} /><Tooltip formatter={(value) => value === null ? '미집계' : percent(Number(value))} /><Legend /><Line type="monotone" dataKey="웰리힐리" stroke="#e87936" strokeWidth={3} dot={{ r: 4 }} connectNulls={false} /><Line type="monotone" dataKey="선택 지역 평균" stroke="#247767" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div></article><article className="occupancy-panel"><header><div><p>{activeMonth} RANKING</p><h2>{region} 가동률 순위</h2></div><span>{activeRows.length}개사</span></header><div className="occupancy-chart occupancy-chart--rank"><ResponsiveContainer width="100%" height="100%"><BarChart data={ranking} layout="vertical" margin={{ left: 4, right: 24, top: 4, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5eeeb" /><XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} axisLine={false} tickLine={false} /><YAxis type="category" dataKey="company" width={118} axisLine={false} tickLine={false} fontSize={11} /><Tooltip formatter={(value) => percent(Number(value))} /><Bar dataKey="가동률" radius={[0, 5, 5, 0]}>{ranking.map((entry) => <Cell key={entry.company} fill={entry.isWelli ? '#e87936' : '#247767'} />)}</Bar></BarChart></ResponsiveContainer></div></article></section>
     <section className="occupancy-panel occupancy-table"><header><div><p>COMPANY DETAIL</p><h2>{activeMonth} 업체별 상세</h2></div><span>웰리힐리 강조 표시</span></header><div className="occupancy-table-wrap"><table><thead><tr><th>순위</th><th>업체</th><th>가용객실수</th>{dataMonths.map((month) => <th key={month}>{month}</th>)}</tr></thead><tbody>{activeRows.map((row, index) => <tr key={row.company} className={isWelli(row.company) ? 'is-welli' : ''}><td>{index + 1}</td><td><span>{isWelli(row.company) && <Building2 size={15} />}{row.company}</span></td><td>{row.rooms.toLocaleString()}실</td>{dataMonths.map((_, rateIndex) => <td key={`${row.company}-${rateIndex}`}>{row.rates[rateIndex] === undefined ? '—' : percent(row.rates[rateIndex])}</td>)}</tr>)}</tbody></table></div></section>
     <footer className="occupancy-note">※ 기본 자료는 제공된 PDF 54개 행입니다. 새 PDF를 업로드하면 현재 화면의 비교·순위·추이가 업로드 자료 기준으로 바뀌고, 다음 방문에도 유지됩니다.</footer>
