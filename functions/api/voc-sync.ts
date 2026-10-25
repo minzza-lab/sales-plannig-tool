@@ -28,8 +28,8 @@ type InquiryDetail = {
 const WADM_API = 'https://wadm.wellihillipark.com:8060/api';
 const PAGE_SIZE = 20;
 // Cloudflare Pages Functions의 호출 한도 안에서 최신 문의를 안정적으로 처리한다.
-// 최신 5페이지(최대 100건)와 각 상세 조회를 처리한다. seq_id upsert로 중복은 자동 갱신한다.
-const MAX_PAGES = 5;
+// 한 번의 Worker 요청은 1페이지(최대 20건)만 처리한다.
+// 프런트에서 5번 순차 호출하여 Cloudflare subrequest 제한을 피한다.
 const DETAIL_CONCURRENCY = 6;
 const TIMEOUT_MS = 12_000;
 const SYNC_MARKER = '[VOC_SERVER_SYNC]';
@@ -118,24 +118,21 @@ async function getAdminToken(id: string, pwd: string) {
   return token;
 }
 
-async function fetchRecentInquiries(token: string) {
-  const rows: InquiryListItem[] = [];
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const params = new URLSearchParams({
-      pg: String(page), pgSz: String(PAGE_SIZE), schTp: '', schCatg: '', schAnsYn: '',
-      schStrtYmd: '', schEndYmd: '', schExpsYn: '', schFld: 'ttl', schTxt: '', sordFld: 'rgstYmd', sordMetd: 'DESC',
-    });
-    const response = await fetchWithTimeout(`${WADM_API}/customer/inquiry/list?${params}`, {
-      headers: { 'X-AUTH-TOKEN': token },
-    });
-    if (!response.ok) throw new Error(`VOC 목록을 조회하지 못했습니다. (${response.status})`);
-    const body = await response.json() as { data?: { list?: InquiryListItem[]; totalPageSize?: number }; list?: InquiryListItem[]; totalPageSize?: number };
-    const payload = body.data || body;
-    const pageRows = Array.isArray(payload.list) ? payload.list : [];
-    rows.push(...pageRows);
-    if (pageRows.length === 0 || page >= Number(payload.totalPageSize || 1)) break;
-  }
-  return rows.filter((row) => row.seq);
+async function fetchRecentInquiries(token: string, page: number) {
+  const params = new URLSearchParams({
+    pg: String(page), pgSz: String(PAGE_SIZE), schTp: '', schCatg: '', schAnsYn: '',
+    schStrtYmd: '', schEndYmd: '', schExpsYn: '', schFld: 'ttl', schTxt: '', sordFld: 'rgstYmd', sordMetd: 'DESC',
+  });
+  const response = await fetchWithTimeout(`${WADM_API}/customer/inquiry/list?${params}`, {
+    headers: { 'X-AUTH-TOKEN': token },
+  });
+  if (!response.ok) throw new Error(`VOC 목록을 조회하지 못했습니다. (${response.status})`);
+  const body = await response.json() as { data?: { list?: InquiryListItem[]; totalPageSize?: number }; list?: InquiryListItem[]; totalPageSize?: number };
+  const payload = body.data || body;
+  return {
+    rows: (Array.isArray(payload.list) ? payload.list : []).filter((row) => row.seq),
+    totalPages: Number(payload.totalPageSize || 1),
+  };
 }
 
 async function fetchInquiryDetail(token: string, seq: string | number) {
@@ -200,6 +197,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const adminId = context.env.WADM_ADMIN_ID;
   const adminPwd = context.env.WADM_ADMIN_PWD;
   const authorization = context.request.headers.get('Authorization');
+  const requestedPage = Number(new URL(context.request.url).searchParams.get('page') || '1');
+  const page = Number.isInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 5 ? requestedPage : 1;
 
   if (!supabaseUrl || !anonKey) return jsonResponse({ error: '서버의 데이터베이스 연결 설정이 없습니다.' }, 500);
   if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: '로그인이 필요합니다.' }, 401);
@@ -214,10 +213,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     lock = await acquireLock(supabaseUrl, anonKey, authorization);
     if (!lock) return jsonResponse({ error: '다른 VOC 동기화가 진행 중입니다. 잠시 후 다시 시도해주세요.' }, 409);
     const adminToken = await getAdminToken(adminId, adminPwd);
-    const [sourceRows, config] = await Promise.all([
-      fetchRecentInquiries(adminToken),
+    const [sourcePage, config] = await Promise.all([
+      fetchRecentInquiries(adminToken, page),
       fetchInquiryConfig(adminToken),
     ]);
+    const sourceRows = sourcePage.rows;
     const savedRows: Array<Record<string, unknown>> = [];
     let failedCount = 0;
 
@@ -249,7 +249,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       savedCount: savedRows.length,
       failedCount,
       finishedAt: new Date().toISOString(),
-      message: `최신 VOC ${savedRows.length}건을 수집하고 처리했습니다.${failedCount ? ` (${failedCount}건 확인 실패)` : ''}`,
+      page,
+      totalPages: sourcePage.totalPages,
+      message: `VOC ${page}페이지 ${savedRows.length}건을 수집했습니다.${failedCount ? ` (${failedCount}건 확인 실패)` : ''}`,
     };
     state = 'completed';
     return jsonResponse(result);

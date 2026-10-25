@@ -199,25 +199,30 @@ export default function CrawlerSyncButton({
           startedAt: new Date().toISOString(),
           finishedAt: null,
         })
-        const response = await fetch('/api/voc-sync', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        const result = await response.json().catch(() => ({})) as {
-          error?: string
-          sourceCount?: number
-          savedCount?: number
-          failedCount?: number
-          message?: string
+        let totalSaved = 0
+        let totalFailed = 0
+        for (let page = 1; page <= 5; page += 1) {
+          setState(current => ({ ...current, progress: 20 + Math.round((page / 5) * 70), message: `최신 VOC ${page}/5페이지를 수집하고 있습니다.` }))
+          const response = await fetch(`/api/voc-sync?page=${page}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+          const result = await response.json().catch(() => ({})) as {
+            error?: string
+            savedCount?: number
+            failedCount?: number
+          }
+          if (!response.ok) throw new Error(result.error || `VOC ${page}페이지를 수집하지 못했습니다.`)
+          totalSaved += result.savedCount || 0
+          totalFailed += result.failedCount || 0
         }
-        if (!response.ok) throw new Error(result.error || 'VOC를 수집하지 못했습니다.')
 
         await onCompleteRef.current()
         setState({
           id: null,
           status: 'completed',
           progress: 100,
-          message: result.message || `최신 VOC ${result.savedCount || 0}건을 동기화했습니다.`,
+          message: `최신 VOC ${totalSaved}건을 동기화했습니다.${totalFailed ? ` (${totalFailed}건 확인 실패)` : ''}`,
           startedAt: null,
           finishedAt: new Date().toISOString(),
         })
