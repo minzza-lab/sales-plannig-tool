@@ -157,8 +157,8 @@ function App() {
                 <Route path="tools/meta-ads-manager" element={<MetaAdsManager />} />
                 <Route path="tools/cs-center" element={<CSResponseCenter />} />
                 <Route path="tools/cs-center/search" element={<CSResponseCenter />} />
-                <Route path="tools/cs-center/history" element={<CSResponseCenter />} />
-                <Route path="tools/cs-center/admin" element={<CSResponseCenter />} />
+                <Route path="tools/cs-center/history" element={<Navigate to="/tools/cs-center" replace />} />
+                <Route path="tools/cs-center/admin" element={<Navigate to="/tools/cs-center" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>

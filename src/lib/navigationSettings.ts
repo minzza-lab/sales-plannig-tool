@@ -29,8 +29,6 @@ export const sidebarEntries: SidebarEntry[] = [
   { id: 'voc-assistant', title: '고객의 소리(VOC) 어시스턴트', icon: '🎧', path: '/tools/voc-assistant', section: 'top' },
   { id: 'cs-center', title: 'CS 대시보드', icon: '💬', path: '/tools/cs-center', section: 'cs' },
   { id: 'cs-center-search', title: 'FAQ 검색', icon: '🔎', path: '/tools/cs-center/search', section: 'cs' },
-  { id: 'cs-center-history', title: '상담 이력 관리', icon: '📝', path: '/tools/cs-center/history', section: 'cs' },
-  { id: 'cs-center-admin', title: 'FAQ 관리', icon: '🛡️', path: '/tools/cs-center/admin', section: 'cs' },
   { id: 'water-operations', title: '워터 운영 통합 현황', icon: '📍', path: '/tools/water-operations', section: 'sales' },
   { id: 'waterpark-sales', title: '워터파크 매출 관리', icon: '🌊', path: '/tools/waterpark-sales', section: 'sales' },
   { id: 'water-operations-analysis', title: '워터 권종·대여 분석', icon: '🛟', path: '/tools/water-operations-analysis', section: 'sales' },
