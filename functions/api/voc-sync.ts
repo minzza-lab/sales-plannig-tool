@@ -160,6 +160,15 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
 }
 
+function dateOnly(value: unknown) {
+  const raw = text(value);
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
 async function saveInquiries(supabaseUrl: string, anonKey: string, authorization: string, rows: Array<Record<string, unknown>>) {
   if (rows.length === 0) return;
   const response = await fetchWithTimeout(`${supabaseUrl}/rest/v1/voc_inquiries?on_conflict=seq_id`, {
@@ -232,6 +241,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           title: text(detail.ttl),
           content: text(detail.cont),
           answer: text(detail.inqrAns),
+          answer_date: dateOnly(detail.ansYmd || item.ansYmd),
           status: text(detail.ansYmd || item.ansYmd) ? 'answered' : 'unanswered',
         };
       }));
