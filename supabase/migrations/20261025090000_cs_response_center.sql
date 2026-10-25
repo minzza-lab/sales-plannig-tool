@@ -26,6 +26,7 @@ create trigger cs_faqs_updated_at before update on public.cs_faqs for each row e
 create or replace function public.record_cs_faq_revision() returns trigger language plpgsql security invoker as $$ begin insert into public.cs_faq_revisions (faq_id, changed_by, snapshot) values (old.id, auth.uid(), to_jsonb(old)); return new; end; $$;
 drop trigger if exists cs_faqs_revision on public.cs_faqs;
 create trigger cs_faqs_revision before update on public.cs_faqs for each row execute function public.record_cs_faq_revision();
+create unique index if not exists cs_faqs_question_unique on public.cs_faqs (question);
 alter table public.cs_faq_categories enable row level security; alter table public.cs_faqs enable row level security; alter table public.cs_consultations enable row level security; alter table public.cs_faq_revisions enable row level security;
 drop policy if exists "cs categories active read" on public.cs_faq_categories; create policy "cs categories active read" on public.cs_faq_categories for select to authenticated using (public.has_active_app_access());
 drop policy if exists "cs categories admin write" on public.cs_faq_categories; create policy "cs categories admin write" on public.cs_faq_categories for all to authenticated using (public.is_app_admin()) with check (public.is_app_admin());
