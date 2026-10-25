@@ -10,6 +10,7 @@ interface Env {
 type InquiryListItem = {
   seq?: string | number;
   ansYmd?: string;
+  [key: string]: unknown;
   tp?: string | number;
   catg?: string | number;
 };
@@ -23,6 +24,7 @@ type InquiryDetail = {
   cont?: string;
   inqrAns?: string;
   ansYmd?: string;
+  [key: string]: unknown;
 };
 
 const WADM_API = 'https://wadm.wellihillipark.com:8060/api';
@@ -164,9 +166,29 @@ function dateOnly(value: unknown) {
   const raw = text(value);
   if (!raw) return null;
   const digits = raw.replace(/\D/g, '');
-  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  if (/^\d{8,}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function answerDateOf(detail: InquiryDetail, item: InquiryListItem) {
+  const candidates = [
+    detail.ansYmd, detail.ansDt, detail.ansDtm, detail.ansDate, detail.ansDateTime,
+    detail.answerDate, detail.answerDateTime, item.ansYmd, item.ansDt, item.ansDtm,
+    item.ansDate, item.ansDateTime, item.answerDate, item.answerDateTime,
+  ];
+  for (const candidate of candidates) {
+    const value = dateOnly(candidate);
+    if (value) return value;
+  }
+  const source = { ...item, ...detail };
+  for (const [key, value] of Object.entries(source)) {
+    if (/^(ans|answer)/i.test(key) && /(ymd|date|dtm|time)/i.test(key)) {
+      const normalized = dateOnly(value);
+      if (normalized) return normalized;
+    }
+  }
+  return null;
 }
 
 async function saveInquiries(supabaseUrl: string, anonKey: string, authorization: string, rows: Array<Record<string, unknown>>) {
@@ -234,6 +256,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       const group = sourceRows.slice(offset, offset + DETAIL_CONCURRENCY);
       const results = await Promise.allSettled(group.map(async (item) => {
         const detail = await fetchInquiryDetail(adminToken, item.seq!);
+        const answerDate = answerDateOf(detail, item);
         return {
           seq_id: text(detail.seq || item.seq),
           customer_name: text(detail.rgstrNm),
@@ -241,8 +264,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           title: text(detail.ttl),
           content: text(detail.cont),
           answer: text(detail.inqrAns),
-          answer_date: dateOnly(detail.ansYmd || item.ansYmd),
-          status: text(detail.ansYmd || item.ansYmd) ? 'answered' : 'unanswered',
+          answer_date: answerDate,
+          status: answerDate || text(detail.inqrAns) ? 'answered' : 'unanswered',
         };
       }));
       for (const result of results) {
