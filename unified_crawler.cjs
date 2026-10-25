@@ -105,7 +105,7 @@ async function scrapeVOC(page, stats) {
     
     let allLinks = [];
     let currentPage = 1;
-    const maxPages = 1; // 최근 1페이지만 크롤링
+    const maxPages = 5; // 최근 5페이지(최대 100건) 크롤링
 
     while (currentPage <= maxPages) {
       spinner.text = chalk.yellow(`VOC 목록 파싱 중... (페이지 ${currentPage}/${maxPages})`);

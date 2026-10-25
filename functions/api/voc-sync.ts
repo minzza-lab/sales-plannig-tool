@@ -28,8 +28,8 @@ type InquiryDetail = {
 const WADM_API = 'https://wadm.wellihillipark.com:8060/api';
 const PAGE_SIZE = 20;
 // Cloudflare Pages Functions의 호출 한도 안에서 최신 문의를 안정적으로 처리한다.
-// 목록 1페이지(20건)와 각 상세 조회, DB 기록을 합쳐도 한도를 넉넉히 유지한다.
-const MAX_PAGES = 1;
+// 최신 5페이지(최대 100건)와 각 상세 조회를 처리한다. seq_id upsert로 중복은 자동 갱신한다.
+const MAX_PAGES = 5;
 const DETAIL_CONCURRENCY = 6;
 const TIMEOUT_MS = 12_000;
 const SYNC_MARKER = '[VOC_SERVER_SYNC]';
