@@ -30,6 +30,7 @@ export const categories: ToolCategory[] = [
       { id: 'product-proposals', title: '상품안 보관함', description: '상품안과 의견을 관리하고 AI 요약을 확인합니다.', icon: '💡', path: '/tools/product-proposals' },
       { id: 'official-letter', title: '발송공문제작기', description: '회사 공식 양식을 유지한 발송 공문을 작성하고 엑셀로 내려받습니다.', icon: '📨', path: '/tools/official-letter' },
       { id: 'voc-assistant', title: 'VOC 어시스턴트', description: '고객 문의를 분석해 답변 초안을 빠르게 작성합니다.', icon: '🎧', path: '/tools/voc-assistant' },
+      { id: 'cs-center', title: 'CS 응대센터', description: '표준 응대 문안을 찾고 상담 이력을 관리합니다.', icon: '💬', path: '/tools/cs-center' },
     ],
   },
   {

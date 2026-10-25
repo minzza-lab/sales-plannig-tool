@@ -46,6 +46,7 @@ const LunchRoulette = lazy(() => import('./components/LunchRoulette'))
 const AIStudio = lazy(() => import('./ai-studio/AIStudio'))
 const FixedCostManagement = lazy(() => import('./components/FixedCostManagement'))
 const MetaAdsManager = lazy(() => import('./components/MetaAdsManager'))
+const CSResponseCenter = lazy(() => import('./components/CSResponseCenter'))
 
 const AppLoader = () => (
   <div className="app-loader" role="status" aria-live="polite">
@@ -154,6 +155,10 @@ function App() {
                 <Route path="tools/sales-schedule-performance" element={<SalesSchedulePerformance />} />
                 <Route path="tools/fixed-cost-management" element={<FixedCostManagement />} />
                 <Route path="tools/meta-ads-manager" element={<MetaAdsManager />} />
+                <Route path="tools/cs-center" element={<CSResponseCenter />} />
+                <Route path="tools/cs-center/search" element={<CSResponseCenter />} />
+                <Route path="tools/cs-center/history" element={<CSResponseCenter />} />
+                <Route path="tools/cs-center/admin" element={<CSResponseCenter />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>

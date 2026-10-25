@@ -15,13 +15,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onOpenApiModal, isAd
   const navigate = useNavigate();
   const location = useLocation();
   const settings = useNavigationSettings();
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ sales: true, settlement: true, nicepay: true, naver: true, promo: true, util: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ cs: true, sales: true, settlement: true, nicepay: true, naver: true, promo: true, util: true });
   const toggleGroup = (group: string) => setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (!error) navigate('/login');
   };
   const renderEntry = (entry: SidebarEntry) => {
+    if (entry.id === 'cs-center-admin' && !isAdmin) return null;
     const [pathname, query] = entry.path.split('?');
     const active = location.pathname === pathname && (!query || (new URLSearchParams(location.search).get('step') || '1') === new URLSearchParams(query).get('step'));
     return <li key={entry.id} className={entry.section === 'sales' || entry.provider ? 'menu-highlight' : undefined}>
