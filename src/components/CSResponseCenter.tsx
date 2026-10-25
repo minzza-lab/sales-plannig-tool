@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import CrawlerSyncButton from './CrawlerSyncButton'
 import './CSResponseCenter.css'
 
 type FAQ = {
@@ -11,6 +12,7 @@ type FAQ = {
   voc_source_id?: string | null; voc_source_date?: string | null; voc_answer_date?: string | null; source_note?: string | null
 }
 type Consultation = { id: string; customer_name: string | null; customer_phone: string | null; order_number: string | null; category: string; inquiry_type: string | null; inquiry_content: string; response_content: string | null; linked_faq_id: string | null; assigned_to: string | null; status: string; internal_memo: string | null; created_at: string; completed_at: string | null }
+type VOCInquiry = { id: string; seq_id: string; category: string | null; title: string | null; content: string | null; answer: string | null; status: string; created_at: string }
 
 const categories = ['전체', '장비보관소', '시즌패스', '스노우파크', '워터플래닛', '객실', '기타']
 const lockerTypes = ['상품 및 요금', '구매 및 결제', '보관함 배정', '와이즈클럽', '시설 및 이용', '취소 및 환불', '민원 및 예외사항']
@@ -25,7 +27,7 @@ const badgeClass = (value: string) => value.replace(/\s/g, '-')
 export default function CSResponseCenter() {
   const location = useLocation()
   const mode = location.pathname.endsWith('/history') ? 'history' : location.pathname.endsWith('/admin') ? 'admin' : location.pathname.endsWith('/search') ? 'search' : 'dashboard'
-  const [faqs, setFaqs] = useState<FAQ[]>([]); const [consultations, setConsultations] = useState<Consultation[]>([])
+  const [faqs, setFaqs] = useState<FAQ[]>([]); const [consultations, setConsultations] = useState<Consultation[]>([]); const [vocRows, setVocRows] = useState<VOCInquiry[]>([])
   const [selected, setSelected] = useState<FAQ | null>(null); const [query, setQuery] = useState(''); const [category, setCategory] = useState('전체')
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [notice, setNotice] = useState('')
   const [isAdmin, setIsAdmin] = useState(false); const [editing, setEditing] = useState<Partial<FAQ> | null>(null)
@@ -40,6 +42,8 @@ export default function CSResponseCenter() {
     ])
     if (faqResult.error) setError(`FAQ를 불러오지 못했습니다: ${faqResult.error.message}`); else setFaqs((faqResult.data || []) as FAQ[])
     if (!consultationResult.error) setConsultations((consultationResult.data || []) as Consultation[])
+    const vocResult = await supabase.from('voc_inquiries').select('id,seq_id,category,title,content,answer,status,created_at').eq('status', 'answered').order('created_at', { ascending: false }).limit(8)
+    if (!vocResult.error) setVocRows((vocResult.data || []) as VOCInquiry[])
     const userId = userResult.data.user?.id
     if (userId) { const { data } = await supabase.from('app_user_access').select('role,status').eq('user_id', userId).maybeSingle(); setIsAdmin(data?.role === 'admin' && data?.status === 'approved') }
     setLoading(false)
@@ -69,7 +73,7 @@ export default function CSResponseCenter() {
     <div className="cs-heading"><div><p className="cs-eyebrow">CUSTOMER SERVICE</p><h1>CS 응대센터</h1><p>확인된 운영정보를 기준으로 고객 문의에 일관되게 응대합니다.</p><p className="cs-source-note">※ 현재 FAQ는 실제 고객 VOC 답변을 기준으로 작성되었습니다. VOC 기준일자에 따라 운영정책과 응대내용이 달라질 수 있으니, 답변 전 기준일자를 확인하세요.</p></div><Link className="cs-primary" to="/tools/cs-center/search">FAQ 바로 찾기</Link></div>
     <nav className="cs-tabs">{tabs.map(([key, title, path]) => <Link key={key} className={mode === key ? 'active' : ''} to={path}>{title}</Link>)}</nav>
     {notice && <div className="cs-notice">{notice}</div>}{error && <div className="cs-error">{error}<button onClick={() => void load()}>다시 시도</button></div>}
-    {mode === 'dashboard' && <Dashboard faqs={postedFaqs} consultations={consultations} onOpen={openFaq} onCopy={copyAnswer} />}
+    {mode === 'dashboard' && <Dashboard faqs={postedFaqs} consultations={consultations} vocRows={vocRows} onOpen={openFaq} onCopy={copyAnswer} onVocSync={() => void load()} />}
     {mode === 'search' && <Search faqs={visibleFaqs} query={query} setQuery={setQuery} category={category} setCategory={setCategory} onOpen={openFaq} onCopy={copyAnswer} onConsult={setConsultationFaq} />}
     {mode === 'history' && <History consultations={consultations} />}
     {mode === 'admin' && (isAdmin ? <Admin faqs={faqs} editing={editing} setEditing={setEditing} onSave={saveFaq} onReload={load} /> : <div className="cs-empty">FAQ 관리 화면은 관리자만 이용할 수 있습니다.</div>)}
@@ -79,9 +83,9 @@ export default function CSResponseCenter() {
   </div>
 }
 
-function Dashboard({ faqs, consultations, onOpen, onCopy }: { faqs: FAQ[]; consultations: Consultation[]; onOpen: (faq: FAQ) => void; onCopy: (faq: FAQ) => void }) {
+function Dashboard({ faqs, consultations, vocRows, onOpen, onCopy, onVocSync }: { faqs: FAQ[]; consultations: Consultation[]; vocRows: VOCInquiry[]; onOpen: (faq: FAQ) => void; onCopy: (faq: FAQ) => void; onVocSync: () => void }) {
   const pending = consultations.filter(row => row.status !== '처리 완료').length; const done = consultations.length - pending
-  return <><div className="cs-metrics"><Metric label="등록된 FAQ" value={faqs.length} /><Metric label="전체 상담 건수" value={consultations.length} /><Metric label="처리 대기" value={pending} /><Metric label="처리 완료" value={done} /></div><div className="cs-dashboard-grid"><section className="cs-card"><div className="cs-card-title"><h2>최근 게시 FAQ</h2><Link to="/tools/cs-center/search">전체 보기</Link></div>{faqs.slice(0, 5).map(faq => <FaqRow key={faq.id} faq={faq} onOpen={onOpen} onCopy={onCopy} />)}{!faqs.length && <Empty text="게시된 FAQ가 없습니다." />}</section><section className="cs-card"><div className="cs-card-title"><h2>최근 상담 이력</h2><Link to="/tools/cs-center/history">전체 보기</Link></div>{consultations.slice(0, 5).map(row => <div className="cs-history-row" key={row.id}><b>{row.customer_name || '고객명 미입력'}</b><span>{row.inquiry_type || row.category}</span><em className={`cs-badge ${badgeClass(row.status)}`}>{row.status}</em></div>)}{!consultations.length && <Empty text="등록된 상담 이력이 없습니다." />}</section></div></>
+  return <><div className="cs-metrics"><Metric label="등록된 FAQ" value={faqs.length} /><Metric label="전체 상담 건수" value={consultations.length} /><Metric label="처리 대기" value={pending} /><Metric label="처리 완료" value={done} /></div><div className="cs-dashboard-grid"><section className="cs-card"><div className="cs-card-title"><h2>최근 게시 FAQ</h2><Link to="/tools/cs-center/search">전체 보기</Link></div>{faqs.slice(0, 5).map(faq => <FaqRow key={faq.id} faq={faq} onOpen={onOpen} onCopy={onCopy} />)}{!faqs.length && <Empty text="게시된 FAQ가 없습니다." />}</section><section className="cs-card"><div className="cs-card-title"><h2>최근 상담 이력</h2><Link to="/tools/cs-center/history">전체 보기</Link></div>{consultations.slice(0, 5).map(row => <div className="cs-history-row" key={row.id}><b>{row.customer_name || '고객명 미입력'}</b><span>{row.inquiry_type || row.category}</span><em className={`cs-badge ${badgeClass(row.status)}`}>{row.status}</em></div>)}{!consultations.length && <Empty text="등록된 상담 이력이 없습니다." />}</section><section className="cs-card cs-voc-card"><div className="cs-card-title"><div><h2>최근 VOC 원문 · FAQ 후보</h2><p>자동 수집된 답변은 원문 기준으로 검토 후 FAQ로 게시합니다.</p></div><CrawlerSyncButton target="voc" label="최신 VOC 동기화" onComplete={onVocSync} /></div>{vocRows.map(row => <div className="cs-voc-row" key={row.id}><div><b>{row.title || '제목 없음'}</b><p>{row.answer || '답변 없음'}</p></div><small>VOC #{row.seq_id}<br />{formatDate(row.created_at)}</small></div>)}{!vocRows.length && <Empty text="자동 수집된 답변 VOC가 없습니다." />}</section></div></>
 }
 function Metric({ label, value }: { label: string; value: number }) { return <div className="cs-metric"><span>{label}</span><strong>{value.toLocaleString('ko-KR')}</strong></div> }
 function Search({ faqs, query, setQuery, category, setCategory, onOpen, onCopy, onConsult }: { faqs: FAQ[]; query: string; setQuery: (v: string) => void; category: string; setCategory: (v: string) => void; onOpen: (faq: FAQ) => void; onCopy: (faq: FAQ) => void; onConsult: (faq: FAQ) => void }) { return <section><div className="cs-search-box"><input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="고객 문의 내용을 입력하세요. 제목·답변·키워드를 함께 검색합니다." /><span>⌘ K</span></div><div className="cs-filter-row">{categories.map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="cs-result-meta">{query || category !== '전체' ? `${faqs.length}건 검색됨` : `게시된 FAQ ${faqs.length}건`}</div><div className="cs-faq-grid">{faqs.map(faq => <FaqCard key={faq.id} faq={faq} onOpen={onOpen} onCopy={onCopy} onConsult={onConsult} />)}{!faqs.length && <Empty text="조건에 맞는 FAQ가 없습니다." />}</div></section> }
